@@ -13,6 +13,13 @@ function formatDuration(s?: number) {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+function shortFolder(p: string) {
+  const normalized = p.replace(/\/+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 2) return normalized;
+  return parts.slice(-2).join('/');
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('library');
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -194,7 +201,7 @@ export default function App() {
               <button className="primary" onClick={doScan} disabled={scanning}>{scanning ? 'Scanning…' : 'Scan all'}</button>
               <button onClick={refresh} disabled={scanning}>Re-scan</button>
             </div>
-            {folders.length > 0 && <ul style={{ marginTop: 8, paddingLeft: 18 }}>{folders.map((f,i) => <li key={f} style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ flex: 1, wordBreak: 'break-all' }}>{f}</span><button onClick={() => removeFolder(i)} style={{ padding: '2px 8px' }}>Remove</button></li>)}</ul>}
+            {folders.length > 0 && <ul style={{ marginTop: 8, paddingLeft: 18 }}>{folders.map((f,i) => <li key={f} style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ flex: 1, wordBreak: 'break-all' }} title={f}>{shortFolder(f)}</span><button onClick={() => removeFolder(i)} style={{ padding: '2px 8px' }}>Remove</button></li>)}</ul>}
             {folders.length === 0 && <p className="muted" style={{ marginTop: 8 }}>Add one or more absolute folder paths — scan merges all MP3s.</p>}
           </div>
 
