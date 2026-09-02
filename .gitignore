@@ -2,3 +2,7 @@ node_modules
 dist
 out
 data/*.json
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite-*

@@ -4,7 +4,11 @@ import { existsSync, promises as fs, createReadStream, statSync } from 'fs';
 import { parseFile } from 'music-metadata';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { getDb, getFolders, setFolders as dbSetFolders, getTracks, setTracks, getWishlist, addWishlistItem, updateWishlistItem, deleteWishlistItem } from './db.js';
 const execFileAsync = promisify(execFile);
+
+// Ensure DB initialized (creates file + migrates JSON if needed)
+getDb();
 
 type Track = {
   id: string;
@@ -15,7 +19,7 @@ type Track = {
   genre: string;
   year?: number;
   duration?: number;
-  duplicateGroupId?: string; // set if part of duplicate group
+  duplicateGroupId?: string;
 };
 type WishlistItem = {
   id: string;
@@ -27,21 +31,7 @@ type WishlistItem = {
 type Config = { folders?: string[]; lastFolder?: string };
 
 const PORT = Number(process.env.PORT || 3055);
-const DATA_DIR = resolve(process.cwd(), 'data');
-const CONFIG_FILE = join(DATA_DIR, 'config.json');
-const LIBRARY_FILE = join(DATA_DIR, 'library.json');
-const WISHLIST_FILE = join(DATA_DIR, 'wishlist.json');
 
-async function readJson<T>(p: string, fallback: T): Promise<T> {
-  try {
-    if (!existsSync(p)) return fallback;
-    return JSON.parse(await fs.readFile(p, 'utf-8')) as T;
-  } catch { return fallback; }
-}
-async function writeJson(p: string, data: unknown) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(p, JSON.stringify(data, null, 2), 'utf-8');
-}
 async function walkMp3(dir: string, out: string[] = []): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const e of entries) {
@@ -72,8 +62,6 @@ function markDuplicates(tracks: Track[]): Track[] {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k)!.push(t);
   }
-  // Also consider exact filePath duplicates already deduped; group by normalized key with count>1
-  // Assign duplicateGroupId
   for (const [, arr] of groups) {
     if (arr.length > 1) {
       const gid = arr[0].artist + ' - ' + arr[0].title;
@@ -112,16 +100,12 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
     }
   }
   markDuplicates(tracks);
-  await writeJson(LIBRARY_FILE, tracks);
-  await writeJson(CONFIG_FILE, { folders: uniqFolders });
+  setTracks(tracks);
+  dbSetFolders(uniqFolders);
   return tracks;
 }
 async function getConfig(): Promise<Config> {
-  const raw = await readJson<any>(CONFIG_FILE, {});
-  // migrate lastFolder -> folders
-  if (raw.folders) return { folders: raw.folders };
-  if (raw.lastFolder) return { folders: [raw.lastFolder] };
-  return { folders: [] };
+  return { folders: getFolders() };
 }
 
 async function pickFolderNative(): Promise<string | null> {
@@ -133,7 +117,6 @@ async function pickFolderNative(): Promise<string | null> {
       return p ? p.replace(/\/$/, '') : null;
     }
     if (platform === 'linux') {
-      // prefer zenity, fallback to kdialog
       try {
         const { stdout } = await execFileAsync('zenity', ['--file-selection', '--directory', '--title=Select music folder']) as any;
         return String(stdout).trim() || null;
@@ -180,14 +163,12 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/config' && req.method === 'POST') {
       const body = await getBody(req);
       const folders: string[] = (body.folders ?? []).map((f: string) => f.trim()).filter(Boolean);
-      const uniq = [...new Set(folders.map(f => resolve(f)))];
-      await writeJson(CONFIG_FILE, { folders: uniq });
+      const uniq = dbSetFolders(folders);
       return json(res, 200, { folders: uniq });
     }
     if (url.pathname === '/api/library' && req.method === 'GET') {
       const showDuplicates = url.searchParams.get('duplicates') === '1';
-      let tracks = await readJson<Track[]>(LIBRARY_FILE, []);
-      // ensure duplicates marked (for old caches)
+      let tracks = getTracks();
       if (tracks.length && !tracks.some(t => t.duplicateGroupId)) {
         markDuplicates(tracks);
       }
@@ -195,9 +176,8 @@ const server = createServer(async (req, res) => {
       return json(res, 200, tracks);
     }
     if (url.pathname === '/api/library/duplicates' && req.method === 'GET') {
-      const tracks = await readJson<Track[]>(LIBRARY_FILE, []);
+      const tracks = getTracks();
       const dupes = tracks.filter(t => t.duplicateGroupId);
-      // group
       const groups = new Map<string, Track[]>();
       for (const t of dupes) {
         const g = t.duplicateGroupId!;
@@ -207,22 +187,20 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { count: dupes.length, groups: Object.fromEntries(groups) });
     }
     if (url.pathname === '/api/library/validate' && req.method === 'POST') {
-      const tracks = await readJson<Track[]>(LIBRARY_FILE, []);
+      const tracks = getTracks();
       const validated = tracks.filter(t => existsSync(t.filePath));
       if (validated.length !== tracks.length) {
         markDuplicates(validated);
-        await writeJson(LIBRARY_FILE, validated);
+        setTracks(validated);
       }
       return json(res, 200, validated);
     }
     if (url.pathname === '/api/scan' && req.method === 'POST') {
       const body = await getBody(req);
-      // support both { folder } and { folders }
       let folders: string[] = [];
       if (Array.isArray(body.folders)) folders = body.folders;
       else if (body.folder) folders = [body.folder];
       else if (body.folders === undefined && body.folder === undefined) {
-        // if no body, use stored config
         const cfg = await getConfig();
         folders = cfg.folders ?? [];
       }
@@ -235,12 +213,11 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === '/api/wishlist' && req.method === 'GET') {
-      return json(res, 200, await readJson<WishlistItem[]>(WISHLIST_FILE, []));
+      return json(res, 200, getWishlist());
     }
     if (url.pathname === '/api/wishlist' && req.method === 'POST') {
       const body = await getBody(req);
       if (!body.name?.trim()) return json(res, 400, { error: 'name required' });
-      const list = await readJson<WishlistItem[]>(WISHLIST_FILE, []);
       const item: WishlistItem = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         name: body.name.trim(),
@@ -248,25 +225,19 @@ const server = createServer(async (req, res) => {
         priority: body.priority || 'Medium',
         dateAdded: new Date().toISOString(),
       };
-      list.push(item);
-      await writeJson(WISHLIST_FILE, list);
+      addWishlistItem(item);
       return json(res, 201, item);
     }
     if (url.pathname.startsWith('/api/wishlist/') && req.method === 'PUT') {
       const id = url.pathname.split('/').pop()!;
       const patch = await getBody(req);
-      const list = await readJson<WishlistItem[]>(WISHLIST_FILE, []);
-      const idx = list.findIndex(i => i.id === id);
-      if (idx === -1) return json(res, 404, { error: 'not found' });
-      list[idx] = { ...list[idx], ...patch, id: list[idx].id };
-      await writeJson(WISHLIST_FILE, list);
-      return json(res, 200, list[idx]);
+      const updated = updateWishlistItem(id, patch);
+      if (!updated) return json(res, 404, { error: 'not found' });
+      return json(res, 200, updated);
     }
     if (url.pathname.startsWith('/api/wishlist/') && req.method === 'DELETE') {
       const id = url.pathname.split('/').pop()!;
-      const list = await readJson<WishlistItem[]>(WISHLIST_FILE, []);
-      const next = list.filter(i => i.id !== id);
-      await writeJson(WISHLIST_FILE, next);
+      deleteWishlistItem(id);
       return json(res, 200, { ok: true });
     }
 
@@ -274,10 +245,8 @@ const server = createServer(async (req, res) => {
       const filePath = url.searchParams.get('path');
       if (!filePath) return json(res, 400, { error: 'path query required' });
       const resolved = resolve(filePath);
-      // security: must be inside one of the configured folders or known library
-      const tracks = await readJson<Track[]>(LIBRARY_FILE, []);
+      const tracks = getTracks();
       const allowed = tracks.some(t => resolve(t.filePath) === resolved);
-      // also allow if inside configured folders (for ad-hoc)
       let inFolder = false;
       if (!allowed) {
         const cfg = await getConfig();
