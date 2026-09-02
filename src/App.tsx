@@ -20,6 +20,13 @@ function shortFolder(p: string) {
   return parts.slice(-2).join('/');
 }
 
+function shortFile(p: string) {
+  const normalized = p.replace(/\/+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 3) return normalized;
+  return parts.slice(-3).join('/');
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('library');
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -234,7 +241,7 @@ export default function App() {
                     {playingId === t.id && <button onClick={handleStop} style={{ marginLeft: 4, padding: '4px 8px' }} title="Stop">⏹</button>}
                   </td>
                   <td>{t.title} {t.duplicateGroupId && <span style={{ fontSize: 11, background: '#ffc107', padding: '1px 6px', borderRadius: 8 }}>dup</span>}</td>
-                  <td>{t.artist}</td><td>{t.album}</td><td>{t.genre}</td><td>{formatDuration(t.duration)}</td><td>{t.year ?? '—'}</td><td className="muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.filePath}</td>
+                  <td>{t.artist}</td><td>{t.album}</td><td>{t.genre}</td><td>{formatDuration(t.duration)}</td><td>{t.year ?? '—'}</td><td className="muted" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.filePath}>{shortFile(t.filePath)}</td>
                 </tr>
                 );
               })}
