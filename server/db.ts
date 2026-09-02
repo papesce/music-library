@@ -12,6 +12,7 @@ export type Track = {
   year?: number;
   duration?: number;
   duplicateGroupId?: string;
+  hasCover?: boolean;
 };
 export type WishlistItem = {
   id: string;
@@ -51,7 +52,8 @@ function initSchema(database: DatabaseSync) {
       genre TEXT NOT NULL,
       year INTEGER,
       duration INTEGER,
-      duplicateGroupId TEXT
+      duplicateGroupId TEXT,
+      hasCover INTEGER DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS wishlist (
       id TEXT PRIMARY KEY,
@@ -96,10 +98,10 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
         const tracks = JSON.parse(readFileSync(libPath, 'utf-8')) as Track[];
         if (Array.isArray(tracks) && tracks.length) {
           const stmt = database.prepare(
-            'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
           );
           for (const t of tracks) {
-            stmt.run(t.id, t.filePath, t.title, t.artist, t.album, t.genre, t.year ?? null, t.duration ?? null, t.duplicateGroupId ?? null);
+            stmt.run(t.id, t.filePath, t.title, t.artist, t.album, t.genre, t.year ?? null, t.duration ?? null, t.duplicateGroupId ?? null, (t as any).hasCover ? 1 : 0);
           }
         }
       } catch {}
@@ -150,6 +152,8 @@ export function setFolders(folders: string[]) {
 // --- Tracks ---
 export function getTracks(): Track[] {
   const d = getDb();
+  // migrate hasCover column if DB from old version
+  try { d.prepare('SELECT hasCover FROM tracks LIMIT 1').get(); } catch { try { d.exec('ALTER TABLE tracks ADD COLUMN hasCover INTEGER DEFAULT 0'); } catch {} }
   const rows = d.prepare('SELECT * FROM tracks ORDER BY artist, album, title').all() as any[];
   return rows.map(r => ({
     id: r.id,
@@ -161,6 +165,7 @@ export function getTracks(): Track[] {
     year: r.year ?? undefined,
     duration: r.duration ?? undefined,
     duplicateGroupId: r.duplicateGroupId ?? undefined,
+    hasCover: !!r.hasCover,
   }));
 }
 
@@ -170,10 +175,10 @@ export function setTracks(tracks: Track[]) {
   try {
     d.prepare('DELETE FROM tracks').run();
     const stmt = d.prepare(
-      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     for (const t of tracks) {
-      stmt.run(t.id, t.filePath, t.title, t.artist, t.album, t.genre, t.year ?? null, t.duration ?? null, t.duplicateGroupId ?? null);
+      stmt.run(t.id, t.filePath, t.title, t.artist, t.album, t.genre, t.year ?? null, t.duration ?? null, t.duplicateGroupId ?? null, t.hasCover ? 1 : 0);
     }
     d.exec('COMMIT');
   } catch (e) {

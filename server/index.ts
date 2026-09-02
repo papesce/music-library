@@ -20,6 +20,7 @@ type Track = {
   year?: number;
   duration?: number;
   duplicateGroupId?: string;
+  hasCover?: boolean;
 };
 type WishlistItem = {
   id: string;
@@ -84,6 +85,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
     try {
       const meta = await parseFile(filePath);
       const fb = fallbackFromFilename(filePath);
+      const hasCover = !!(meta.common.picture && meta.common.picture.length > 0);
       tracks.push({
         id: filePath,
         filePath,
@@ -93,10 +95,11 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         genre: meta.common.genre?.[0] ?? 'Unknown',
         year: meta.common.year,
         duration: meta.format.duration ? Math.round(meta.format.duration) : undefined,
+        hasCover,
       });
     } catch {
       const fb = fallbackFromFilename(filePath);
-      tracks.push({ id: filePath, filePath, title: fb.title, artist: fb.artist, album: 'Unknown', genre: 'Unknown' });
+      tracks.push({ id: filePath, filePath, title: fb.title, artist: fb.artist, album: 'Unknown', genre: 'Unknown', hasCover: false });
     }
   }
   markDuplicates(tracks);
@@ -278,6 +281,38 @@ const server = createServer(async (req, res) => {
         }
         res.writeHead(200, { 'Content-Length': stat.size, 'Content-Type': 'audio/mpeg' });
         return createReadStream(resolved).pipe(res);
+      } catch (e: any) {
+        return json(res, 500, { error: e.message });
+      }
+    }
+
+    if (url.pathname === '/api/cover' && req.method === 'GET') {
+      const filePath = url.searchParams.get('path');
+      if (!filePath) return json(res, 400, { error: 'path query required' });
+      const resolved = resolve(filePath);
+      // auth: must be in library or allowed folder (same as stream)
+      const tracks = getTracks();
+      const allowed = tracks.some(t => resolve(t.filePath) === resolved);
+      let inFolder = false;
+      if (!allowed) {
+        const cfg = await getConfig();
+        for (const f of cfg.folders ?? []) {
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) { inFolder = true; break; }
+        }
+        if (!inFolder) return json(res, 403, { error: 'file not in library' });
+      }
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      try {
+        const meta = await parseFile(resolved);
+        const pic = meta.common.picture?.[0];
+        if (!pic) return json(res, 404, { error: 'no cover' });
+        res.writeHead(200, {
+          'Content-Type': pic.format || 'image/jpeg',
+          'Content-Length': pic.data.length,
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*',
+        });
+        return res.end(pic.data);
       } catch (e: any) {
         return json(res, 500, { error: e.message });
       }

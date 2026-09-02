@@ -24,6 +24,13 @@ function shortFile(p: string) {
   if (parts.length <= 3) return normalized;
   return parts.slice(-3).join('/');
 }
+function splitFile(p: string) {
+  const normalized = p.replace(/\/+$/, '');
+  const parts = normalized.split(/[\\/]/);
+  const file = parts.pop() || '';
+  const folder = parts.slice(-2).join('/');
+  return { folder, file };
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('library');
@@ -124,15 +131,26 @@ export default function App() {
   const dupeCount = useMemo(() => tracks.filter(t => t.duplicateGroupId).length, [tracks]);
 
   const streamUrl = (t: Track) => `/api/stream?path=${encodeURIComponent(t.filePath)}`;
+  const coverUrl = (t: Track) => `/api/cover?path=${encodeURIComponent(t.filePath)}`;
   const handlePlay = (t: Track) => {
     const audio = audioRef.current; if (!audio) return;
     if (playingId === t.id) {
-      if (isPaused) { audio.play(); setIsPaused(false); }
+      if (isPaused) { audio.play().then(()=>setIsPaused(false)).catch(e=>setError(e.message)); }
       else { audio.pause(); setIsPaused(true); }
       return;
     }
+    // set src on the single persistent element, then play
     audio.src = streamUrl(t);
-    audio.play().then(() => { setPlayingId(t.id); setIsPaused(false); }).catch(e => setError(e.message));
+    audio.load();
+    // show dock immediately so controls are visible while loading
+    setPlayingId(t.id);
+    setIsPaused(false);
+    setError('');
+    audio.play().catch(e => {
+      // NotAllowedError = autoplay blocked, need user gesture - but this IS a user gesture
+      setError(`Playback failed: ${e.message} — check file exists and /api/stream is reachable`);
+      setPlayingId(null);
+    });
   };
   const handleStop = () => {
     const audio = audioRef.current; if (!audio) return;
@@ -222,17 +240,17 @@ export default function App() {
             <table>
               <thead><tr>
                 <th style={{ width:56 }}></th>
-                <th onClick={() => toggleSort('title')}>Title{arrow('title')}</th>
+                <th onClick={() => toggleSort('title')}>Track{arrow('title')}</th>
                 <th onClick={() => toggleSort('artist')}>Artist{arrow('artist')}</th>
                 <th onClick={() => toggleSort('album')}>Album{arrow('album')}</th>
                 <th>Genre</th><th>Duration</th>
                 <th onClick={() => toggleSort('year')}>Year{arrow('year')}</th>
-                <th>File</th>
               </tr></thead>
               <tbody>
                 {filteredSorted.map(t => {
                   const isPlaying = playingId===t.id && !isPaused;
                   const isPausedThis = playingId===t.id && isPaused;
+                  const { folder, file } = splitFile(t.filePath);
                   return (
                     <tr key={t.id} className={`${playingId===t.id?'playing':''} ${t.duplicateGroupId?'dup':''}`} title={t.filePath}>
                       <td>
@@ -240,18 +258,33 @@ export default function App() {
                           {isPlaying ? '⏸' : '▶'}
                         </button>
                       </td>
-                      <td><span style={{ fontWeight:600 }}>{t.title}</span>{t.duplicateGroupId && <span className="dup-badge">dup</span>}</td>
+                      <td>
+                        <div className="track-cell">
+                          <div className="thumb">
+                            <img src={coverUrl(t)} alt="" loading="lazy"
+                              onLoad={e => { const fb=(e.target as HTMLImageElement).nextElementSibling as HTMLElement; if(fb) fb.style.display='none'; }}
+                              onError={e => { const img=e.target as HTMLImageElement; img.style.display='none'; const fb=img.nextElementSibling as HTMLElement; if(fb) fb.style.display='grid'; }} />
+                            <span className="thumb-fallback">♪</span>
+                          </div>
+                          <div className="track-main">
+                            <span className="track-title">{t.title}{t.duplicateGroupId && <span className="dup-badge">dup</span>}</span>
+                            <span className="track-file" title={t.filePath}>
+                              <span className="track-file-folder">{folder}/</span>
+                              <span className="track-file-name">{file}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </td>
                       <td style={{ color:'var(--muted)' }}>{t.artist}</td>
                       <td style={{ color:'var(--muted)' }}>{t.album}</td>
                       <td className="muted">{t.genre || '—'}</td>
                       <td className="muted">{formatDuration(t.duration)}</td>
                       <td className="muted">{t.year ?? '—'}</td>
-                      <td className="muted cell-ellipsis" title={t.filePath}>{shortFile(t.filePath)}</td>
                     </tr>
                   );
                 })}
                 {filteredSorted.length===0 && (
-                  <tr><td colSpan={8}><div className="empty" style={{ border:'none' }}>
+                  <tr><td colSpan={7}><div className="empty" style={{ border:'none' }}>
                     <b>{showDupesOnly ? 'No duplicates' : 'No tracks yet'}</b>
                     <span>{showDupesOnly ? 'Your library is clean.' : 'Add a folder in settings and hit Scan.'}</span>
                   </div></td></tr>
@@ -354,7 +387,7 @@ export default function App() {
         </>
       )}
 
-      {/* Bottom Player Dock */}
+      {/* Bottom Player Dock - info only, audio element is persistent below */}
       {playingTrack && (
         <div className="glass player-dock">
           <div className="player-art">♪</div>
@@ -366,25 +399,18 @@ export default function App() {
             <button className="play-btn" onClick={() => playingTrack && handlePlay(playingTrack)} title={isPaused?'Resume':'Pause'}>{isPaused?'▶':'⏸'}</button>
             <button className="play-btn ghost" onClick={handleStop} title="Stop">⏹</button>
           </div>
-          <audio
-            ref={audioRef}
-            controls
-            onEnded={() => { setPlayingId(null); setIsPaused(false); }}
-            onPause={() => { if (playingId) setIsPaused(true); }}
-            onPlay={() => { if (playingId) setIsPaused(false); }}
-          />
         </div>
       )}
-      {/* hidden audio when nothing playing to keep ref alive */}
-      {!playingTrack && (
-        <audio
-          ref={audioRef}
-          style={{ display:'none' }}
-          onEnded={() => { setPlayingId(null); setIsPaused(false); }}
-          onPause={() => { if (playingId) setIsPaused(true); }}
-          onPlay={() => { if (playingId) setIsPaused(false); }}
-        />
-      )}
+      {/* Single persistent audio - always mounted, just hidden via CSS (fixes src lost on mount) */}
+      <audio
+        ref={audioRef}
+        controls
+        style={{ position:'fixed', bottom: playingTrack ? 88 : -100, left:'50%', transform:'translateX(-50%)', width:'min(720px, calc(100% - 32px))', zIndex: 49, borderRadius:12, opacity: playingTrack ? 1 : 0, pointerEvents: playingTrack ? 'auto' : 'none' }}
+        onEnded={() => { setPlayingId(null); setIsPaused(false); }}
+        onPause={() => { if (playingId) setIsPaused(true); }}
+        onPlay={() => { if (playingId) setIsPaused(false); }}
+        onError={() => setError('Failed to play — file may be missing or format unsupported')}
+      />
     </div>
   );
 }

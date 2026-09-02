@@ -8,6 +8,7 @@ export type Track = {
   year?: number;
   duration?: number;
   duplicateGroupId?: string;
+  hasCover?: boolean;
 };
 export type WishlistItem = {
   id: string;

@@ -135,6 +135,17 @@ tbody tr.dup{ background: rgba(255,193,7,0.07); }
 .play-btn.ghost{ background: rgba(255,255,255,0.1); color: var(--text); border:1px solid var(--border); }
 .cell-ellipsis{ max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+/* track cell with cover + 2-line file */
+.track-cell{ display:flex; gap:10px; align-items:center; min-width:0; }
+.thumb{ width:40px; height:40px; border-radius:8px; overflow:hidden; flex-shrink:0; background: rgba(255,255,255,0.07); border:1px solid var(--border-soft); display:grid; place-items:center; position:relative; }
+.thumb img{ width:100%; height:100%; object-fit:cover; display:block; position:relative; z-index:1; }
+.thumb-fallback{ font-size:16px; opacity:.7; position:absolute; inset:0; display:grid; place-items:center; z-index:0; }
+.track-main{ display:flex; flex-direction:column; gap:2px; min-width:0; overflow:hidden; }
+.track-title{ font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.track-file{ font-size:11px; color: var(--muted); display:flex; gap:0; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-family: ui-monospace, SFMono-Regular, monospace; }
+.track-file-folder{ opacity:.7; overflow:hidden; text-overflow:ellipsis; }
+.track-file-name{ color: rgba(238,241,255,0.75); overflow:hidden; text-overflow:ellipsis; }
+
 /* primary button */
 .btn{ padding:9px 16px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,0.08); color: var(--text); cursor:pointer; font-size:13px; font-weight:600; transition:.2s; }
 .btn:hover{ background: rgba(255,255,255,0.14); }
@@ -188,6 +199,7 @@ tbody tr.dup{ background: rgba(255,193,7,0.07); }
 @media (max-width: 640px){
   .player-controls audio{ width:140px; }
   .app{ padding:18px 14px 110px; }
+  .thumb{ width:32px; height:32px; }
   th:nth-child(5), td:nth-child(5), th:nth-child(7), td:nth-child(7){ display:none; } /* hide genre/year on mobile */
 }
 
