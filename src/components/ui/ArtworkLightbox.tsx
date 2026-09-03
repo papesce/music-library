@@ -9,10 +9,12 @@ type Props = {
   onEdit?: () => void;
   onPlay?: () => void;
   isPlaying?: boolean;
+  coverBust?: number;
 };
 
-export function ArtworkLightbox({ track, onClose, onEdit, onPlay, isPlaying }: Props) {
+export function ArtworkLightbox({ track, onClose, onEdit, onPlay, isPlaying, coverBust }: Props) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [track.filePath, coverBust]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -44,7 +46,7 @@ export function ArtworkLightbox({ track, onClose, onEdit, onPlay, isPlaying }: P
         <div className="artwork-lightbox-img-wrap">
           {!failed ? (
             <img
-              src={coverUrl(track.filePath)}
+              src={coverUrl(track.filePath, coverBust)}
               alt={`${track.album} cover — ${track.artist} — ${track.title}`}
               onError={() => setFailed(true)}
             />

@@ -31,6 +31,7 @@ export default function App() {
   const [nowOpen, setNowOpen] = useState(true);
   const [batchResults, setBatchResults] = useState<{ path: string; status: string; source?: string; lrc?: string; error?: string }[] | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
+  const [coverBust, setCoverBust] = useState<Record<string, number>>({});
 
   const { error, setError, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
@@ -225,6 +226,7 @@ export default function App() {
             onDelete={setConfirmTrack}
             onToggleReviewed={toggleReviewed}
             showDupesOnly={lib.showDupesOnly}
+            coverBust={coverBust}
           />
         </>
       )}
@@ -270,7 +272,7 @@ export default function App() {
 
       {confirmTrack && <DeleteTrackModal track={confirmTrack} deleting={deleting} onCancel={() => setConfirmTrack(null)} onConfirm={confirmDeleteTrack} />}
 
-      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); }} setError={setError} />}
+      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); setCoverBust(prev => ({ ...prev, [t.filePath]: Date.now() })); if (oldFilePath && oldFilePath !== t.filePath) setCoverBust(prev => { const { [oldFilePath]: _, ...rest } = prev; return rest; }); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); }} setError={setError} />}
 
       <UnifiedPlayer
         track={player.playingTrack}
@@ -287,6 +289,7 @@ export default function App() {
         onExpand={() => setNowOpen(true)}
         onCollapse={() => setNowOpen(false)}
         onEdit={player.playingTrack ? () => setEditTrack(player.playingTrack!) : undefined}
+        coverBust={player.playingTrack ? coverBust[player.playingTrack.filePath] : undefined}
       />
 
       {splitTrack && (

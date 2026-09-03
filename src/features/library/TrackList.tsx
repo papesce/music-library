@@ -18,11 +18,12 @@ type Props = {
   onDelete: (t: Track) => void;
   onToggleReviewed?: (t: Track) => void;
   showDupesOnly: boolean;
+  coverBust?: Record<string, number>;
 };
 
 const ROW_HEIGHT = 64;
 
-export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, showDupesOnly }: Props) {
+export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, showDupesOnly, coverBust }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
@@ -65,6 +66,7 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
                 onEdit={() => onEdit(t)}
                 onDelete={() => onDelete(t)}
                 onToggleReviewed={onToggleReviewed}
+                coverBust={coverBust?.[t.filePath]}
                 style={{
                   position: 'absolute',
                   top: 0,

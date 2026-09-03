@@ -18,6 +18,7 @@ type Props = {
   onExpand: () => void;
   onCollapse: () => void;
   onEdit?: () => void;
+  coverBust?: number;
 };
 
 function LyricsView({
@@ -61,7 +62,7 @@ function LyricsView({
   return <div className="lyrics-plain">{lyrics}</div>;
 }
 
-export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit }: Props) {
+export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, coverBust }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
@@ -70,7 +71,7 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
   const [previewText, setPreviewText] = useState('');
   const [detectError, setDetectError] = useState('');
 
-  useEffect(() => setArtFailed(false), [track?.filePath]);
+  useEffect(() => setArtFailed(false), [track?.filePath, coverBust]);
   useEffect(() => { setPreview(null); setPreviewText(''); setDetectError(''); }, [track?.filePath]);
 
   const handleDetect = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
@@ -105,7 +106,7 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
     <div className="glass unified-collapsed" onClick={onExpand} role="button" tabIndex={0} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onExpand()} aria-label="Expand player">
       <div className="unified-collapsed-art">
         {!artFailed ? (
-          <img src={coverUrl(track.filePath)} alt="" onError={() => setArtFailed(true)} />
+          <img src={coverUrl(track.filePath, coverBust)} alt="" onError={() => setArtFailed(true)} />
         ) : (
           <span>♪</span>
         )}
@@ -130,6 +131,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
         <button className="play-btn ghost" onClick={onStop} aria-label="Stop">
           ⏹
         </button>
+        {onEdit && (
+          <button className="btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title="Edit song" style={{ padding: '6px 10px' }}>
+            ✎
+          </button>
+        )}
         <button className="btn" onClick={onExpand} aria-label="Expand" style={{ padding: '6px 10px' }}>
           {expanded ? '⌄' : '⌃'}
         </button>
@@ -151,6 +157,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            {onEdit && (
+              <button className="btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title="Edit metadata, artwork and lyrics" style={{ padding: '6px 12px' }}>
+                ✎ Edit
+              </button>
+            )}
             <button className="btn" onClick={onCollapse} aria-label="Collapse" style={{ padding: '6px 10px' }}>
               ⌄
             </button>
@@ -170,7 +181,7 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             style={{ border: 'none', padding: 0, cursor: 'zoom-in' }}
           >
             {!artFailed ? (
-              <img src={coverUrl(track.filePath)} alt={`${track.album} cover`} onError={() => setArtFailed(true)} />
+              <img src={coverUrl(track.filePath, coverBust)} alt={`${track.album} cover`} onError={() => setArtFailed(true)} />
             ) : (
               <div className="now-artwork-fallback">♪</div>
             )}
@@ -249,7 +260,7 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
       {collapsed}
 
       {lightboxOpen && (
-        <ArtworkLightbox track={track} onClose={() => setLightboxOpen(false)} onEdit={onEdit} onPlay={onToggle} isPlaying={!isPaused} />
+        <ArtworkLightbox track={track} coverBust={coverBust} onClose={() => setLightboxOpen(false)} onEdit={onEdit} onPlay={onToggle} isPlaying={!isPaused} />
       )}
     </div>
   );

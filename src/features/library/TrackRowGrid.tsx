@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { Track } from '../../types/api.d';
 import { coverUrl, splitFile } from '../../lib/path';
 import { formatDuration, truncateMiddle } from '../../lib/format';
@@ -15,11 +15,13 @@ type Props = {
   onDelete: () => void;
   onToggleReviewed?: (t: Track) => void;
   style?: React.CSSProperties;
+  coverBust?: number;
 };
 
-export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, style }: Props) {
+export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, style, coverBust }: Props) {
   const { folder, file } = splitFile(track.filePath);
   const [coverFailed, setCoverFailed] = useState(false);
+  useEffect(() => { setCoverFailed(false); }, [track.filePath, coverBust]);
 
   return (
     <div
@@ -65,7 +67,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
             title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Play'}
           >
             {!coverFailed ? (
-              <img src={coverUrl(track.filePath)} alt="" loading="lazy" onError={() => setCoverFailed(true)} />
+              <img src={coverUrl(track.filePath, coverBust)} alt="" loading="lazy" onError={() => setCoverFailed(true)} />
             ) : null}
             <span className="thumb-fallback" style={{ display: coverFailed ? 'grid' : undefined }}>
               ♪

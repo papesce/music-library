@@ -17,6 +17,7 @@ export function streamUrl(filePath: string): string {
   return `/api/stream?path=${encodeURIComponent(filePath)}`;
 }
 
-export function coverUrl(filePath: string): string {
-  return `/api/cover?path=${encodeURIComponent(filePath)}`;
+export function coverUrl(filePath: string, bust?: number | string): string {
+  const base = `/api/cover?path=${encodeURIComponent(filePath)}`;
+  return bust != null ? `${base}&t=${encodeURIComponent(String(bust))}` : base;
 }
