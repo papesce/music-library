@@ -848,6 +848,71 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true, files: created, count: created.length });
     }
 
+    if (url.pathname === '/api/lyrics' && req.method === 'GET') {
+      const filePath = url.searchParams.get('path');
+      if (!filePath) return json(res, 400, { error: 'path query required' });
+      const resolved = resolve(filePath);
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      try {
+        const meta = await parseFile(resolved);
+        let lyrics: string | null = null;
+        let synced: { ms: number; text: string }[] | undefined;
+        // 1) ID3 USLT / common.lyric
+        const rawLyrics = (meta.common as any).lyrics ?? (meta.common as any).lyric;
+        if (Array.isArray(rawLyrics) && rawLyrics.length) {
+          const first = rawLyrics[0];
+          if (typeof first === 'string') lyrics = first;
+          else if (first?.text) lyrics = first.text;
+        }
+        if (!lyrics) {
+          // try native frames
+          for (const tagType of Object.keys(meta.native)) {
+            for (const f of (meta.native as any)[tagType] ?? []) {
+              if (f.id === 'USLT' || f.id === 'SYLT' || f.id?.startsWith('USLT')) {
+                const txt = f.value?.text ?? f.value;
+                if (typeof txt === 'string' && txt.trim()) lyrics = txt.trim();
+              }
+            }
+          }
+        }
+        // 2) LRC sidecar
+        if (!lyrics) {
+          const lrcPath = resolved.replace(/\.mp3$/i, '.lrc');
+          const lrcPath2 = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
+          for (const p of [lrcPath, lrcPath2]) {
+            if (existsSync(p)) {
+              try {
+                lyrics = await fs.readFile(p, 'utf-8');
+                break;
+              } catch {}
+            }
+          }
+        }
+        // 3) try parse synced from LRC format
+        if (lyrics && /^\s*\[\d{1,3}:\d{2}/m.test(lyrics)) {
+          const lines = lyrics.split('\n');
+          const parsed: { ms: number; text: string }[] = [];
+          for (const line of lines) {
+            const m = line.match(/\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\](.*)/);
+            if (m) {
+              const min = Number(m[1]), sec = Number(m[2]), msPart = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0;
+              const ms = (min * 60 + sec) * 1000 + msPart;
+              const text = (m[4] ?? '').trim();
+              if (text) parsed.push({ ms, text });
+            }
+          }
+          if (parsed.length) synced = parsed.sort((a, b) => a.ms - b.ms);
+        }
+        return json(res, 200, { lyrics: lyrics ?? null, synced: synced ?? null });
+      } catch (e: any) {
+        return json(res, 500, { error: e.message });
+      }
+    }
+
     if (url.pathname === '/' && req.method === 'GET') {
       return json(res, 200, {
         ok: true,

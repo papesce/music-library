@@ -11,6 +11,7 @@ import { DeleteTrackModal } from './features/library/DeleteTrackModal';
 import { EditTrackModal } from './features/library/EditTrackModal';
 import { WishlistTab } from './features/wishlist/WishlistTab';
 import { AudioElement } from './features/player/AudioElement';
+import { NowPlayingSheet } from './features/player/NowPlayingSheet';
 import { useFolders } from './features/settings/useFolders';
 import { useLibrary } from './features/library/useLibrary';
 import { usePlayer } from './features/player/usePlayer';
@@ -28,6 +29,7 @@ export default function App() {
   const [deleting, setDeleting] = useState(false);
   const [editTrack, setEditTrack] = useState<Track | null>(null);
   const [splitTrack, setSplitTrack] = useState<Track | null>(null);
+  const [nowOpen, setNowOpen] = useState(false);
 
   const { error, setError, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
@@ -198,7 +200,19 @@ export default function App() {
 
       {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={t => setTracks(prev => prev.map(x => (x.filePath === t.filePath ? t : x)))} setError={setError} />}
 
-      <PlayerDock track={player.playingTrack} isPaused={player.isPaused} onToggle={() => player.playingTrack && player.handlePlay(player.playingTrack)} onStop={player.handleStop} />
+      <PlayerDock track={player.playingTrack} isPaused={player.isPaused} onToggle={() => player.playingTrack && player.handlePlay(player.playingTrack)} onStop={player.handleStop} onExpand={() => setNowOpen(true)} />
+      {nowOpen && (
+        <NowPlayingSheet
+          track={player.playingTrack}
+          isPaused={player.isPaused}
+          onToggle={() => player.playingTrack && player.handlePlay(player.playingTrack)}
+          onStop={player.handleStop}
+          onClose={() => setNowOpen(false)}
+          currentTime={player.currentTime}
+          duration={player.duration || player.playingTrack?.duration || 0}
+          onSeek={player.seek}
+        />
+      )}
 
       {splitTrack && (
         <SplitModal

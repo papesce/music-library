@@ -64,4 +64,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segments }),
     }),
+  getLyrics: (filePath: string) =>
+    req<{ lyrics: string | null; synced: { ms: number; text: string }[] | null }>(
+      `/api/lyrics?path=${encodeURIComponent(filePath)}`
+    ),
 };
