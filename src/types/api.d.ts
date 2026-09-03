@@ -11,6 +11,7 @@ export type Track = {
   hasCover?: boolean;
   reviewed?: boolean;
   reviewedAt?: string;
+  isCover?: boolean;
 };
 export type WishlistItem = {
   id: string;

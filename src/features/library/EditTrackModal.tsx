@@ -41,6 +41,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [reviewed, setReviewed] = useState(!!track.reviewed);
+  const [isCover, setIsCover] = useState(!!track.isCover);
   const [activeTab, setActiveTab] = useState<Tab>('details');
   // artwork state
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     setFilename(getFilename(track.filePath));
     setFilenameError('');
     setReviewed(!!track.reviewed);
+    setIsCover(!!track.isCover);
     setCoverPreview(null);
     setCoverMime(null);
     setCoverError('');
@@ -180,6 +182,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     const originalFilename = getFilename(track.filePath);
     const filenameChanged = filenameTrimmed !== originalFilename;
     const reviewedChanged = reviewed !== !!track.reviewed;
+    const isCoverChanged = isCover !== !!track.isCover;
     const coverChanged = !!coverPreview || coverRemove;
     if (filenameChanged) {
       const err = validateFilename(filenameTrimmed);
@@ -222,10 +225,13 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
           currentTrack = await api.setCover(targetPath, coverPreview);
         }
       }
+      if (isCoverChanged) {
+        currentTrack = await api.setIsCover(currentTrack.filePath, isCover);
+      }
       if (reviewedChanged) {
         currentTrack = await api.setReviewed(currentTrack.filePath, reviewed);
       }
-      if (!hasPatch && !reviewedChanged && !didRename && !coverChanged) {
+      if (!hasPatch && !reviewedChanged && !isCoverChanged && !didRename && !coverChanged) {
         onClose();
         return;
       }
@@ -245,7 +251,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
   const isSynced = lyricsText ? /\[\d{1,3}:\d{2}/.test(lyricsText) : false;
 
   // per-tab dirty
-  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || reviewed !== !!track.reviewed;
+  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || reviewed !== !!track.reviewed || isCover !== !!track.isCover;
   const fileDirty = filename.trim() !== getFilename(track.filePath);
   const lyricsDirty = lyricsPreview !== (lyricsText ?? '') && lyricsPreview.trim() !== '';
 
@@ -347,14 +353,23 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
               <div style={{ width: 120 }}><Field label="Year" value={year} onChange={setYear} placeholder="2024" inputMode="numeric" /></div>
             </div>
 
-            {/* Reviewed — compact toggle */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.10)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} style={{ accentColor: '#2ecc71', width: 16, height: 16 }} />
-              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: reviewed ? '#8ff5b8' : 'var(--text)' }}>{reviewed ? '✓ Reviewed' : 'Mark as reviewed'}</span>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{reviewed ? 'Hidden when "Hide done" is active.' : "Won't need inspection again."}</span>
-              </span>
-            </label>
+            {/* Reviewed + Cover/Original toggles */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.10)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} style={{ accentColor: '#2ecc71', width: 16, height: 16 }} />
+                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: reviewed ? '#8ff5b8' : 'var(--text)' }}>{reviewed ? '✓ Reviewed' : 'Mark as reviewed'}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{reviewed ? 'Hidden when "Hide done" is active.' : "Won't need inspection again."}</span>
+                </span>
+              </label>
+              <label style={{ flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${isCover ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`, background: isCover ? 'rgba(124,92,255,0.12)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={isCover} onChange={e => setIsCover(e.target.checked)} style={{ accentColor: '#7c5cff', width: 16, height: 16 }} />
+                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: isCover ? '#c4b5ff' : 'var(--text)' }}>{isCover ? 'Cover version' : 'Original'}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{isCover ? 'Mark as cover (badge in list)' : 'Mark if this is a cover'}</span>
+                </span>
+              </label>
+            </div>
 
             {/* Google validation — inline, not a big card */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>

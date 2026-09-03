@@ -77,6 +77,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
           <div className="track-main">
             <span className="track-title">
               {track.title}
+              {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff' }}>cover</span> : <span className="dup-badge" style={{ background: 'rgba(255,255,255,0.14)', color: 'var(--muted)', border: '1px solid var(--border-soft)' }}>orig</span>}
               {track.duplicateGroupId && <span className="dup-badge">dup</span>}
               {track.reviewed && <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f' }}>✓ done</span>}
             </span>

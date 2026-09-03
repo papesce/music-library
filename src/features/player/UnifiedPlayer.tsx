@@ -151,9 +151,9 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
       <div className="glass unified-expanded">
         <div className="now-header">
           <div className="now-header-meta">
-            <b>{track.title}</b>
+            <b>{track.title} {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff', verticalAlign: 'middle', marginLeft: 6 }}>cover</span> : null}</b>
             <span className="muted">
-              {track.artist} · {track.album} {track.year ? `· ${track.year}` : ''} {hasSynced ? '· synced' : ''}
+              {track.artist} · {track.album} {track.year ? `· ${track.year}` : ''} {hasSynced ? '· synced' : ''} {track.isCover ? '· cover' : '· orig'}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>

@@ -15,6 +15,7 @@ export type Track = {
   hasCover?: boolean;
   reviewed?: boolean;
   reviewedAt?: string;
+  isCover?: boolean;
 };
 export type WishlistItem = {
   id: string;
@@ -57,7 +58,8 @@ function initSchema(database: DatabaseSync) {
       duplicateGroupId TEXT,
       hasCover INTEGER DEFAULT 0,
       reviewed INTEGER DEFAULT 0,
-      reviewedAt TEXT
+      reviewedAt TEXT,
+      isCover INTEGER DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS wishlist (
       id TEXT PRIMARY KEY,
@@ -102,7 +104,7 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
         const tracks = JSON.parse(readFileSync(libPath, 'utf-8')) as Track[];
         if (Array.isArray(tracks) && tracks.length) {
           const stmt = database.prepare(
-            'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt, isCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
           );
           for (const t of tracks) {
             stmt.run(
@@ -117,7 +119,8 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
               t.duplicateGroupId ?? null,
               (t as any).hasCover ? 1 : 0,
               (t as any).reviewed ? 1 : 0,
-              (t as any).reviewedAt ?? null
+              (t as any).reviewedAt ?? null,
+              (t as any).isCover ? 1 : 0
             );
           }
         }
@@ -174,6 +177,7 @@ function ensureTrackMigrations(d: DatabaseSync) {
     ['hasCover', 'ALTER TABLE tracks ADD COLUMN hasCover INTEGER DEFAULT 0'],
     ['reviewed', 'ALTER TABLE tracks ADD COLUMN reviewed INTEGER DEFAULT 0'],
     ['reviewedAt', 'ALTER TABLE tracks ADD COLUMN reviewedAt TEXT'],
+    ['isCover', 'ALTER TABLE tracks ADD COLUMN isCover INTEGER DEFAULT 0'],
   ] as const) {
     try {
       d.prepare(`SELECT ${col} FROM tracks LIMIT 1`).get();
@@ -202,6 +206,7 @@ export function getTracks(): Track[] {
     hasCover: !!r.hasCover,
     reviewed: !!r.reviewed,
     reviewedAt: r.reviewedAt ?? undefined,
+    isCover: !!r.isCover,
   }));
 }
 
@@ -212,7 +217,7 @@ export function setTracks(tracks: Track[]) {
   try {
     d.prepare('DELETE FROM tracks').run();
     const stmt = d.prepare(
-      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt, isCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     for (const t of tracks) {
       stmt.run(
@@ -227,7 +232,8 @@ export function setTracks(tracks: Track[]) {
         t.duplicateGroupId ?? null,
         t.hasCover ? 1 : 0,
         t.reviewed ? 1 : 0,
-        t.reviewedAt ?? null
+        t.reviewedAt ?? null,
+        t.isCover ? 1 : 0
       );
     }
     d.exec('COMMIT');
@@ -317,7 +323,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
   if (!existing) return null;
   const merged = { ...existing, ...patch, filePath: existing.filePath, id: existing.id };
   d.prepare(
-    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ? WHERE filePath = ?'
+    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ?, isCover = ? WHERE filePath = ?'
   ).run(
     merged.title,
     merged.artist,
@@ -329,6 +335,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     merged.hasCover ? 1 : 0,
     merged.reviewed ? 1 : 0,
     merged.reviewedAt ?? null,
+    merged.isCover ? 1 : 0,
     existing.filePath
   );
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
@@ -346,6 +353,35 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     hasCover: !!row.hasCover,
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
+    isCover: !!row.isCover,
+  };
+}
+
+export function setTrackIsCover(filePath: string, isCover: boolean): Track | null {
+  const d = getDb();
+  ensureTrackMigrations(d);
+  const resolved = resolve(filePath);
+  const existing =
+    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
+    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+  if (!existing) return null;
+  d.prepare('UPDATE tracks SET isCover = ? WHERE filePath = ?').run(isCover ? 1 : 0, existing.filePath);
+  const row2 = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
+  if (!row2) return null;
+  return {
+    id: row2.id,
+    filePath: row2.filePath,
+    title: row2.title,
+    artist: row2.artist,
+    album: row2.album,
+    genre: row2.genre,
+    year: row2.year ?? undefined,
+    duration: row2.duration ?? undefined,
+    duplicateGroupId: row2.duplicateGroupId ?? undefined,
+    hasCover: !!row2.hasCover,
+    reviewed: !!row2.reviewed,
+    reviewedAt: row2.reviewedAt ?? undefined,
+    isCover: !!row2.isCover,
   };
 }
 
@@ -374,6 +410,7 @@ export function setTrackReviewed(filePath: string, reviewed: boolean): Track | n
     hasCover: !!row.hasCover,
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
+    isCover: !!row.isCover,
   };
 }
 
@@ -439,5 +476,6 @@ export function renameTrackPath(oldPath: string, newPath: string): Track | null 
     hasCover: !!row.hasCover,
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
+    isCover: !!row.isCover,
   };
 }

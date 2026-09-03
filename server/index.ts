@@ -26,6 +26,7 @@ import {
   getTrackByPath,
   renameTrackPath,
   setTrackReviewed,
+  setTrackIsCover,
 } from './db.js';
 const execFileAsync = promisify(execFile);
 
@@ -45,6 +46,7 @@ type Track = {
   hasCover?: boolean;
   reviewed?: boolean;
   reviewedAt?: string;
+  isCover?: boolean;
 };
 type WishlistItem = {
   id: string;
@@ -127,6 +129,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         hasCover,
         reviewed: prev?.reviewed ?? false,
         reviewedAt: prev?.reviewedAt,
+        isCover: prev?.isCover ?? false,
       });
     } catch {
       const fb = fallbackFromFilename(filePath);
@@ -140,6 +143,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         hasCover: false,
         reviewed: prev?.reviewed ?? false,
         reviewedAt: prev?.reviewedAt,
+        isCover: prev?.isCover ?? false,
       });
     }
   }
@@ -823,6 +827,21 @@ const server = createServer(async (req, res) => {
       if (!existing) return json(res, 404, { error: 'track not found' });
       const updated = setTrackReviewed(resolved, reviewed);
       if (!updated) return json(res, 500, { error: 'failed to update reviewed state' });
+      return json(res, 200, updated);
+    }
+
+    if ((url.pathname === '/api/tracks/is-cover' || url.pathname === '/api/tracks/cover-mark') && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const raw = body.isCover ?? body.is_original ?? body.original;
+      if (raw === undefined) return json(res, 400, { error: 'isCover boolean required' });
+      const isCover = raw === true || raw === 'true' || raw === 1 || raw === '1' || String(raw).toLowerCase() === 'cover';
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      if (!existing) return json(res, 404, { error: 'track not found' });
+      const updated = setTrackIsCover(resolved, isCover);
+      if (!updated) return json(res, 500, { error: 'failed to update cover/original mark' });
       return json(res, 200, updated);
     }
 
