@@ -6,7 +6,7 @@ import { FolderDrawer } from './components/FolderDrawer';
 import { PlayerDock } from './components/PlayerDock';
 import { Toast } from './components/ui/Toast';
 import { LibraryHero } from './features/library/LibraryHero';
-import { TrackTable } from './features/library/TrackTable';
+import { TrackList } from './features/library/TrackList';
 import { DeleteTrackModal } from './features/library/DeleteTrackModal';
 import { EditTrackModal } from './features/library/EditTrackModal';
 import { WishlistTab } from './features/wishlist/WishlistTab';
@@ -139,7 +139,7 @@ export default function App() {
             playing={!!player.playingId}
             onStop={player.handleStop}
           />
-          <TrackTable
+          <TrackList
             tracks={lib.filteredSorted}
             playingId={player.playingId}
             isPaused={player.isPaused}

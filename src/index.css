@@ -254,83 +254,108 @@ body {
   color: var(--muted);
 }
 
-/* table as glass */
-.table-wrap {
+/* track list — grid replaces table (virtualized, responsive) */
+.track-list {
   border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.track-list-body {
   overflow: auto;
+  max-height: 65vh;
   -webkit-overflow-scrolling: touch;
 }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 720px;
+.track-list-header,
+.track-row {
+  display: grid;
+  grid-template-columns: 48px minmax(180px, 1.6fr) 140px 140px 80px 72px 64px 96px;
+  align-items: center;
+  gap: 0;
 }
-/* keep action column (edit/delete/split) always visible - sticky right */
-th:last-child,
-td:last-child {
+.track-list-header {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
   position: sticky;
-  right: 0;
-  z-index: 1;
-  background: var(--glass);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-left: 1px solid var(--border-soft);
-  box-shadow: -12px 0 24px rgba(0, 0, 0, 0.15);
-}
-th:last-child {
+  top: 0;
   z-index: 2;
+  backdrop-filter: blur(12px);
 }
-tbody tr:hover td:last-child {
-  background: rgba(255, 255, 255, 0.05);
-}
-tbody tr.playing td:last-child {
-  background: rgba(124, 92, 255, 0.12);
-}
-tbody tr.dup td:last-child {
-  background: rgba(255, 193, 7, 0.07);
-}
-tbody tr.playing:hover td:last-child {
-  background: rgba(124, 92, 255, 0.16);
-}
-tbody tr.dup:hover td:last-child {
-  background: rgba(255, 193, 7, 0.1);
-}
-/* prevent YEAR header/content being trimmed by sticky actions column */
-th:nth-last-child(2),
-td:nth-last-child(2) {
-  padding-right: 24px;
-}
-th,
-td {
-  padding: 12px 14px;
-  text-align: left;
-  font-size: 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-th {
+.header-cell {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
   font-weight: 700;
-  cursor: pointer;
-  user-select: none;
+  padding: 0 10px;
   white-space: nowrap;
+  overflow: hidden;
 }
-th:hover {
+.sort-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.sort-btn:hover {
   color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
 }
-tbody tr {
+.sort-arrow {
+  font-size: 10px;
+  opacity: 0.4;
+}
+.sort-arrow.active {
+  opacity: 1;
+}
+.track-row {
+  height: 64px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   transition: background 0.15s;
+  padding: 0;
 }
-tbody tr:hover {
+.track-row:hover {
   background: rgba(255, 255, 255, 0.05);
 }
-tbody tr.playing {
+.track-row.playing {
   background: rgba(124, 92, 255, 0.12);
 }
-tbody tr.dup {
+.track-row.dup {
   background: rgba(255, 193, 7, 0.07);
+}
+.track-row.playing:hover {
+  background: rgba(124, 92, 255, 0.16);
+}
+.track-row.dup:hover {
+  background: rgba(255, 193, 7, 0.1);
+}
+.track-row-cell {
+  padding: 0 10px;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track-row-cell.cell-artist,
+.track-row-cell.cell-album {
+  color: var(--muted);
+}
+.cell-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  padding-right: 12px;
 }
 .dup-badge {
   font-size: 10px;
@@ -624,6 +649,20 @@ tbody tr.dup {
   filter: invert(1) hue-rotate(180deg) brightness(1.2);
   opacity: 0.9;
 }
+@media (max-width: 900px) {
+  .track-list-header,
+  .track-row {
+    grid-template-columns: 48px minmax(140px, 1fr) 120px 96px;
+  }
+  .header-cell.cell-album,
+  .track-row-cell.cell-album,
+  .header-cell.cell-genre,
+  .track-row-cell.cell-genre,
+  .header-cell.cell-year,
+  .track-row-cell.cell-year {
+    display: none;
+  }
+}
 @media (max-width: 640px) {
   .player-controls audio {
     width: 140px;
@@ -635,12 +674,28 @@ tbody tr.dup {
     width: 32px;
     height: 32px;
   }
-  th:nth-child(5),
-  td:nth-child(5),
-  th:nth-child(7),
-  td:nth-child(7) {
+  .track-list-body {
+    max-height: 60vh;
+  }
+  .track-list-header {
     display: none;
-  } /* hide genre/year on mobile */
+  }
+  .track-row {
+    grid-template-columns: 40px 1fr 72px 56px;
+    height: 64px !important;
+  }
+  .track-row .cell-album,
+  .track-row .cell-genre,
+  .track-row .cell-year {
+    display: none;
+  }
+  .track-row .cell-artist {
+    font-size: 12px;
+  }
+  .track-row .cell-duration {
+    font-size: 11px;
+    justify-self: end;
+  }
 }
 
 /* drawer */
