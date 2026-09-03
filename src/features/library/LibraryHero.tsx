@@ -3,7 +3,10 @@ export function LibraryHero({
   setSearch,
   showDupesOnly,
   setShowDupesOnly,
+  hideReviewed,
+  setHideReviewed,
   dupeCount,
+  reviewedCount,
   filteredCount,
   totalCount,
   scanning,
@@ -16,7 +19,10 @@ export function LibraryHero({
   setSearch: (v: string) => void;
   showDupesOnly: boolean;
   setShowDupesOnly: (v: boolean) => void;
+  hideReviewed: boolean;
+  setHideReviewed: (v: boolean) => void;
   dupeCount: number;
+  reviewedCount: number;
   filteredCount: number;
   totalCount: number;
   scanning: boolean;
@@ -46,6 +52,14 @@ export function LibraryHero({
               Dupes {dupeCount > 0 ? `· ${dupeCount}` : ''}
             </button>
           </div>
+          <button
+            className={`pill ${hideReviewed ? 'active' : ''}`}
+            onClick={() => setHideReviewed(!hideReviewed)}
+            title={hideReviewed ? 'Showing unreviewed only' : 'Hide completed/reviewed songs'}
+            style={{ borderColor: hideReviewed ? 'rgba(46,204,113,0.35)' : undefined, background: hideReviewed ? 'rgba(46,204,113,0.14)' : undefined }}
+          >
+            {hideReviewed ? '✓ Unreviewed only' : `Hide done ${reviewedCount > 0 ? `· ${reviewedCount}` : ''}`}
+          </button>
           <button className="btn btn-primary" onClick={onScan} disabled={scanning}>
             {scanning ? 'Scanning…' : 'Scan'}
           </button>
@@ -78,6 +92,18 @@ export function LibraryHero({
           <div className="glass stat" style={{ borderColor: 'rgba(255,193,7,0.25)' }}>
             <b>{dupeCount}</b>
             <span>dupes</span>
+          </div>
+        )}
+        {reviewedCount > 0 && (
+          <div className="glass stat" style={{ borderColor: 'rgba(46,204,113,0.3)', background: 'rgba(46,204,113,0.08)' }}>
+            <b>{reviewedCount}</b>
+            <span>done</span>
+          </div>
+        )}
+        {reviewedCount > 0 && filteredCount !== totalCount - (hideReviewed ? reviewedCount : 0) && (
+          <div className="glass stat">
+            <b>{totalCount - reviewedCount}</b>
+            <span>pending</span>
           </div>
         )}
       </div>

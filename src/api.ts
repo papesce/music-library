@@ -46,6 +46,16 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path: filePath, ...patch }),
     }),
+  renameTrack: (filePath: string, filename: string) =>
+    req<Track>('/api/tracks/rename', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, filename }),
+    }),
+  setReviewed: (filePath: string, reviewed: boolean) =>
+    req<Track>('/api/tracks/reviewed', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, reviewed }),
+    }),
   detectSplit: (filePath: string, minSilenceMs = 700, silenceThreshDb = -50) =>
     req<{ path: string; split_points_ms: number[]; duration_ms: number }>('/api/split/detect', {
       method: 'POST',
@@ -68,4 +78,14 @@ export const api = {
     req<{ lyrics: string | null; synced: { ms: number; text: string }[] | null }>(
       `/api/lyrics?path=${encodeURIComponent(filePath)}`
     ),
+  setCover: (filePath: string, imageDataUrl: string) =>
+    req<Track>('/api/tracks/cover', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, image: imageDataUrl }),
+    }),
+  removeCover: (filePath: string) =>
+    req<Track>('/api/tracks/cover', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, remove: true }),
+    }),
 };

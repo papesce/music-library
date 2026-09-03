@@ -3,7 +3,6 @@ import type { Track } from './types/api.d';
 import { api } from './api';
 import { SplitModal } from './components/split/SplitModal';
 import { FolderDrawer } from './components/FolderDrawer';
-import { PlayerDock } from './components/PlayerDock';
 import { Toast } from './components/ui/Toast';
 import { LibraryHero } from './features/library/LibraryHero';
 import { TrackList } from './features/library/TrackList';
@@ -11,7 +10,7 @@ import { DeleteTrackModal } from './features/library/DeleteTrackModal';
 import { EditTrackModal } from './features/library/EditTrackModal';
 import { WishlistTab } from './features/wishlist/WishlistTab';
 import { AudioElement } from './features/player/AudioElement';
-import { NowPlayingSheet } from './features/player/NowPlayingSheet';
+import { UnifiedPlayer } from './features/player/UnifiedPlayer';
 import { useFolders } from './features/settings/useFolders';
 import { useLibrary } from './features/library/useLibrary';
 import { usePlayer } from './features/player/usePlayer';
@@ -29,11 +28,19 @@ export default function App() {
   const [deleting, setDeleting] = useState(false);
   const [editTrack, setEditTrack] = useState<Track | null>(null);
   const [splitTrack, setSplitTrack] = useState<Track | null>(null);
-  const [nowOpen, setNowOpen] = useState(false);
+  const [nowOpen, setNowOpen] = useState(true);
 
   const { error, setError, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
   const player = usePlayer(tracks, setError);
+
+  // auto-expand unified player when a new track starts (0 clicks to lyrics)
+  useEffect(() => {
+    if (player.playingTrack) setNowOpen(true);
+  }, [player.playingTrack?.id]);
+  useEffect(() => {
+    if (!player.playingTrack) setNowOpen(false);
+  }, [player.playingTrack]);
   const lib = useLibrary(tracks);
   const wishlistCtl = useWishlist();
 
@@ -96,6 +103,15 @@ export default function App() {
     }
   };
 
+  const toggleReviewed = async (t: Track) => {
+    try {
+      const updated = await api.setReviewed(t.filePath, !t.reviewed);
+      setTracks(prev => prev.map(x => (x.filePath === t.filePath ? updated : x)));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -132,7 +148,10 @@ export default function App() {
             setSearch={lib.setSearch}
             showDupesOnly={lib.showDupesOnly}
             setShowDupesOnly={lib.setShowDupesOnly}
+            hideReviewed={lib.hideReviewed}
+            setHideReviewed={lib.setHideReviewed}
             dupeCount={lib.dupeCount}
+            reviewedCount={lib.reviewedCount}
             filteredCount={lib.filteredSorted.length}
             totalCount={tracks.length}
             scanning={scanning}
@@ -148,10 +167,14 @@ export default function App() {
             sortKey={lib.sortKey}
             sortDir={lib.sortDir}
             toggleSort={lib.toggleSort}
-            onPlay={player.handlePlay}
+            onPlay={t => {
+              player.handlePlay(t);
+              setNowOpen(true);
+            }}
             onSplit={setSplitTrack}
             onEdit={setEditTrack}
             onDelete={setConfirmTrack}
+            onToggleReviewed={toggleReviewed}
             showDupesOnly={lib.showDupesOnly}
           />
         </>
@@ -198,21 +221,24 @@ export default function App() {
 
       {confirmTrack && <DeleteTrackModal track={confirmTrack} deleting={deleting} onCancel={() => setConfirmTrack(null)} onConfirm={confirmDeleteTrack} />}
 
-      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={t => setTracks(prev => prev.map(x => (x.filePath === t.filePath ? t : x)))} setError={setError} />}
+      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); }} setError={setError} />}
 
-      <PlayerDock track={player.playingTrack} isPaused={player.isPaused} onToggle={() => player.playingTrack && player.handlePlay(player.playingTrack)} onStop={player.handleStop} onExpand={() => setNowOpen(true)} />
-      {nowOpen && (
-        <NowPlayingSheet
-          track={player.playingTrack}
-          isPaused={player.isPaused}
-          onToggle={() => player.playingTrack && player.handlePlay(player.playingTrack)}
-          onStop={player.handleStop}
-          onClose={() => setNowOpen(false)}
-          currentTime={player.currentTime}
-          duration={player.duration || player.playingTrack?.duration || 0}
-          onSeek={player.seek}
-        />
-      )}
+      <UnifiedPlayer
+        track={player.playingTrack}
+        isPaused={player.isPaused}
+        currentTime={player.currentTime}
+        duration={player.duration || player.playingTrack?.duration || 0}
+        onToggle={() => player.playingTrack && player.handlePlay(player.playingTrack)}
+        onStop={() => {
+          player.handleStop();
+          setNowOpen(false);
+        }}
+        onSeek={player.seek}
+        expanded={nowOpen}
+        onExpand={() => setNowOpen(true)}
+        onCollapse={() => setNowOpen(false)}
+        onEdit={player.playingTrack ? () => setEditTrack(player.playingTrack!) : undefined}
+      />
 
       {splitTrack && (
         <SplitModal
@@ -231,7 +257,7 @@ export default function App() {
         />
       )}
 
-      <AudioElement audioRef={player.audioRef} playingTrack={player.playingTrack} playingId={player.playingId} setPlayingId={player.setPlayingId} setIsPaused={player.setIsPaused} setError={setError} />
+      <AudioElement audioRef={player.audioRef} playingId={player.playingId} setPlayingId={player.setPlayingId} setIsPaused={player.setIsPaused} setError={setError} />
     </div>
   );
 }

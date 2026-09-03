@@ -13,6 +13,8 @@ export type Track = {
   duration?: number;
   duplicateGroupId?: string;
   hasCover?: boolean;
+  reviewed?: boolean;
+  reviewedAt?: string;
 };
 export type WishlistItem = {
   id: string;
@@ -53,7 +55,9 @@ function initSchema(database: DatabaseSync) {
       year INTEGER,
       duration INTEGER,
       duplicateGroupId TEXT,
-      hasCover INTEGER DEFAULT 0
+      hasCover INTEGER DEFAULT 0,
+      reviewed INTEGER DEFAULT 0,
+      reviewedAt TEXT
     );
     CREATE TABLE IF NOT EXISTS wishlist (
       id TEXT PRIMARY KEY,
@@ -98,7 +102,7 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
         const tracks = JSON.parse(readFileSync(libPath, 'utf-8')) as Track[];
         if (Array.isArray(tracks) && tracks.length) {
           const stmt = database.prepare(
-            'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
           );
           for (const t of tracks) {
             stmt.run(
@@ -111,7 +115,9 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
               t.year ?? null,
               t.duration ?? null,
               t.duplicateGroupId ?? null,
-              (t as any).hasCover ? 1 : 0
+              (t as any).hasCover ? 1 : 0,
+              (t as any).reviewed ? 1 : 0,
+              (t as any).reviewedAt ?? null
             );
           }
         }
@@ -163,16 +169,25 @@ export function setFolders(folders: string[]) {
 }
 
 // --- Tracks ---
+function ensureTrackMigrations(d: DatabaseSync) {
+  for (const [col, ddl] of [
+    ['hasCover', 'ALTER TABLE tracks ADD COLUMN hasCover INTEGER DEFAULT 0'],
+    ['reviewed', 'ALTER TABLE tracks ADD COLUMN reviewed INTEGER DEFAULT 0'],
+    ['reviewedAt', 'ALTER TABLE tracks ADD COLUMN reviewedAt TEXT'],
+  ] as const) {
+    try {
+      d.prepare(`SELECT ${col} FROM tracks LIMIT 1`).get();
+    } catch {
+      try {
+        d.exec(ddl);
+      } catch {}
+    }
+  }
+}
+
 export function getTracks(): Track[] {
   const d = getDb();
-  // migrate hasCover column if DB from old version
-  try {
-    d.prepare('SELECT hasCover FROM tracks LIMIT 1').get();
-  } catch {
-    try {
-      d.exec('ALTER TABLE tracks ADD COLUMN hasCover INTEGER DEFAULT 0');
-    } catch {}
-  }
+  ensureTrackMigrations(d);
   const rows = d.prepare('SELECT * FROM tracks ORDER BY artist, album, title').all() as any[];
   return rows.map(r => ({
     id: r.id,
@@ -185,16 +200,19 @@ export function getTracks(): Track[] {
     duration: r.duration ?? undefined,
     duplicateGroupId: r.duplicateGroupId ?? undefined,
     hasCover: !!r.hasCover,
+    reviewed: !!r.reviewed,
+    reviewedAt: r.reviewedAt ?? undefined,
   }));
 }
 
 export function setTracks(tracks: Track[]) {
   const d = getDb();
+  ensureTrackMigrations(d);
   d.exec('BEGIN');
   try {
     d.prepare('DELETE FROM tracks').run();
     const stmt = d.prepare(
-      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     for (const t of tracks) {
       stmt.run(
@@ -207,7 +225,9 @@ export function setTracks(tracks: Track[]) {
         t.year ?? null,
         t.duration ?? null,
         t.duplicateGroupId ?? null,
-        t.hasCover ? 1 : 0
+        t.hasCover ? 1 : 0,
+        t.reviewed ? 1 : 0,
+        t.reviewedAt ?? null
       );
     }
     d.exec('COMMIT');
@@ -283,6 +303,7 @@ export function deleteTrackByPath(filePath: string): boolean {
 
 export function updateTrackByPath(filePath: string, patch: Partial<Track>): Track | null {
   const d = getDb();
+  ensureTrackMigrations(d);
   const resolved = resolve(filePath);
   const existing =
     (d
@@ -296,7 +317,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
   if (!existing) return null;
   const merged = { ...existing, ...patch, filePath: existing.filePath, id: existing.id };
   d.prepare(
-    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ? WHERE filePath = ?'
+    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ? WHERE filePath = ?'
   ).run(
     merged.title,
     merged.artist,
@@ -306,6 +327,8 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     merged.duration ?? null,
     merged.duplicateGroupId ?? null,
     merged.hasCover ? 1 : 0,
+    merged.reviewed ? 1 : 0,
+    merged.reviewedAt ?? null,
     existing.filePath
   );
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
@@ -321,11 +344,42 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     duration: row.duration ?? undefined,
     duplicateGroupId: row.duplicateGroupId ?? undefined,
     hasCover: !!row.hasCover,
+    reviewed: !!row.reviewed,
+    reviewedAt: row.reviewedAt ?? undefined,
+  };
+}
+
+export function setTrackReviewed(filePath: string, reviewed: boolean): Track | null {
+  const d = getDb();
+  ensureTrackMigrations(d);
+  const resolved = resolve(filePath);
+  const existing =
+    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
+    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+  if (!existing) return null;
+  const reviewedAt = reviewed ? new Date().toISOString() : null;
+  d.prepare('UPDATE tracks SET reviewed = ?, reviewedAt = ? WHERE filePath = ?').run(reviewed ? 1 : 0, reviewedAt, existing.filePath);
+  const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    filePath: row.filePath,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    genre: row.genre,
+    year: row.year ?? undefined,
+    duration: row.duration ?? undefined,
+    duplicateGroupId: row.duplicateGroupId ?? undefined,
+    hasCover: !!row.hasCover,
+    reviewed: !!row.reviewed,
+    reviewedAt: row.reviewedAt ?? undefined,
   };
 }
 
 export function getTrackByPath(filePath: string): Track | null {
   const d = getDb();
+  ensureTrackMigrations(d);
   const resolved = resolve(filePath);
   const row =
     (d
@@ -348,5 +402,42 @@ export function getTrackByPath(filePath: string): Track | null {
     duration: row.duration ?? undefined,
     duplicateGroupId: row.duplicateGroupId ?? undefined,
     hasCover: !!row.hasCover,
+    reviewed: !!row.reviewed,
+    reviewedAt: row.reviewedAt ?? undefined,
+  };
+}
+
+export function renameTrackPath(oldPath: string, newPath: string): Track | null {
+  const d = getDb();
+  const oldResolved = resolve(oldPath);
+  const newResolved = resolve(newPath);
+  const existing =
+    (d
+      .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+      .get(oldResolved, oldResolved) as any) ||
+    (oldPath !== oldResolved
+      ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(oldPath, oldPath) as any)
+      : null);
+  if (!existing) return null;
+  d.prepare('UPDATE tracks SET filePath = ?, id = ? WHERE filePath = ?').run(
+    newResolved,
+    newResolved,
+    existing.filePath
+  );
+  const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(newResolved) as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    filePath: row.filePath,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    genre: row.genre,
+    year: row.year ?? undefined,
+    duration: row.duration ?? undefined,
+    duplicateGroupId: row.duplicateGroupId ?? undefined,
+    hasCover: !!row.hasCover,
+    reviewed: !!row.reviewed,
+    reviewedAt: row.reviewedAt ?? undefined,
   };
 }

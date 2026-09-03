@@ -17,6 +17,8 @@ import {
   deleteTrackByPath,
   updateTrackByPath,
   getTrackByPath,
+  renameTrackPath,
+  setTrackReviewed,
 } from './db.js';
 const execFileAsync = promisify(execFile);
 
@@ -34,6 +36,8 @@ type Track = {
   duration?: number;
   duplicateGroupId?: string;
   hasCover?: boolean;
+  reviewed?: boolean;
+  reviewedAt?: string;
 };
 type WishlistItem = {
   id: string;
@@ -94,8 +98,12 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
     const files = await walkMp3(f);
     for (const fp of files) allFiles.add(resolve(fp));
   }
+  // preserve reviewed state across rescans (filePath is stable id)
+  const prevByPath = new Map<string, Track>();
+  for (const t of getTracks()) prevByPath.set(resolve(t.filePath), t);
   const tracks: Track[] = [];
   for (const filePath of allFiles) {
+    const prev = prevByPath.get(resolve(filePath));
     try {
       const meta = await parseFile(filePath);
       const fb = fallbackFromFilename(filePath);
@@ -110,6 +118,8 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         year: meta.common.year,
         duration: meta.format.duration ? Math.round(meta.format.duration) : undefined,
         hasCover,
+        reviewed: prev?.reviewed ?? false,
+        reviewedAt: prev?.reviewedAt,
       });
     } catch {
       const fb = fallbackFromFilename(filePath);
@@ -121,6 +131,8 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         album: 'Unknown',
         genre: 'Unknown',
         hasCover: false,
+        reviewed: prev?.reviewed ?? false,
+        reviewedAt: prev?.reviewedAt,
       });
     }
   }
@@ -606,6 +618,87 @@ const server = createServer(async (req, res) => {
       return json(res, 200, updated);
     }
 
+    if (url.pathname === '/api/tracks/rename' && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath: string | undefined =
+        body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      const newFilename: string | undefined =
+        body.filename ?? body.fileName ?? body.newFilename ?? body.newFileName;
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      if (!newFilename || !String(newFilename).trim())
+        return json(res, 400, { error: 'filename required (e.g. \"Artist - Title.mp3\")' });
+      let filename = String(newFilename).trim();
+      // basename only — no directory separators
+      if (filename.includes('/') || filename.includes('\\'))
+        return json(res, 400, { error: 'filename must not contain path separators' });
+      if (!filename.toLowerCase().endsWith('.mp3'))
+        return json(res, 400, { error: 'filename must end with .mp3' });
+      if (filename.length > 255) return json(res, 400, { error: 'filename too long (max 255)' });
+      // disallow empty base
+      const baseNoExt = filename.slice(0, -4).trim();
+      if (!baseNoExt) return json(res, 400, { error: 'filename without extension cannot be empty' });
+      // disallow problematic characters (null byte etc)
+      if (filename.includes('\0')) return json(res, 400, { error: 'filename contains invalid characters' });
+
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      let allowed = !!existing;
+      if (!allowed) {
+        const cfg = await getConfig();
+        for (const f of cfg.folders ?? []) {
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) {
+            allowed = true;
+            break;
+          }
+        }
+        if (!allowed) return json(res, 403, { error: 'file not in library/folders — rename denied' });
+      }
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+
+      const newPath = join(dirname(resolved), filename);
+      const newResolved = resolve(newPath);
+      if (newResolved === resolved) return json(res, 200, existing);
+      // prevent directory traversal: must stay in same dir
+      if (dirname(newResolved) !== dirname(resolved))
+        return json(res, 400, { error: 'filename must not change directory' });
+      if (existsSync(newResolved))
+        return json(res, 409, { error: `a file named \"${filename}\" already exists in this folder` });
+
+      try {
+        await fs.rename(resolved, newResolved);
+      } catch (e: any) {
+        return json(res, 500, { error: `failed to rename file: ${e.message}` });
+      }
+      // also rename sidecar .lrc if exists (keep lyrics with file)
+      try {
+        const oldLrc = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
+        const newLrc = join(dirname(newResolved), basename(newResolved, extname(newResolved)) + '.lrc');
+        if (existsSync(oldLrc) && !existsSync(newLrc)) await fs.rename(oldLrc, newLrc);
+      } catch {}
+
+      const updated = renameTrackPath(resolved, newResolved);
+      if (!updated) {
+        // fallback: re-scan that file minimally
+        return json(res, 200, { ok: true, filePath: newResolved, oldFilePath: resolved });
+      }
+      return json(res, 200, updated);
+    }
+
+    if (url.pathname === '/api/tracks/reviewed' && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const reviewedRaw = body.reviewed ?? body.completed ?? body.checked;
+      if (reviewedRaw === undefined) return json(res, 400, { error: 'reviewed boolean required' });
+      const reviewed = reviewedRaw === true || reviewedRaw === 'true' || reviewedRaw === 1 || reviewedRaw === '1';
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      if (!existing) return json(res, 404, { error: 'track not found' });
+      const updated = setTrackReviewed(resolved, reviewed);
+      if (!updated) return json(res, 500, { error: 'failed to update reviewed state' });
+      return json(res, 200, updated);
+    }
+
     if (url.pathname === '/api/stream' && req.method === 'GET') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return json(res, 400, { error: 'path query required' });
@@ -683,6 +776,90 @@ const server = createServer(async (req, res) => {
         return res.end(pic.data);
       } catch (e: any) {
         return json(res, 500, { error: e.message });
+      }
+    }
+
+    if ((url.pathname === '/api/tracks/cover' || url.pathname === '/api/cover') && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      let allowed = !!existing;
+      if (!allowed) {
+        const cfg = await getConfig();
+        for (const f of cfg.folders ?? []) {
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) { allowed = true; break; }
+        }
+        if (!allowed) return json(res, 403, { error: 'file not in library/folders — cover edit denied' });
+      }
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const remove = body.remove === true || body.remove === 'true' || body.action === 'remove';
+      try {
+        const NodeID3: any = (await import('node-id3')).default;
+        if (remove) {
+          // remove cover: read all tags, strip image/APIC, rewrite
+          const current: any = NodeID3.read(resolved) || {};
+          if (current.image || current.APIC || current.picture) {
+            delete current.image;
+            delete current.APIC;
+            delete current.picture;
+            // NodeID3.write replaces whole tag; we need to preserve remaining tags
+            // If no tags left, removeTags instead
+            const hasAny = Object.keys(current).some(k => k !== 'raw' && current[k] != null);
+            if (!hasAny) {
+              // remove all tags then re-add without picture via parseFile fallback not needed
+              NodeID3.removeTags(resolved);
+            } else {
+              const { raw, ...tagsToWrite } = current;
+              // removeTags clears existing ID3, then write new ones
+              NodeID3.removeTags(resolved);
+              if (Object.keys(tagsToWrite).length) NodeID3.write(tagsToWrite, resolved);
+            }
+          }
+        } else {
+          let imageB64: string | undefined = body.image || body.imageBase64 || body.data;
+          let mime: string | undefined = body.mime || body.format;
+          if (!imageB64) return json(res, 400, { error: 'image (base64 data URL or raw base64) required, or { remove: true }' });
+          // support data URL
+          if (imageB64.startsWith('data:')) {
+            const m = imageB64.match(/^data:([^;]+);base64,(.*)$/);
+            if (!m) return json(res, 400, { error: 'invalid data URL' });
+            mime = m[1];
+            imageB64 = m[2];
+          }
+          if (!mime) {
+            // guess from header bytes
+            mime = 'image/jpeg';
+          }
+          if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) {
+            return json(res, 400, { error: `unsupported image mime ${mime} (jpeg/png/webp/gif only)` });
+          }
+          let buf: Buffer;
+          try { buf = Buffer.from(imageB64!, 'base64'); } catch { return json(res, 400, { error: 'invalid base64' }); }
+          if (buf.length === 0) return json(res, 400, { error: 'empty image' });
+          if (buf.length > 8 * 1024 * 1024) return json(res, 400, { error: 'image too large (max 8MB)' });
+          const tags: any = {
+            image: {
+              mime,
+              type: { id: 3, name: 'front cover' },
+              description: 'cover',
+              imageBuffer: buf,
+            },
+          };
+          const success = NodeID3.update(tags, resolved);
+          if (!success) throw new Error('node-id3 update returned false');
+        }
+        // re-read hasCover and update DB
+        let hasCover = false;
+        try {
+          const meta = await parseFile(resolved);
+          hasCover = !!(meta.common.picture && meta.common.picture.length > 0);
+        } catch { hasCover = !remove; }
+        const updated = updateTrackByPath(resolved, { hasCover } as any);
+        return json(res, 200, updated ?? { ok: true, hasCover });
+      } catch (e: any) {
+        return json(res, 500, { error: `failed to update cover: ${e.message}` });
       }
     }
 

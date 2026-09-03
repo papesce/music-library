@@ -3,6 +3,7 @@ import type { Track } from '../../types/api.d';
 import { coverUrl } from '../../lib/path';
 import { formatDuration } from '../../lib/format';
 import { useLyrics } from './useLyrics';
+import { ArtworkLightbox } from '../../components/ui/ArtworkLightbox';
 
 type Props = {
   track: Track | null;
@@ -15,17 +16,25 @@ type Props = {
   onSeek: (sec: number) => void;
 };
 
-function ArtworkView({ track }: { track: Track }) {
+function ArtworkView({ track, onExpand }: { track: Track; onExpand?: () => void }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [track.filePath]);
   return (
-    <div className="now-artwork">
+    <button
+      type="button"
+      className="now-artwork now-artwork-btn"
+      onClick={onExpand}
+      aria-label={`Enlarge artwork for ${track.title}`}
+      title="Click to enlarge"
+      style={{ cursor: onExpand ? 'zoom-in' : undefined, border: 'none', padding: 0 }}
+    >
       {!failed ? (
         <img src={coverUrl(track.filePath)} alt={`${track.album} cover`} onError={() => setFailed(true)} />
       ) : (
         <div className="now-artwork-fallback">♪</div>
       )}
-    </div>
+      {onExpand && <span className="now-artwork-zoom-hint" aria-hidden>⤢</span>}
+    </button>
   );
 }
 
@@ -60,8 +69,9 @@ function LyricsView({ lyrics, synced, currentTime }: { lyrics: string | null; sy
   return <div className="lyrics-plain">{lyrics}</div>;
 }
 
-export function NowPlayingSheet({ track, isPaused, onToggle, onStop, onClose, currentTime, duration, onSeek }: Props) {
+export function NowPlayingSheet({ track, isPaused, onToggle, onStop, onClose, currentTime, duration, onSeek, onEdit }: Props & { onEdit?: () => void }) {
   const [tab, setTab] = useState<'artwork' | 'lyrics'>('artwork');
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const { lyrics, synced } = useLyrics(track?.filePath ?? null);
 
   if (!track) return null;
@@ -94,8 +104,11 @@ export function NowPlayingSheet({ track, isPaused, onToggle, onStop, onClose, cu
         </div>
 
         <div className="now-body">
-          {tab === 'artwork' ? <ArtworkView track={track} /> : <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />}
+          {tab === 'artwork' ? <ArtworkView track={track} onExpand={() => setLightboxOpen(true)} /> : <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />}
         </div>
+        {lightboxOpen && track && (
+          <ArtworkLightbox track={track} onClose={() => setLightboxOpen(false)} onEdit={onEdit} onPlay={onToggle} isPlaying={!isPaused} />
+        )}
 
         <div className="now-transport">
           <div className="now-seek">

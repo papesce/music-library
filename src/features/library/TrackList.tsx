@@ -16,12 +16,13 @@ type Props = {
   onSplit: (t: Track) => void;
   onEdit: (t: Track) => void;
   onDelete: (t: Track) => void;
+  onToggleReviewed?: (t: Track) => void;
   showDupesOnly: boolean;
 };
 
 const ROW_HEIGHT = 64;
 
-export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, showDupesOnly }: Props) {
+export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, showDupesOnly }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
@@ -63,6 +64,7 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
                 onSplit={() => onSplit(t)}
                 onEdit={() => onEdit(t)}
                 onDelete={() => onDelete(t)}
+                onToggleReviewed={onToggleReviewed}
                 style={{
                   position: 'absolute',
                   top: 0,

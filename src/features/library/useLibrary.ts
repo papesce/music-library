@@ -9,6 +9,7 @@ export function useLibrary(tracks: Track[]) {
   const [sortKey, setSortKey] = useState<SortKey>('artist');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [showDupesOnly, setShowDupesOnly] = useState(false);
+  const [hideReviewed, setHideReviewed] = useState(false);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -21,6 +22,7 @@ export function useLibrary(tracks: Track[]) {
   const filteredSorted = useMemo(() => {
     const q = search.toLowerCase();
     const arr = tracks.filter(t => {
+      if (hideReviewed && t.reviewed) return false;
       if (showDupesOnly && !t.duplicateGroupId) return false;
       if (!q) return true;
       return (
@@ -41,6 +43,7 @@ export function useLibrary(tracks: Track[]) {
   }, [tracks, search, sortKey, sortDir, showDupesOnly]);
 
   const dupeCount = useMemo(() => tracks.filter(t => t.duplicateGroupId).length, [tracks]);
+  const reviewedCount = useMemo(() => tracks.filter(t => t.reviewed).length, [tracks]);
 
-  return { search, setSearch, sortKey, sortDir, toggleSort, showDupesOnly, setShowDupesOnly, filteredSorted, dupeCount };
+  return { search, setSearch, sortKey, sortDir, toggleSort, showDupesOnly, setShowDupesOnly, hideReviewed, setHideReviewed, filteredSorted, dupeCount, reviewedCount };
 }

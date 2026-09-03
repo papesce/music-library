@@ -13,10 +13,11 @@ type Props = {
   onSplit: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onToggleReviewed?: (t: Track) => void;
   style?: React.CSSProperties;
 };
 
-export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, style }: Props) {
+export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, style }: Props) {
   const { folder, file } = splitFile(track.filePath);
   const [coverFailed, setCoverFailed] = useState(false);
 
@@ -25,34 +26,68 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
       role="row"
       aria-selected={isActive}
       title={track.filePath}
-      style={style}
-      className={`track-row ${isActive ? 'playing' : ''} ${track.duplicateGroupId ? 'dup' : ''}`}
+      style={{ ...style, opacity: track.reviewed ? 0.62 : undefined }}
+      className={`track-row ${isActive ? 'playing' : ''} ${track.duplicateGroupId ? 'dup' : ''} ${track.reviewed ? 'reviewed' : ''}`}
     >
       <div role="gridcell" className="track-row-cell cell-play">
-        <button
-          className={`play-btn ${isActive ? '' : 'ghost'}`}
-          onClick={onPlay}
-          aria-label={isPlaying ? `Pause ${track.title}` : isPaused ? `Resume ${track.title}` : `Play ${track.title}`}
-          title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Play'}
-        >
-          {isPlaying ? '⏸' : '▶'}
-        </button>
+        {onToggleReviewed && (
+          <button
+            onClick={() => onToggleReviewed(track)}
+            title={track.reviewed ? 'Mark as not reviewed' : 'Mark as reviewed / completed'}
+            aria-label={track.reviewed ? 'Unmark reviewed' : 'Mark reviewed'}
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              border: `1px solid ${track.reviewed ? 'rgba(46,204,113,0.8)' : 'var(--border-soft)'}`,
+              background: track.reviewed ? 'rgba(46,204,113,0.22)' : 'rgba(255,255,255,0.06)',
+              color: track.reviewed ? '#8ff5b8' : 'var(--muted)',
+              display: 'grid',
+              placeItems: 'center',
+              cursor: 'pointer',
+              fontSize: 11,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            {track.reviewed ? '✓' : '○'}
+          </button>
+        )}
       </div>
 
       <div role="gridcell" className="track-row-cell cell-track">
         <div className="track-cell">
-          <div className="thumb">
+          <button
+            type="button"
+            className={`thumb thumb-btn ${isActive ? 'thumb-btn-active' : ''}`}
+            onClick={onPlay}
+            aria-label={isPlaying ? `Pause ${track.title}` : isPaused ? `Resume ${track.title}` : `Play ${track.title}`}
+            title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Play — click pencil to edit'}
+          >
             {!coverFailed ? (
               <img src={coverUrl(track.filePath)} alt="" loading="lazy" onError={() => setCoverFailed(true)} />
             ) : null}
             <span className="thumb-fallback" style={{ display: coverFailed ? 'grid' : undefined }}>
               ♪
             </span>
-          </div>
+            <span className="thumb-play-overlay" aria-hidden>{isPlaying ? '⏸' : '▶'}</span>
+            <span
+              role="button"
+              tabIndex={0}
+              className="thumb-edit-btn"
+              title="Edit song"
+              aria-label={`Edit ${track.title}`}
+              onClick={e => { e.stopPropagation(); onEdit(); }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(); } }}
+            >
+              ✎
+            </span>
+          </button>
           <div className="track-main">
             <span className="track-title">
               {track.title}
               {track.duplicateGroupId && <span className="dup-badge">dup</span>}
+              {track.reviewed && <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f' }}>✓ done</span>}
             </span>
             <span className="track-file" title={track.filePath}>
               <span className="track-file-folder">{folder}/</span>
