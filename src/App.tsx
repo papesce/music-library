@@ -155,9 +155,6 @@ export default function App() {
             reviewedCount={lib.reviewedCount}
             filteredCount={lib.filteredSorted.length}
             totalCount={tracks.length}
-            scanning={scanning}
-            onScan={doScan}
-            onRefresh={refresh}
             playing={!!player.playingId}
             onStop={player.handleStop}
             onExported={refresh}

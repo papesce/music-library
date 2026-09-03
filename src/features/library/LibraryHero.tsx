@@ -12,9 +12,6 @@ export function LibraryHero({
   reviewedCount,
   filteredCount,
   totalCount,
-  scanning,
-  onScan,
-  onRefresh,
   playing,
   onStop,
   onExported,
@@ -30,9 +27,6 @@ export function LibraryHero({
   reviewedCount: number;
   filteredCount: number;
   totalCount: number;
-  scanning: boolean;
-  onScan: () => void;
-  onRefresh: () => void;
   playing: boolean;
   onStop: () => void;
   onExported?: () => void;
@@ -70,12 +64,6 @@ export function LibraryHero({
             style={{ borderColor: hideReviewed ? 'rgba(46,204,113,0.35)' : undefined, background: hideReviewed ? 'rgba(46,204,113,0.14)' : undefined }}
           >
             {hideReviewed ? '✓ Unreviewed only' : `Hide done ${reviewedCount > 0 ? `· ${reviewedCount}` : ''}`}
-          </button>
-          <button className="btn btn-primary" onClick={onScan} disabled={scanning}>
-            {scanning ? 'Scanning…' : 'Scan'}
-          </button>
-          <button className="btn glass-soft" onClick={onRefresh} disabled={scanning}>
-            Re-scan
           </button>
         </div>
         <div className="meta-row">
