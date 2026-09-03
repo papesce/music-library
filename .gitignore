@@ -1,8 +1,29 @@
+# deps / build
 node_modules
 dist
 out
+coverage
+
+# local data — never publish personal library or absolute folder paths
 data/*.json
 data/*.db
 data/*.db-*
 data/*.sqlite
 data/*.sqlite-*
+data/*.wal
+data/*.shm
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+.idea/
+.vscode/
+*.swp
+*.swo
