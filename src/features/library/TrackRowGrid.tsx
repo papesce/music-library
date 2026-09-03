@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import type { Track } from '../../types/api.d';
 import { coverUrl, splitFile } from '../../lib/path';
 import { formatDuration, truncateMiddle } from '../../lib/format';
+import { RowActionsMenu } from './RowActionsMenu';
 
 type Props = {
   track: Track;
@@ -80,15 +81,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
       </div>
 
       <div role="gridcell" className="track-row-cell cell-actions">
-        <button className="edit-btn" onClick={onSplit} aria-label={`Split ${track.title}`} title={`Split: ${track.filePath}`} style={{ background: 'rgba(0,212,255,0.18)', borderColor: 'rgba(0,212,255,0.30)' }}>
-          ✂
-        </button>
-        <button className="edit-btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title={`Edit tags: ${track.filePath}`}>
-          ✎
-        </button>
-        <button className="delete-btn" onClick={onDelete} aria-label={`Delete ${track.title}`} title={`Move to Trash: ${track.filePath}`}>
-          🗑
-        </button>
+        <RowActionsMenu trackTitle={track.title} onSplit={onSplit} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </div>
   );
