@@ -13,17 +13,55 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   pickFolder: () => req<{ path: string | null; message?: string }>('/api/pick-folder'),
   getConfig: () => req<{ folders?: string[]; lastFolder?: string }>('/api/config'),
-  setConfig: (folders: string[]) => req<{ folders: string[] }>('/api/config', { method: 'POST', body: JSON.stringify({ folders }) }),
+  setConfig: (folders: string[]) =>
+    req<{ folders: string[] }>('/api/config', {
+      method: 'POST',
+      body: JSON.stringify({ folders }),
+    }),
   getLibrary: () => req<Track[]>('/api/library'),
-  getDuplicates: () => req<{ count: number; groups: Record<string, Track[]> }>('/api/library/duplicates'),
+  getDuplicates: () =>
+    req<{ count: number; groups: Record<string, Track[]> }>('/api/library/duplicates'),
   validateLibrary: () => req<Track[]>('/api/library/validate', { method: 'POST' }),
-  scanFolders: (folders: string[]) => req<Track[]>('/api/scan', { method: 'POST', body: JSON.stringify({ folders }) }),
+  scanFolders: (folders: string[]) =>
+    req<Track[]>('/api/scan', { method: 'POST', body: JSON.stringify({ folders }) }),
   // backward compat single
-  scanFolder: (folder: string) => req<Track[]>('/api/scan', { method: 'POST', body: JSON.stringify({ folder }) }),
+  scanFolder: (folder: string) =>
+    req<Track[]>('/api/scan', { method: 'POST', body: JSON.stringify({ folder }) }),
   getWishlist: () => req<WishlistItem[]>('/api/wishlist'),
   addWishlistItem: (item: { name: string; artist?: string; priority: 'High' | 'Medium' | 'Low' }) =>
     req<WishlistItem>('/api/wishlist', { method: 'POST', body: JSON.stringify(item) }),
   updateWishlistItem: (id: string, patch: Partial<Omit<WishlistItem, 'id'>>) =>
     req<WishlistItem>(`/api/wishlist/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
-  deleteWishlistItem: (id: string) => req<{ ok: boolean }>(`/api/wishlist/${id}`, { method: 'DELETE' }),
+  deleteWishlistItem: (id: string) =>
+    req<{ ok: boolean }>(`/api/wishlist/${id}`, { method: 'DELETE' }),
+  deleteTrack: (filePath: string) =>
+    req<{ ok: boolean; deleted?: boolean }>(`/api/tracks?path=${encodeURIComponent(filePath)}`, {
+      method: 'DELETE',
+    }),
+  updateTrack: (
+    filePath: string,
+    patch: Partial<Pick<Track, 'title' | 'artist' | 'album' | 'genre'>> & { year?: number | null }
+  ) =>
+    req<Track>('/api/tracks', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, ...patch }),
+    }),
+  detectSplit: (filePath: string, minSilenceMs = 700, silenceThreshDb = -50) =>
+    req<{ path: string; split_points_ms: number[]; duration_ms: number }>('/api/split/detect', {
+      method: 'POST',
+      body: JSON.stringify({
+        path: filePath,
+        min_silence_ms: minSilenceMs,
+        silence_thresh_db: silenceThreshDb,
+      }),
+    }),
+  applySplit: (
+    filePath: string,
+    splitPoints: number[],
+    segments?: { title?: string; artist?: string; album?: string; year?: string; genre?: string }[]
+  ) =>
+    req<{ ok: boolean; files: string[]; count: number }>('/api/split/apply', {
+      method: 'POST',
+      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segments }),
+    }),
 };

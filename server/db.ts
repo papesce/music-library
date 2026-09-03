@@ -101,7 +101,18 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
             'INSERT OR IGNORE INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
           );
           for (const t of tracks) {
-            stmt.run(t.id, t.filePath, t.title, t.artist, t.album, t.genre, t.year ?? null, t.duration ?? null, t.duplicateGroupId ?? null, (t as any).hasCover ? 1 : 0);
+            stmt.run(
+              t.id,
+              t.filePath,
+              t.title,
+              t.artist,
+              t.album,
+              t.genre,
+              t.year ?? null,
+              t.duration ?? null,
+              t.duplicateGroupId ?? null,
+              (t as any).hasCover ? 1 : 0
+            );
           }
         }
       } catch {}
@@ -115,7 +126,9 @@ function migrateFromJsonIfNeeded(database: DatabaseSync) {
       try {
         const items = JSON.parse(readFileSync(wishPath, 'utf-8')) as WishlistItem[];
         if (Array.isArray(items) && items.length) {
-          const stmt = database.prepare('INSERT OR IGNORE INTO wishlist (id, name, artist, priority, dateAdded) VALUES (?, ?, ?, ?, ?)');
+          const stmt = database.prepare(
+            'INSERT OR IGNORE INTO wishlist (id, name, artist, priority, dateAdded) VALUES (?, ?, ?, ?, ?)'
+          );
           for (const it of items) {
             stmt.run(it.id, it.name, it.artist ?? null, it.priority, it.dateAdded);
           }
@@ -153,7 +166,13 @@ export function setFolders(folders: string[]) {
 export function getTracks(): Track[] {
   const d = getDb();
   // migrate hasCover column if DB from old version
-  try { d.prepare('SELECT hasCover FROM tracks LIMIT 1').get(); } catch { try { d.exec('ALTER TABLE tracks ADD COLUMN hasCover INTEGER DEFAULT 0'); } catch {} }
+  try {
+    d.prepare('SELECT hasCover FROM tracks LIMIT 1').get();
+  } catch {
+    try {
+      d.exec('ALTER TABLE tracks ADD COLUMN hasCover INTEGER DEFAULT 0');
+    } catch {}
+  }
   const rows = d.prepare('SELECT * FROM tracks ORDER BY artist, album, title').all() as any[];
   return rows.map(r => ({
     id: r.id,
@@ -178,7 +197,18 @@ export function setTracks(tracks: Track[]) {
       'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     for (const t of tracks) {
-      stmt.run(t.id, t.filePath, t.title, t.artist, t.album, t.genre, t.year ?? null, t.duration ?? null, t.duplicateGroupId ?? null, t.hasCover ? 1 : 0);
+      stmt.run(
+        t.id,
+        t.filePath,
+        t.title,
+        t.artist,
+        t.album,
+        t.genre,
+        t.year ?? null,
+        t.duration ?? null,
+        t.duplicateGroupId ?? null,
+        t.hasCover ? 1 : 0
+      );
     }
     d.exec('COMMIT');
   } catch (e) {
@@ -187,7 +217,7 @@ export function setTracks(tracks: Track[]) {
   }
 }
 
-export function deleteTracksNotIn(filePaths: Set<string>) {
+export function deleteTracksNotIn(_filePaths: Set<string>) {
   // used for validate: keep only existing files - caller should filter
 }
 
@@ -206,9 +236,9 @@ export function getWishlist(): WishlistItem[] {
 
 export function addWishlistItem(item: WishlistItem): WishlistItem {
   const d = getDb();
-  d.prepare('INSERT INTO wishlist (id, name, artist, priority, dateAdded) VALUES (?, ?, ?, ?, ?)').run(
-    item.id, item.name, item.artist ?? null, item.priority, item.dateAdded
-  );
+  d.prepare(
+    'INSERT INTO wishlist (id, name, artist, priority, dateAdded) VALUES (?, ?, ?, ?, ?)'
+  ).run(item.id, item.name, item.artist ?? null, item.priority, item.dateAdded);
   return item;
 }
 
@@ -218,9 +248,9 @@ export function updateWishlistItem(id: string, patch: Partial<WishlistItem>): Wi
   if (!existing) return null;
   const updated = { ...existing, ...patch, id: existing.id };
   // null handling for artist
-  d.prepare('UPDATE wishlist SET name = ?, artist = ?, priority = ?, dateAdded = ? WHERE id = ?').run(
-    updated.name, updated.artist ?? null, updated.priority, updated.dateAdded, id
-  );
+  d.prepare(
+    'UPDATE wishlist SET name = ?, artist = ?, priority = ?, dateAdded = ? WHERE id = ?'
+  ).run(updated.name, updated.artist ?? null, updated.priority, updated.dateAdded, id);
   return {
     id: updated.id,
     name: updated.name,
@@ -232,4 +262,91 @@ export function updateWishlistItem(id: string, patch: Partial<WishlistItem>): Wi
 
 export function deleteWishlistItem(id: string) {
   getDb().prepare('DELETE FROM wishlist WHERE id = ?').run(id);
+}
+
+export function deleteTrackByPath(filePath: string): boolean {
+  const d = getDb();
+  const resolved = resolve(filePath);
+  // try both raw and resolved (id is filePath which was stored as resolve(fp))
+  const result = d
+    .prepare('DELETE FROM tracks WHERE filePath = ? OR id = ?')
+    .run(resolved, resolved);
+  // also try exact match if caller passed non-resolved
+  if (result.changes === 0 && filePath !== resolved) {
+    const result2 = d
+      .prepare('DELETE FROM tracks WHERE filePath = ? OR id = ?')
+      .run(filePath, filePath);
+    return result2.changes > 0;
+  }
+  return result.changes > 0;
+}
+
+export function updateTrackByPath(filePath: string, patch: Partial<Track>): Track | null {
+  const d = getDb();
+  const resolved = resolve(filePath);
+  const existing =
+    (d
+      .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+      .get(resolved, resolved) as any) ||
+    (filePath !== resolved
+      ? (d
+          .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+          .get(filePath, filePath) as any)
+      : null);
+  if (!existing) return null;
+  const merged = { ...existing, ...patch, filePath: existing.filePath, id: existing.id };
+  d.prepare(
+    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ? WHERE filePath = ?'
+  ).run(
+    merged.title,
+    merged.artist,
+    merged.album,
+    merged.genre,
+    merged.year ?? null,
+    merged.duration ?? null,
+    merged.duplicateGroupId ?? null,
+    merged.hasCover ? 1 : 0,
+    existing.filePath
+  );
+  const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    filePath: row.filePath,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    genre: row.genre,
+    year: row.year ?? undefined,
+    duration: row.duration ?? undefined,
+    duplicateGroupId: row.duplicateGroupId ?? undefined,
+    hasCover: !!row.hasCover,
+  };
+}
+
+export function getTrackByPath(filePath: string): Track | null {
+  const d = getDb();
+  const resolved = resolve(filePath);
+  const row =
+    (d
+      .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+      .get(resolved, resolved) as any) ||
+    (filePath !== resolved
+      ? (d
+          .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+          .get(filePath, filePath) as any)
+      : null);
+  if (!row) return null;
+  return {
+    id: row.id,
+    filePath: row.filePath,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    genre: row.genre,
+    year: row.year ?? undefined,
+    duration: row.duration ?? undefined,
+    duplicateGroupId: row.duplicateGroupId ?? undefined,
+    hasCover: !!row.hasCover,
+  };
 }

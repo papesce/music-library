@@ -1,10 +1,23 @@
 import { createServer } from 'http';
-import { join, resolve } from 'path';
+import { join, resolve, dirname, basename, extname } from 'path';
 import { existsSync, promises as fs, createReadStream, statSync } from 'fs';
 import { parseFile } from 'music-metadata';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { getDb, getFolders, setFolders as dbSetFolders, getTracks, setTracks, getWishlist, addWishlistItem, updateWishlistItem, deleteWishlistItem } from './db.js';
+import {
+  getDb,
+  getFolders,
+  setFolders as dbSetFolders,
+  getTracks,
+  setTracks,
+  getWishlist,
+  addWishlistItem,
+  updateWishlistItem,
+  deleteWishlistItem,
+  deleteTrackByPath,
+  updateTrackByPath,
+  getTrackByPath,
+} from './db.js';
 const execFileAsync = promisify(execFile);
 
 // Ensure DB initialized (creates file + migrates JSON if needed)
@@ -50,7 +63,8 @@ function fallbackFromFilename(filePath: string) {
   const base = filePath.split('/').pop() ?? filePath.split('\\').pop() ?? filePath;
   const withoutExt = base.replace(/\.mp3$/i, '');
   const parts = withoutExt.split(' - ');
-  if (parts.length >= 2) return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() };
+  if (parts.length >= 2)
+    return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() };
   return { artist: 'Unknown', title: withoutExt.trim() || 'Unknown' };
 }
 function normalizeKey(t: Track): string {
@@ -99,7 +113,15 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
       });
     } catch {
       const fb = fallbackFromFilename(filePath);
-      tracks.push({ id: filePath, filePath, title: fb.title, artist: fb.artist, album: 'Unknown', genre: 'Unknown', hasCover: false });
+      tracks.push({
+        id: filePath,
+        filePath,
+        title: fb.title,
+        artist: fb.artist,
+        album: 'Unknown',
+        genre: 'Unknown',
+        hasCover: false,
+      });
     }
   }
   markDuplicates(tracks);
@@ -111,26 +133,94 @@ async function getConfig(): Promise<Config> {
   return { folders: getFolders() };
 }
 
+async function moveToTrash(resolved: string): Promise<void> {
+  const platform = process.platform;
+  if (platform === 'darwin') {
+    const escaped = resolved.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    try {
+      await execFileAsync('osascript', [
+        '-e',
+        `tell application "Finder" to delete POSIX file "${escaped}"`,
+      ]);
+      return;
+    } catch {}
+    // fallback to `trash` CLI if available (brew install trash)
+    try {
+      await execFileAsync('trash', [resolved]);
+      return;
+    } catch {}
+    // fallback: move to ~/.Trash manually (works without Finder permission, appears in Trash UI)
+    try {
+      const home = process.env.HOME || '';
+      const trashDir = join(home, '.Trash');
+      const base = resolved.split('/').pop() || 'file.mp3';
+      let dest = join(trashDir, base);
+      // avoid collision
+      let i = 1;
+      while (existsSync(dest)) {
+        const dot = base.lastIndexOf('.');
+        const name = dot > 0 ? base.slice(0, dot) : base;
+        const ext = dot > 0 ? base.slice(dot) : '';
+        dest = join(trashDir, `${name} ${i}${ext}`);
+        i++;
+        if (i > 100) break;
+      }
+      await fs.rename(resolved, dest);
+      return;
+    } catch {}
+    throw new Error(
+      'Failed to move file to Trash (Finder not authorized and ~/.Trash fallback failed)'
+    );
+  }
+  if (platform === 'win32') {
+    const ps = `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('${resolved.replace(/'/g, "''")}', 'OnlyRecycleBin', 'SendToRecycleBin')`;
+    await execFileAsync('powershell', ['-NoProfile', '-Command', ps]);
+    return;
+  }
+  // linux
+  try {
+    await execFileAsync('gio', ['trash', resolved]);
+    return;
+  } catch {}
+  try {
+    await execFileAsync('trash-put', [resolved]);
+    return;
+  } catch {}
+  try {
+    await execFileAsync('kioclient5', ['move', resolved, 'trash:/']);
+    return;
+  } catch {}
+  throw new Error('No trash utility found (install gio or trash-cli)');
+}
+
 async function pickFolderNative(): Promise<string | null> {
   const platform = process.platform;
   try {
     if (platform === 'darwin') {
-      const { stdout } = await execFileAsync('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select music folder")'], { timeout: 120000 } as any) as any;
+      const { stdout } = (await execFileAsync(
+        'osascript',
+        ['-e', 'POSIX path of (choose folder with prompt "Select music folder")'],
+        { timeout: 120000 } as any
+      )) as any;
       const p = String(stdout).trim();
       return p ? p.replace(/\/$/, '') : null;
     }
     if (platform === 'linux') {
       try {
-        const { stdout } = await execFileAsync('zenity', ['--file-selection', '--directory', '--title=Select music folder']) as any;
+        const { stdout } = (await execFileAsync('zenity', [
+          '--file-selection',
+          '--directory',
+          '--title=Select music folder',
+        ])) as any;
         return String(stdout).trim() || null;
       } catch {
-        const { stdout } = await execFileAsync('kdialog', ['--getexistingdirectory', '.']) as any;
+        const { stdout } = (await execFileAsync('kdialog', ['--getexistingdirectory', '.'])) as any;
         return String(stdout).trim() || null;
       }
     }
     if (platform === 'win32') {
       const ps = `Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description='Select music folder'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }`;
-      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-Command', ps]) as any;
+      const { stdout } = (await execFileAsync('powershell', ['-NoProfile', '-Command', ps])) as any;
       return String(stdout).trim() || null;
     }
   } catch {
@@ -155,8 +245,116 @@ async function getBody(req: any): Promise<any> {
   return raw ? JSON.parse(raw) : {};
 }
 
+// ── Split helpers (ffmpeg-based, no temp copy) ──
+function _runCmd(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync(args[0]!, args.slice(1), { maxBuffer: 10 * 1024 * 1024 } as any) as any;
+}
+async function getDurationMs(filePath: string): Promise<number> {
+  const { stdout } = (await execFileAsync('ffprobe', [
+    '-v',
+    'quiet',
+    '-print_format',
+    'json',
+    '-show_entries',
+    'format=duration:stream=duration',
+    filePath,
+  ])) as any;
+  const data = JSON.parse(stdout);
+  const ds: number[] = [];
+  const fd = data?.format?.duration;
+  if (fd != null) ds.push(Number(fd));
+  for (const s of data?.streams ?? []) if (s.duration != null) ds.push(Number(s.duration));
+  if (!ds.length) throw new Error('ffprobe: no duration');
+  return Math.round(Math.max(...ds) * 1000);
+}
+async function detectSplitPoints(
+  filePath: string,
+  minSilenceMs = 700,
+  silenceThreshDb = -50
+): Promise<number[]> {
+  const durationMs = await getDurationMs(filePath);
+  const noise = `${silenceThreshDb}dB`;
+  const minDur = minSilenceMs / 1000;
+  let stderr = '';
+  try {
+    const r: any = await execFileAsync(
+      'ffmpeg',
+      [
+        '-vn',
+        '-i',
+        filePath,
+        '-af',
+        `silencedetect=noise=${noise}:duration=${minDur}`,
+        '-f',
+        'null',
+        '-',
+      ],
+      { maxBuffer: 10 * 1024 * 1024 } as any
+    );
+    stderr = r.stderr ?? '';
+  } catch (e: any) {
+    stderr = e.stderr ?? e.message ?? '';
+    if (!stderr.includes('silence_start')) throw e;
+  }
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const line of stderr.split('\n')) {
+    if (line.includes('silence_start:')) {
+      const v = Number(line.split('silence_start:')[1]?.trim());
+      if (!isNaN(v)) starts.push(v);
+    } else if (line.includes('silence_end:')) {
+      const v = Number(line.split('silence_end:')[1]?.split('|')[0]?.trim());
+      if (!isNaN(v)) ends.push(v);
+    }
+  }
+  const points: number[] = [0];
+  for (let i = 0; i < Math.min(starts.length, ends.length); i++) {
+    const s = starts[i]!,
+      e = ends[i]!;
+    if (s < 0.1) points[0] = Math.round(e * 1000);
+    else points.push(Math.round(((s + e) / 2) * 1000));
+  }
+  points.push(durationMs);
+  return [...new Set(points)].sort((a, b) => a - b);
+}
+async function sliceSegment(
+  src: string,
+  startMs: number,
+  endMs: number,
+  out: string
+): Promise<void> {
+  const startS = startMs / 1000;
+  const durS = (endMs - startMs) / 1000;
+  (await execFileAsync('ffmpeg', [
+    '-y',
+    '-i',
+    src,
+    '-vn',
+    '-ss',
+    String(startS),
+    '-t',
+    String(durS),
+    '-acodec',
+    'libmp3lame',
+    '-b:a',
+    '320k',
+    '-write_xing',
+    '1',
+    out,
+  ])) as any;
+}
+function isAllowedPath(resolved: string, tracks: Track[], folders: string[]): boolean {
+  if (tracks.some(t => resolve(t.filePath) === resolved)) return true;
+  for (const f of folders)
+    if (resolved === resolve(f) || resolved.startsWith(resolve(f) + '/')) return true;
+  return false;
+}
+
 const server = createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') { json(res, 204, {}); return; }
+  if (req.method === 'OPTIONS') {
+    json(res, 204, {});
+    return;
+  }
   const url = new URL(req.url || '/', `http://localhost:${PORT}`);
 
   try {
@@ -208,9 +406,11 @@ const server = createServer(async (req, res) => {
         folders = cfg.folders ?? [];
       }
       folders = folders.map((f: string) => f.trim()).filter(Boolean);
-      if (folders.length === 0) return json(res, 400, { error: 'folders required (array of absolute paths)' });
+      if (folders.length === 0)
+        return json(res, 400, { error: 'folders required (array of absolute paths)' });
       const missing = folders.filter(f => !existsSync(f));
-      if (missing.length) return json(res, 400, { error: `folders not found: ${missing.join(', ')}` });
+      if (missing.length)
+        return json(res, 400, { error: `folders not found: ${missing.join(', ')}` });
       const tracks = await scanFolders(folders);
       return json(res, 200, tracks);
     }
@@ -244,6 +444,168 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    if (
+      (url.pathname === '/api/tracks' ||
+        url.pathname === '/api/track' ||
+        url.pathname === '/api/library/track') &&
+      req.method === 'DELETE'
+    ) {
+      let filePath = url.searchParams.get('path');
+      if (!filePath && req.method === 'DELETE') {
+        try {
+          const body = await getBody(req);
+          if (body?.path) filePath = body.path;
+        } catch {}
+      }
+      if (!filePath)
+        return json(res, 400, {
+          error: 'path query required (?path=/absolute/file.mp3) or JSON body { path }',
+        });
+      const resolved = resolve(filePath);
+      const tracks = getTracks();
+      const allowed = tracks.some(t => resolve(t.filePath) === resolved);
+      let inFolder = false;
+      if (!allowed) {
+        const cfg = await getConfig();
+        for (const f of cfg.folders ?? []) {
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) {
+            inFolder = true;
+            break;
+          }
+        }
+        if (!inFolder)
+          return json(res, 403, { error: 'file not in library/folders — deletion denied' });
+      }
+      // if file doesn't exist, just remove from DB
+      if (!existsSync(resolved)) {
+        deleteTrackByPath(resolved);
+        return json(res, 200, {
+          ok: true,
+          deleted: false,
+          removedFromLibrary: true,
+          message: 'file already missing, removed from library',
+        });
+      }
+      try {
+        await moveToTrash(resolved);
+      } catch (e: any) {
+        return json(res, 500, { error: `failed to move file to Trash: ${e.message}` });
+      }
+      deleteTrackByPath(resolved);
+      return json(res, 200, { ok: true, trashed: true, deleted: true });
+    }
+
+    if (
+      (url.pathname === '/api/tracks' ||
+        url.pathname === '/api/track' ||
+        url.pathname === '/api/library/track') &&
+      req.method === 'PUT'
+    ) {
+      const body = await getBody(req);
+      const filePath: string | undefined =
+        body.path || body.filePath || url.searchParams.get('path') || undefined;
+      if (!filePath)
+        return json(res, 400, {
+          error: 'path required (body { path, title?, artist?, album?, genre?, year? } or ?path=)',
+        });
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      // allow if in library or in allowed folder
+      let allowed = !!existing;
+      if (!allowed) {
+        const cfg = await getConfig();
+        for (const f of cfg.folders ?? []) {
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) {
+            allowed = true;
+            break;
+          }
+        }
+        if (!allowed) return json(res, 403, { error: 'file not in library/folders — edit denied' });
+      }
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+
+      // validate fields
+      const patch: Partial<Track> = {};
+      if (body.title !== undefined) {
+        const v = String(body.title).trim();
+        if (!v) return json(res, 400, { error: 'title cannot be empty' });
+        patch.title = v;
+      }
+      if (body.artist !== undefined) {
+        const v = String(body.artist).trim();
+        if (!v) return json(res, 400, { error: 'artist cannot be empty' });
+        patch.artist = v;
+      }
+      if (body.album !== undefined) {
+        const v = String(body.album).trim();
+        patch.album = v;
+      }
+      if (body.genre !== undefined) {
+        const v = String(body.genre).trim();
+        if (!v) return json(res, 400, { error: 'genre cannot be empty' });
+        patch.genre = v;
+      }
+      if (body.year !== undefined && body.year !== null && body.year !== '') {
+        const y = Number(body.year);
+        if (!Number.isInteger(y) || y < 1000 || y > 2100)
+          return json(res, 400, { error: 'year must be integer 1000-2100' });
+        patch.year = y;
+      } else if (body.year === null || body.year === '') {
+        patch.year = undefined;
+      }
+      if (Object.keys(patch).length === 0)
+        return json(res, 400, {
+          error: 'no editable fields provided (title, artist, album, genre, year)',
+        });
+
+      // write to file ID3 tags using node-id3 (preserves cover etc.)
+      try {
+        const NodeID3: any = (await import('node-id3')).default;
+        // node-id3 uses { title, artist, album, genre, year }
+        const tags: any = {};
+        if (patch.title !== undefined) tags.title = patch.title;
+        if (patch.artist !== undefined) tags.artist = patch.artist;
+        if (patch.album !== undefined) tags.album = patch.album;
+        if (patch.genre !== undefined) tags.genre = patch.genre;
+        if (patch.year !== undefined) tags.year = String(patch.year);
+        // update keeps existing tags (including picture)
+        const success = NodeID3.update(tags, resolved);
+        if (!success) throw new Error('node-id3 update returned false');
+      } catch (e: any) {
+        return json(res, 500, { error: `failed to write tags: ${e.message}` });
+      }
+
+      // re-read canonical metadata to sync DB (duration/hasCover may vary, use parseFile)
+      let updated: Track | null = null;
+      try {
+        const meta = await parseFile(resolved);
+        const fb = fallbackFromFilename(resolved);
+        const hasCover = !!(meta.common.picture && meta.common.picture.length > 0);
+        const canonical: Partial<Track> = {
+          title: meta.common.title ?? patch.title ?? existing?.title ?? fb.title,
+          artist: meta.common.artist ?? patch.artist ?? existing?.artist ?? fb.artist,
+          album: meta.common.album ?? patch.album ?? existing?.album ?? 'Unknown',
+          genre: meta.common.genre?.[0] ?? patch.genre ?? existing?.genre ?? 'Unknown',
+          year: meta.common.year ?? patch.year ?? existing?.year,
+          duration: meta.format.duration ? Math.round(meta.format.duration) : existing?.duration,
+          hasCover,
+        };
+        // prefer patch values where metadata may still be stale due to cache, but canonical is truth
+        updated = updateTrackByPath(resolved, canonical);
+        // recompute duplicates if key changed
+        if (patch.artist !== undefined || patch.title !== undefined || patch.album !== undefined) {
+          const all = getTracks();
+          markDuplicates(all);
+          setTracks(all);
+          updated = getTrackByPath(resolved);
+        }
+      } catch {
+        updated = updateTrackByPath(resolved, patch);
+      }
+      if (!updated) return json(res, 500, { error: 'failed to update library' });
+      return json(res, 200, updated);
+    }
+
     if (url.pathname === '/api/stream' && req.method === 'GET') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return json(res, 400, { error: 'path query required' });
@@ -254,7 +616,10 @@ const server = createServer(async (req, res) => {
       if (!allowed) {
         const cfg = await getConfig();
         for (const f of cfg.folders ?? []) {
-          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) { inFolder = true; break; }
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) {
+            inFolder = true;
+            break;
+          }
         }
         if (!inFolder) return json(res, 403, { error: 'file not in library/folders' });
       }
@@ -297,7 +662,10 @@ const server = createServer(async (req, res) => {
       if (!allowed) {
         const cfg = await getConfig();
         for (const f of cfg.folders ?? []) {
-          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) { inFolder = true; break; }
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) {
+            inFolder = true;
+            break;
+          }
         }
         if (!inFolder) return json(res, 403, { error: 'file not in library' });
       }
@@ -320,20 +688,196 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === '/api/pick-folder' && req.method === 'GET') {
       const picked = await pickFolderNative();
-      if (!picked) return json(res, 200, { path: null, message: 'No folder selected or native picker unavailable — use manual path' });
+      if (!picked)
+        return json(res, 200, {
+          path: null,
+          message: 'No folder selected or native picker unavailable — use manual path',
+        });
       return json(res, 200, { path: picked });
     }
 
+    if (url.pathname === '/api/split/detect' && req.method === 'POST') {
+      const body = await getBody(req);
+      const filePath = body.path || body.filePath;
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const resolved = resolve(filePath);
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const minSilenceMs = Number(body.min_silence_ms ?? body.minSilenceMs ?? 700);
+      const thresh = Number(body.silence_thresh_db ?? body.silenceThreshDb ?? -50);
+      try {
+        const points = await detectSplitPoints(resolved, minSilenceMs, thresh);
+        return json(res, 200, {
+          path: resolved,
+          split_points_ms: points,
+          duration_ms: points[points.length - 1] ?? 0,
+        });
+      } catch (e: any) {
+        return json(res, 500, { error: `detect failed: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/split/apply' && req.method === 'POST') {
+      const body = await getBody(req);
+      const filePath = body.path || body.filePath;
+      const points: number[] = body.split_points_ms ?? body.splitPoints ?? body.points;
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      if (!Array.isArray(points) || points.length < 2)
+        return json(res, 400, {
+          error: 'split_points_ms must be array with >=2 entries (include 0 and duration)',
+        });
+      const resolved = resolve(filePath);
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const sorted = [...new Set(points.map(Number))].sort((a, b) => a - b);
+      const dir = dirname(resolved);
+      const ext = extname(resolved);
+      const base = basename(resolved, ext);
+      // For custom titles: optional per-segment metadata array [{title,artist,album}]
+      const metas: any[] = Array.isArray(body.segments) ? body.segments : [];
+      const created: string[] = [];
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const s = sorted[i]!,
+          e = sorted[i + 1]!;
+        if (e - s < 200) continue;
+        const outBase = `${base} - part ${String(i + 1).padStart(2, '0')}${ext}`;
+        let outPath = join(dir, outBase);
+        let n = 1;
+        while (existsSync(outPath)) {
+          outPath = join(dir, `${base} - part ${String(i + 1).padStart(2, '0')} (${n})${ext}`);
+          n++;
+          if (n > 100) break;
+        }
+        try {
+          await sliceSegment(resolved, s, e, outPath);
+        } catch (e2: any) {
+          return json(res, 500, { error: `slice ${i + 1} failed: ${e2.message}` });
+        }
+        // optionally write ID3 tags if provided
+        const meta = metas[i];
+        if (meta && (meta.title || meta.artist || meta.album)) {
+          try {
+            const NodeID3: any = (await import('node-id3')).default;
+            const tags: any = {};
+            if (meta.title) tags.title = String(meta.title);
+            if (meta.artist) tags.artist = String(meta.artist);
+            if (meta.album) tags.album = String(meta.album);
+            if (meta.year) tags.year = String(meta.year);
+            if (meta.genre) tags.genre = String(meta.genre);
+            // copy cover from source if exists
+            try {
+              const srcMeta = await parseFile(resolved);
+              const pic = srcMeta.common.picture?.[0];
+              if (pic)
+                tags.image = {
+                  mime: pic.format,
+                  type: { id: 3, name: 'front cover' },
+                  description: 'cover',
+                  imageBuffer: pic.data,
+                };
+            } catch {}
+            NodeID3.update(tags, outPath);
+          } catch {}
+        }
+        created.push(outPath);
+      }
+      // optional: rescan folders to ingest new tracks
+      try {
+        const folders = cfg.folders ?? [];
+        if (folders.length) {
+          // quick ingest of created files only
+          const newTracks: Track[] = [];
+          for (const p of created) {
+            try {
+              const meta = await parseFile(p);
+              const hasCover = !!(meta.common.picture && meta.common.picture.length > 0);
+              newTracks.push({
+                id: p,
+                filePath: p,
+                title: meta.common.title ?? basename(p, ext),
+                artist: meta.common.artist ?? 'Unknown',
+                album: meta.common.album ?? 'Unknown',
+                genre: meta.common.genre?.[0] ?? 'Unknown',
+                year: meta.common.year,
+                duration: meta.format.duration ? Math.round(meta.format.duration) : undefined,
+                hasCover,
+              });
+            } catch {
+              newTracks.push({
+                id: p,
+                filePath: p,
+                title: basename(p, ext),
+                artist: 'Unknown',
+                album: 'Unknown',
+                genre: 'Unknown',
+                hasCover: false,
+              });
+            }
+          }
+          const all = [...getTracks(), ...newTracks];
+          // dedupe by filePath
+          const seen = new Set<string>();
+          const uniq: Track[] = [];
+          for (const t of all)
+            if (!seen.has(t.filePath)) {
+              seen.add(t.filePath);
+              uniq.push(t);
+            }
+          // recompute dupes inline
+          const groups = new Map<string, Track[]>();
+          for (const t of uniq) {
+            const k = `${t.artist.trim().toLowerCase()}|${t.title.trim().toLowerCase()}|${t.album.trim().toLowerCase()}`;
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k)!.push(t);
+          }
+          for (const [, arr] of groups) {
+            if (arr.length > 1) {
+              const gid = arr[0]!.artist + ' - ' + arr[0]!.title;
+              for (const t of arr) t.duplicateGroupId = gid;
+            } else for (const t of arr) delete (t as any).duplicateGroupId;
+          }
+          setTracks(uniq);
+        }
+      } catch {}
+      return json(res, 200, { ok: true, files: created, count: created.length });
+    }
+
     if (url.pathname === '/' && req.method === 'GET') {
-      return json(res, 200, { ok: true, message: 'API server — open http://localhost:5164 for UI', endpoints: ['/api/config','/api/library','/api/library/duplicates','/api/scan','/api/wishlist','/api/pick-folder'] });
+      return json(res, 200, {
+        ok: true,
+        message: 'API server — open http://localhost:5164 for UI',
+        endpoints: [
+          '/api/config',
+          '/api/library',
+          '/api/library/duplicates',
+          '/api/scan',
+          '/api/wishlist',
+          '/api/pick-folder',
+        ],
+      });
     }
     if (process.env.NODE_ENV === 'production') {
-      const distFile = join(process.cwd(), 'dist', url.pathname === '/' ? 'index.html' : url.pathname);
+      const distFile = join(
+        process.cwd(),
+        'dist',
+        url.pathname === '/' ? 'index.html' : url.pathname
+      );
       if (existsSync(distFile) && !url.pathname.startsWith('/api')) {
         const data = await fs.readFile(distFile);
         const ext = distFile.split('.').pop();
-        const ct: Record<string,string> = { html:'text/html', js:'text/javascript', css:'text/css', json:'application/json' };
-        res.writeHead(200, { 'Content-Type': ct[ext||''] || 'application/octet-stream' });
+        const ct: Record<string, string> = {
+          html: 'text/html',
+          js: 'text/javascript',
+          css: 'text/css',
+          json: 'application/json',
+        };
+        res.writeHead(200, { 'Content-Type': ct[ext || ''] || 'application/octet-stream' });
         return res.end(data);
       }
     }
