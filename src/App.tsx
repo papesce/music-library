@@ -185,6 +185,8 @@ export default function App() {
             onStop={player.handleStop}
             onBatchLyrics={runBatchLyrics}
             batchRunning={batchRunning}
+            onExported={refresh}
+            setError={setError}
           />
           {batchResults && (
             <div className="glass" style={{ margin: '12px 0', padding: 12, borderRadius: 14 }}>

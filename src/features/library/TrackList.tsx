@@ -47,7 +47,7 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
   const items = virtualizer.getVirtualItems();
 
   return (
-    <div className="glass track-list" role="grid" aria-rowcount={tracks.length} aria-colcount={8}>
+    <div className="glass track-list" role="grid" aria-rowcount={tracks.length} aria-colcount={9}>
       <TrackListHeader sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
       <div ref={parentRef} className="track-list-body">
         <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>

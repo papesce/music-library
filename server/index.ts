@@ -826,6 +826,95 @@ const server = createServer(async (req, res) => {
       return json(res, 200, updated);
     }
 
+    if (url.pathname === '/api/tracks/export-reviewed' && req.method === 'POST') {
+      const body = await getBody(req);
+      const destinationRaw: string | undefined = body.destination ?? body.dest ?? body.folder;
+      const modeRaw: string = String(body.mode ?? 'copy').toLowerCase();
+      const mode = ['copy', 'move', 'm3u'].includes(modeRaw) ? modeRaw : 'copy';
+      const playlistName: string = String(body.playlistName ?? 'Completed.m3u8').trim() || 'Completed.m3u8';
+      const overwrite = body.overwrite === true || body.overwrite === 'true';
+
+      const reviewedTracks = getTracks().filter(t => !!t.reviewed);
+      if (reviewedTracks.length === 0) return json(res, 400, { error: 'no tracks marked as done/reviewed' });
+
+      // destination required for copy/move/m3u — default to <cwd>/data/playlist
+      const destInput = destinationRaw?.trim() || join(process.cwd(), 'data', 'playlist');
+      const destResolved = resolve(destInput);
+      try {
+        await fs.mkdir(destResolved, { recursive: true });
+      } catch (e: any) {
+        return json(res, 400, { error: `cannot create destination: ${e.message}` });
+      }
+
+      if (mode === 'm3u') {
+        const safeName = playlistName.includes('/') || playlistName.includes('\\') ? 'Completed.m3u8' : playlistName;
+        const finalName = safeName.toLowerCase().endsWith('.m3u') || safeName.toLowerCase().endsWith('.m3u8') ? safeName : `${safeName}.m3u8`;
+        const m3uPath = join(destResolved, finalName);
+        if (existsSync(m3uPath) && !overwrite) {
+          return json(res, 409, { error: `playlist already exists: ${finalName} (use overwrite:true)` });
+        }
+        const lines: string[] = ['#EXTM3U'];
+        for (const t of reviewedTracks) {
+          const dur = t.duration ?? -1;
+          const title = `${t.artist} - ${t.title}`;
+          lines.push(`#EXTINF:${dur},${title}`);
+          lines.push(t.filePath);
+        }
+        await fs.writeFile(m3uPath, lines.join('\n') + '\n', 'utf-8');
+        return json(res, 200, { ok: true, mode, destination: destResolved, playlist: m3uPath, count: reviewedTracks.length });
+      }
+
+      // copy / move
+      const results: { file: string; dest: string; ok: boolean; error?: string }[] = [];
+      let okCount = 0;
+      for (const t of reviewedTracks) {
+        const src = resolve(t.filePath);
+        if (!existsSync(src)) {
+          results.push({ file: t.filePath, dest: '', ok: false, error: 'source missing' });
+          continue;
+        }
+        const base = basename(src);
+        let dest = join(destResolved, base);
+        // avoid overwriting different source with same basename
+        if (existsSync(dest) && resolve(dest) !== src) {
+          const ext = extname(base);
+          const nameNoExt = basename(base, ext);
+          let n = 1;
+          while (existsSync(dest) && n < 100) {
+            dest = join(destResolved, `${nameNoExt} (${n})${ext}`);
+            n++;
+          }
+        }
+        // if source already in destination, skip (idempotent)
+        if (resolve(dest) === src) {
+          results.push({ file: t.filePath, dest, ok: true });
+          okCount++;
+          continue;
+        }
+        try {
+          if (mode === 'copy') {
+            await fs.copyFile(src, dest);
+            // also copy sidecar .lrc if exists
+            const srcLrc = join(dirname(src), basename(src, extname(src)) + '.lrc');
+            const destLrc = join(dirname(dest), basename(dest, extname(dest)) + '.lrc');
+            if (existsSync(srcLrc) && !existsSync(destLrc)) await fs.copyFile(srcLrc, destLrc).catch(() => {});
+          } else {
+            await fs.rename(src, dest);
+            const srcLrc = join(dirname(src), basename(src, extname(src)) + '.lrc');
+            const destLrc = join(dirname(dest), basename(dest, extname(dest)) + '.lrc');
+            if (existsSync(srcLrc) && !existsSync(destLrc)) await fs.rename(srcLrc, destLrc).catch(() => {});
+            // update DB path
+            renameTrackPath(src, dest);
+          }
+          results.push({ file: t.filePath, dest, ok: true });
+          okCount++;
+        } catch (e: any) {
+          results.push({ file: t.filePath, dest, ok: false, error: e.message });
+        }
+      }
+      return json(res, 200, { ok: true, mode, destination: destResolved, count: reviewedTracks.length, exported: okCount, results });
+    }
+
     if (url.pathname === '/api/stream' && req.method === 'GET') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return json(res, 400, { error: 'path query required' });

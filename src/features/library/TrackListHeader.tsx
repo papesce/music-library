@@ -31,6 +31,7 @@ export function TrackListHeader({ sortKey, sortDir, toggleSort }: Props) {
           Track
         </SortButton>
       </div>
+      <div role="columnheader" className="header-cell cell-edit" aria-label="Edit" />
       <div role="columnheader" className="header-cell cell-artist">
         <SortButton active={sortKey === 'artist'} dir={sortDir} onClick={() => toggleSort('artist')}>
           Artist

@@ -62,7 +62,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
             className={`thumb thumb-btn ${isActive ? 'thumb-btn-active' : ''}`}
             onClick={onPlay}
             aria-label={isPlaying ? `Pause ${track.title}` : isPaused ? `Resume ${track.title}` : `Play ${track.title}`}
-            title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Play — click pencil to edit'}
+            title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Play'}
           >
             {!coverFailed ? (
               <img src={coverUrl(track.filePath)} alt="" loading="lazy" onError={() => setCoverFailed(true)} />
@@ -71,17 +71,6 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
               ♪
             </span>
             <span className="thumb-play-overlay" aria-hidden>{isPlaying ? '⏸' : '▶'}</span>
-            <span
-              role="button"
-              tabIndex={0}
-              className="thumb-edit-btn"
-              title="Edit song"
-              aria-label={`Edit ${track.title}`}
-              onClick={e => { e.stopPropagation(); onEdit(); }}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit(); } }}
-            >
-              ✎
-            </span>
           </button>
           <div className="track-main">
             <span className="track-title">
@@ -97,6 +86,21 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
             </span>
           </div>
         </div>
+      </div>
+
+      <div role="gridcell" className="track-row-cell cell-edit">
+        <button
+          type="button"
+          className="row-edit-btn"
+          title="Edit song"
+          aria-label={`Edit ${track.title}`}
+          onClick={e => { e.stopPropagation(); onEdit(); }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+        </button>
       </div>
 
       <div role="gridcell" className="track-row-cell cell-artist">

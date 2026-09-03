@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { api } from '../../api';
+
 export function LibraryHero({
   search,
   setSearch,
@@ -16,6 +19,8 @@ export function LibraryHero({
   onStop,
   onBatchLyrics,
   batchRunning,
+  onExported,
+  setError,
 }: {
   search: string;
   setSearch: (v: string) => void;
@@ -34,7 +39,13 @@ export function LibraryHero({
   onStop: () => void;
   onBatchLyrics?: () => void;
   batchRunning?: boolean;
+  onExported?: () => void;
+  setError?: (msg: string) => void;
 }) {
+  const [exportDest, setExportDest] = useState(() => localStorage.getItem('exportDest') || '');
+  const [exportMode, setExportMode] = useState<'copy' | 'move' | 'm3u'>(() => (localStorage.getItem('exportMode') as any) || 'copy');
+  const [exporting, setExporting] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   return (
     <>
       <div className="hero">
@@ -115,7 +126,74 @@ export function LibraryHero({
             <span>pending</span>
           </div>
         )}
+        {reviewedCount > 0 && (
+          <button className="btn glass-soft" style={{ marginLeft: 'auto', borderColor: showExport ? 'rgba(46,204,113,0.4)' : undefined }} onClick={() => setShowExport(v => !v)} title="Export completed songs to playlist folder">
+            {showExport ? '✕ Close export' : `↗ Export done · ${reviewedCount}`}
+          </button>
+        )}
       </div>
+      {showExport && reviewedCount > 0 && (
+        <div className="glass" style={{ marginBottom: 16, padding: 12, borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+            Export completed — saves done songs to a playlist folder
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              placeholder="Playlist folder (absolute path, e.g. /Users/you/Music/Playlist)"
+              value={exportDest}
+              onChange={e => { setExportDest(e.target.value); localStorage.setItem('exportDest', e.target.value); }}
+              style={{ flex: 1, minWidth: 260, padding: '9px 12px', borderRadius: 999, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', outline: 'none', fontSize: 13 }}
+            />
+            <button
+              className="btn glass-soft"
+              onClick={async () => {
+                try {
+                  const r = await api.pickFolder();
+                  if (r.path) { setExportDest(r.path); localStorage.setItem('exportDest', r.path); }
+                  else if (r.message) setError?.(r.message);
+                } catch (e: any) { setError?.(e.message); }
+              }}
+            >
+              Browse…
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="glass segmented">
+              <button className={exportMode === 'copy' ? 'active' : ''} onClick={() => { setExportMode('copy'); localStorage.setItem('exportMode', 'copy'); }} title="Keep originals, copy to folder">Copy</button>
+              <button className={exportMode === 'move' ? 'active' : ''} onClick={() => { setExportMode('move'); localStorage.setItem('exportMode', 'move'); }} title="Move files — updates library paths">Move</button>
+              <button className={exportMode === 'm3u' ? 'active' : ''} onClick={() => { setExportMode('m3u'); localStorage.setItem('exportMode', 'm3u'); }} title="Write Completed.m3u8 playlist (no duplication)">M3U</button>
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {exportMode === 'copy' && 'Copies done songs (incl. .lrc) — safe, idempotent.'}
+              {exportMode === 'move' && 'Moves files & updates library — frees source folder.'}
+              {exportMode === 'm3u' && 'Creates Completed.m3u8 in folder — no duplication, ideal for players.'}
+            </span>
+            <button
+              className="btn btn-primary"
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                try {
+                  const r = await api.exportReviewed({ destination: exportDest || undefined, mode: exportMode, overwrite: true });
+                  setError?.('');
+                  // toast via setError with success? use alert via setError empty then show info
+                  const msg = r.mode === 'm3u'
+                    ? `Playlist created: ${r.playlist} · ${r.count} tracks`
+                    : `${r.mode === 'move' ? 'Moved' : 'Copied'} ${r.exported}/${r.count} to ${r.destination}`;
+                  setError?.(msg);
+                  // trigger refresh if move (paths changed)
+                  if (r.mode === 'move') onExported?.();
+                } catch (e: any) { setError?.(e.message); }
+                finally { setExporting(false); }
+              }}
+              style={{ marginLeft: 'auto' }}
+            >
+              {exporting ? 'Exporting…' : exportMode === 'm3u' ? 'Generate M3U' : exportMode === 'move' ? `Move ${reviewedCount}` : `Copy ${reviewedCount}`}
+            </button>
+          </div>
+          {!exportDest && <span style={{ fontSize: 11, color: 'var(--muted)' }}>Leave empty for default: <code>data/playlist</code> in project folder.</span>}
+        </div>
+      )}
     </>
   );
 }

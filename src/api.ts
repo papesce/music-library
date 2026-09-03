@@ -112,4 +112,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path: filePath, remove: true }),
     }),
+  exportReviewed: (opts: { destination?: string; mode?: 'copy' | 'move' | 'm3u'; playlistName?: string; overwrite?: boolean }) =>
+    req<{ ok: boolean; mode: string; destination: string; playlist?: string; count: number; exported?: number; results?: { file: string; dest: string; ok: boolean; error?: string }[] }>(
+      '/api/tracks/export-reviewed',
+      { method: 'POST', body: JSON.stringify(opts) }
+    ),
 };

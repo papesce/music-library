@@ -269,7 +269,7 @@ body {
 .track-list-header,
 .track-row {
   display: grid;
-  grid-template-columns: 32px minmax(180px, 1.6fr) 140px 140px 80px 72px 64px 48px;
+  grid-template-columns: 32px minmax(180px, 1.6fr) 32px 140px 140px 80px 72px 64px 48px;
   align-items: center;
   gap: 0;
 }
@@ -559,42 +559,53 @@ body {
   opacity: 1;
   background: rgba(124, 92, 255, 0.55);
 }
-.thumb-edit-btn {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #0a0a14;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+/* edit column between track details and artist — hover reveal */
+.track-row-cell.cell-edit,
+.header-cell.cell-edit {
+  padding: 0 2px;
   display: grid;
   place-items: center;
-  font-size: 10px;
-  line-height: 1;
+}
+.row-edit-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  z-index: 3;
   opacity: 0;
   transform: scale(0.85);
   transition:
     opacity 0.15s,
     transform 0.15s,
-    background 0.15s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
-.thumb-btn:hover .thumb-edit-btn,
-.thumb-btn:focus-within .thumb-edit-btn,
-.track-row:hover .thumb-edit-btn {
+.row-edit-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+  opacity: 0.9;
+}
+.track-row:hover .row-edit-btn,
+.track-row:focus-within .row-edit-btn,
+.row-edit-btn:focus-visible {
   opacity: 1;
   transform: scale(1);
 }
-.thumb-edit-btn:hover {
-  background: #fff;
-  transform: scale(1.08);
+.row-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-color: var(--border-soft);
+  transform: scale(1.06);
 }
-.thumb-edit-btn:focus-visible {
+.row-edit-btn:focus-visible {
   outline: 2px solid var(--accent);
+  outline-offset: 2px;
   opacity: 1;
 }
 .track-main {
@@ -814,7 +825,7 @@ body {
 @media (max-width: 900px) {
   .track-list-header,
   .track-row {
-    grid-template-columns: 32px minmax(140px, 1fr) 120px 96px;
+    grid-template-columns: 32px minmax(140px, 1fr) 32px 120px 72px 48px;
   }
   .header-cell.cell-album,
   .track-row-cell.cell-album,
@@ -843,8 +854,11 @@ body {
     display: none;
   }
   .track-row {
-    grid-template-columns: 32px 1fr 72px 56px;
+    grid-template-columns: 32px 1fr 32px 72px 56px;
     height: 64px !important;
+  }
+  .track-list-header {
+    grid-template-columns: 32px 1fr 32px 72px 56px;
   }
   .track-row .cell-album,
   .track-row .cell-genre,
@@ -858,8 +872,10 @@ body {
     font-size: 11px;
     justify-self: end;
   }
-  .row-menu-trigger {
+  .row-menu-trigger,
+  .row-edit-btn {
     opacity: 1;
+    transform: scale(1);
   }
 }
 
