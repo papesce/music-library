@@ -45,6 +45,14 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
   const [coverFailed, setCoverFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const coverKey = useRef(0);
+  // lyrics auto-detect state
+  const [lyricsText, setLyricsText] = useState<string | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricsDetecting, setLyricsDetecting] = useState(false);
+  const [lyricsPreview, setLyricsPreview] = useState<string>('');
+  const [lyricsSource, setLyricsSource] = useState<string>('');
+  const [lyricsError, setLyricsError] = useState('');
+  const [lyricsSaved, setLyricsSaved] = useState(false);
 
   useEffect(() => {
     setTitle(track.title);
@@ -61,7 +69,13 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     setCoverRemove(false);
     setCoverFailed(false);
     coverKey.current += 1;
-  }, [track]);
+    // load current lyrics
+    setLyricsText(null); setLyricsPreview(''); setLyricsSource(''); setLyricsError(''); setLyricsSaved(false);
+    setLyricsLoading(true);
+    api.getLyrics(track.filePath).then(r => {
+      if (r.lyrics) { setLyricsText(r.lyrics); setLyricsPreview(r.lyrics); }
+    }).catch(() => {}).finally(() => setLyricsLoading(false));
+  }, [track.filePath]);
 
   const validateFilename = (v: string): string | null => {
     const t = v.trim();
@@ -136,6 +150,25 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
   const openGoogle = () => {
     const q = buildGoogleQuery();
     window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank');
+  };
+  const detectLyrics = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
+    setLyricsDetecting(true); setLyricsError(''); setLyricsSaved(false);
+    try {
+      const r = await api.detectLyrics(track.filePath, { source, model: 'base', artist: artist.trim(), title: title.trim(), album: album.trim() });
+      setLyricsPreview(r.lrc || r.syncedLyrics || r.plainLyrics || '');
+      setLyricsSource(r.source);
+    } catch (e: any) { setLyricsError(e.message); }
+    finally { setLyricsDetecting(false); }
+  };
+  const saveLyrics = async () => {
+    if (!lyricsPreview.trim()) { setLyricsError('Lyrics empty'); return; }
+    setLyricsDetecting(true); setLyricsError('');
+    try {
+      await api.saveLyrics(track.filePath, lyricsPreview);
+      setLyricsText(lyricsPreview); setLyricsSaved(true);
+      setTimeout(() => setLyricsSaved(false), 2000);
+    } catch (e: any) { setLyricsError(e.message); }
+    finally { setLyricsDetecting(false); }
   };
 
   const save = async () => {
@@ -279,6 +312,22 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
             <Field label="Year" value={year} onChange={setYear} placeholder="2024" inputMode="numeric" />
           </div>
         </div>
+      </div>
+      {/* Lyrics auto-detect */}
+      <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>Lyrics {lyricsSource ? `· ${lyricsSource}` : lyricsText ? `· saved` : ''} {lyricsSaved ? '· ✓ saved' : ''}</span>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>{lyricsLoading ? 'loading…' : lyricsText ? `${lyricsText.split('\n').length} lines${/\[\d{1,3}:\d{2}/.test(lyricsText) ? ' · synced' : ''}` : 'no lyrics'}</span>
+        </div>
+        <textarea value={lyricsPreview} onChange={e => { setLyricsPreview(e.target.value); setLyricsSaved(false); }} placeholder="[00:12.00]Lyric line — or plain lyrics" rows={6} style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', outline: 'none' }} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>{lyricsDetecting ? '…' : '✨ Detect (auto)'}</button>
+          <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>LRClib</button>
+          <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Whisper base</button>
+          <button className="btn btn-primary" onClick={saveLyrics} disabled={lyricsDetecting || !lyricsPreview.trim()} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Save to .lrc + USLT</button>
+        </div>
+        {lyricsError && <span style={{ fontSize: 11, color: 'var(--danger, #e53e3e)' }}>{lyricsError}</span>}
+        <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.3 }}>Preview+confirm: auto tries LRClib (synced) → fallback Whisper base (local, ~140MB first run). Edit before saving. Writes sidecar .lrc + ID3 USLT.</span>
       </div>
       <label style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.10)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
         <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} style={{ accentColor: '#2ecc71', width: 16, height: 16 }} />

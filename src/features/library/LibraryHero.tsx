@@ -14,6 +14,8 @@ export function LibraryHero({
   onRefresh,
   playing,
   onStop,
+  onBatchLyrics,
+  batchRunning,
 }: {
   search: string;
   setSearch: (v: string) => void;
@@ -30,6 +32,8 @@ export function LibraryHero({
   onRefresh: () => void;
   playing: boolean;
   onStop: () => void;
+  onBatchLyrics?: () => void;
+  batchRunning?: boolean;
 }) {
   return (
     <>
@@ -66,6 +70,11 @@ export function LibraryHero({
           <button className="btn glass-soft" onClick={onRefresh} disabled={scanning}>
             Re-scan
           </button>
+          {onBatchLyrics && (
+            <button className="btn glass-soft" onClick={onBatchLyrics} disabled={!!batchRunning} title="Auto-detect lyrics for tracks missing .lrc/USLT (LRClib→Whisper base), preview then batch-save">
+              {batchRunning ? 'Lyrics…' : '✨ Batch lyrics'}
+            </button>
+          )}
         </div>
         <div className="meta-row">
           <span className="muted">

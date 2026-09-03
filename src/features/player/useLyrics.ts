@@ -6,6 +6,21 @@ export function useLyrics(filePath: string | null) {
   const [synced, setSynced] = useState<{ ms: number; text: string }[] | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const reload = async () => {
+    if (!filePath) return;
+    setLoading(true);
+    try {
+      const r = await api.getLyrics(filePath);
+      setLyrics(r.lyrics);
+      setSynced(r.synced);
+    } catch {
+      setLyrics(null);
+      setSynced(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!filePath) {
       setLyrics(null);
@@ -35,5 +50,5 @@ export function useLyrics(filePath: string | null) {
     };
   }, [filePath]);
 
-  return { lyrics, synced, loading };
+  return { lyrics, synced, loading, reload };
 }

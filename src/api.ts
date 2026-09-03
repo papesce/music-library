@@ -78,6 +78,30 @@ export const api = {
     req<{ lyrics: string | null; synced: { ms: number; text: string }[] | null }>(
       `/api/lyrics?path=${encodeURIComponent(filePath)}`
     ),
+  lookupLyrics: (filePath: string) =>
+    req<{ plainLyrics: string; syncedLyrics: string; synced: { ms: number; text: string }[] | null; source: string; trackName: string; artistName: string }>(
+      `/api/lyrics/lookup?path=${encodeURIComponent(filePath)}`
+    ),
+  detectLyrics: (filePath: string, opts?: { source?: 'auto' | 'lrclib' | 'whisper'; model?: string; language?: string; artist?: string; title?: string; album?: string }) =>
+    req<{ source: string; plainLyrics: string; syncedLyrics: string; lrc: string; synced: { ms: number; text: string }[] | null; model?: string }>(
+      '/api/lyrics/detect',
+      { method: 'POST', body: JSON.stringify({ path: filePath, source: opts?.source || 'auto', model: opts?.model || 'base', ...opts }) }
+    ),
+  saveLyrics: (filePath: string, lrc: string) =>
+    req<{ ok: boolean; lrcPath: string; synced: { ms: number; text: string }[] | null }>(
+      '/api/lyrics',
+      { method: 'POST', body: JSON.stringify({ path: filePath, lrc }) }
+    ),
+  batchDetectLyrics: (opts?: { source?: string; model?: string; limit?: number; overwrite?: boolean }) =>
+    req<{ count: number; results: { path: string; status: string; source?: string; lrc?: string; synced?: { ms: number; text: string }[] | null; plainLyrics?: string; error?: string; needsConfirm?: boolean }[] }>(
+      '/api/lyrics/batch',
+      { method: 'POST', body: JSON.stringify(opts || {}) }
+    ),
+  batchSaveLyrics: (items: { path: string; lrc: string }[]) =>
+    req<{ count: number; results: { path: string; ok: boolean; error?: string }[] }>('/api/lyrics/batch/save', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
   setCover: (filePath: string, imageDataUrl: string) =>
     req<Track>('/api/tracks/cover', {
       method: 'PUT',

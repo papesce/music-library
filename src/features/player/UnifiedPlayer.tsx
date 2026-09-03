@@ -4,6 +4,7 @@ import { coverUrl } from '../../lib/path';
 import { formatDuration } from '../../lib/format';
 import { useLyrics } from './useLyrics';
 import { ArtworkLightbox } from '../../components/ui/ArtworkLightbox';
+import { api } from '../../api';
 
 type Props = {
   track: Track | null;
@@ -63,9 +64,36 @@ function LyricsView({
 export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
-  const { lyrics, synced } = useLyrics(track?.filePath ?? null);
+  const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
+  const [detecting, setDetecting] = useState(false);
+  const [preview, setPreview] = useState<{ lrc: string; source: string; synced: { ms: number; text: string }[] | null } | null>(null);
+  const [previewText, setPreviewText] = useState('');
+  const [detectError, setDetectError] = useState('');
 
   useEffect(() => setArtFailed(false), [track?.filePath]);
+  useEffect(() => { setPreview(null); setPreviewText(''); setDetectError(''); }, [track?.filePath]);
+
+  const handleDetect = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
+    if (!track) return;
+    setDetecting(true); setDetectError('');
+    try {
+      const r = await api.detectLyrics(track.filePath, { source, model: 'base' });
+      setPreview({ lrc: r.lrc || r.syncedLyrics || r.plainLyrics || '', source: r.source, synced: r.synced });
+      setPreviewText(r.lrc || r.syncedLyrics || r.plainLyrics || '');
+    } catch (e: any) {
+      setDetectError(e.message || String(e));
+    } finally { setDetecting(false); }
+  };
+  const handleSave = async () => {
+    if (!track || !previewText.trim()) return;
+    setDetecting(true);
+    try {
+      await api.saveLyrics(track.filePath, previewText);
+      setPreview(null); setPreviewText('');
+      await reload();
+    } catch (e: any) { setDetectError(e.message); }
+    finally { setDetecting(false); }
+  };
 
   if (!track) return null;
 
@@ -154,10 +182,36 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
           <div className="unified-lyrics-pane">
             <div className="unified-lyrics-header">
               <span>Lyrics</span>
-              {hasSynced && <span className="muted" style={{ fontSize: 11 }}>synced</span>}
+              <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {hasSynced && <span className="muted" style={{ fontSize: 11 }}>synced</span>}
+                <button className="btn" style={{ padding: '4px 8px', fontSize: 11, borderRadius: 999 }} onClick={() => handleDetect('auto')} disabled={detecting} title="Auto: try LRClib then Whisper (base, local)">{detecting ? '…' : '✨ Detect'}</button>
+              </span>
             </div>
             <div className="unified-lyrics-body">
-              <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />
+              {preview ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Preview · source: <b style={{ color: 'var(--text)' }}>{preview.source}</b> · synced: {preview.synced?.length ?? 0} lines — edit then Save</div>
+                  <textarea value={previewText} onChange={e => setPreviewText(e.target.value)} rows={10} style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical' }} placeholder="[00:12.00]Lyric line" />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={detecting || !previewText.trim()} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Save to .lrc + USLT</button>
+                    <button className="btn" onClick={() => { setPreview(null); setPreviewText(''); }} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Discard</button>
+                    <button className="btn" onClick={() => handleDetect('lrclib')} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Try LRClib only</button>
+                    <button className="btn" onClick={() => handleDetect('whisper')} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Whisper base</button>
+                  </div>
+                  {detectError && <div style={{ fontSize: 11, color: 'var(--danger, #e53e3e)' }}>{detectError}</div>}
+                </div>
+              ) : (
+                <>
+                  <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />
+                  {detectError && <div style={{ padding: 8, fontSize: 11, color: 'var(--danger, #e53e3e)', textAlign: 'center' }}>{detectError}</div>}
+                  {!lyrics && (
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', padding: '0 12px 12px', flexWrap: 'wrap' }}>
+                      <button className="btn" onClick={() => handleDetect('lrclib')} disabled={detecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Search LRClib</button>
+                      <button className="btn" onClick={() => handleDetect('whisper')} disabled={detecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Transcribe (Whisper base)</button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

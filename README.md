@@ -9,7 +9,7 @@ Local MP3 library + wishlist — Node + React (Vite). Glassmorphism UI, virtuali
 - **Library scan** — recursive MP3 walk, `music-metadata` + `node-id3` for title/artist/album/genre/year/duration/cover, duplicate detection
 - **Virtualized grid** — `@tanstack/react-virtual`, sort by title/artist/album/genre/year/duration, dupe-only + hide-reviewed filters
 - **Unified player** — single `UnifiedPlayer` (replaces dock + sheet + native `<audio>`): artwork + synced/plain lyrics side-by-side, default-expanded on play (0 clicks to lyrics), custom seek/transport, lightbox
-- **Lyrics** — USLT tag or adjacent `.lrc`, synced line highlighting + auto-scroll
+- **Lyrics** — USLT tag or adjacent `.lrc`, synced line highlighting + auto-scroll; auto-detect via LRClib (synced) → fallback local Whisper `base` with timestamps, preview+confirm + batch mode
 - **Edit** — change tags + cover, renames file on disk, updates DB
 - **Split** — `wavesurfer.js` waveform, regions/markers, export segments
 - **Wishlist** — add/edit/delete with priority + date sort, persisted in SQLite
@@ -24,17 +24,21 @@ Local MP3 library + wishlist — Node + React (Vite). Glassmorphism UI, virtuali
 ## Getting started
 
 ```bash
-npm install
-# dev — concurrent server (tsx --watch) + client (vite)
-npm run dev
+# recommended — auto-installs deps + whisper (.whisper-venv) if missing
+./start.sh dev        # or ./start.sh --setup  (setup only) / ./start.sh --check
 # server http://localhost:3055, client http://localhost:5173 (proxied /api)
 
+# manual
+npm install
+npm run dev           # concurrently dev:server (tsx --watch) + dev:client (vite)
 # production
 npm run build
-npm start  # NODE_ENV=production node --loader tsx server/index.ts
+npm start             # NODE_ENV=production node --loader tsx server/index.ts
+# or
+./start.sh start      # build + start with whisper PATH
 ```
 
-Environment: `PORT` (default `3055`). No other env required.
+Environment: `PORT` (default `3055`). No other env required. Lyrics: LRClib lookup works without setup; Whisper `base` (~140MB, downloaded on first transcribe) is auto-installed by `./start.sh` into `.whisper-venv` (gitignored) — Node server auto-prepends it to `PATH`.
 
 ## Scripts
 

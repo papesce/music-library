@@ -29,6 +29,8 @@ export default function App() {
   const [editTrack, setEditTrack] = useState<Track | null>(null);
   const [splitTrack, setSplitTrack] = useState<Track | null>(null);
   const [nowOpen, setNowOpen] = useState(true);
+  const [batchResults, setBatchResults] = useState<{ path: string; status: string; source?: string; lrc?: string; error?: string }[] | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
 
   const { error, setError, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
@@ -111,6 +113,28 @@ export default function App() {
       setError((e as Error).message);
     }
   };
+  const runBatchLyrics = async () => {
+    setBatchRunning(true); setError('');
+    try {
+      const r = await api.batchDetectLyrics({ source: 'auto', model: 'base', limit: 30 });
+      setBatchResults(r.results);
+      if (!r.results.length) setError('No tracks missing lyrics found (or all have .lrc/USLT)');
+    } catch (e: any) { setError(e.message); }
+    finally { setBatchRunning(false); }
+  };
+  const confirmBatchSave = async () => {
+    if (!batchResults) return;
+    const items = batchResults.filter(r => r.status === 'preview' && r.lrc).map(r => ({ path: r.path, lrc: r.lrc! }));
+    if (!items.length) { setError('No previews to save'); return; }
+    setBatchRunning(true);
+    try {
+      const r = await api.batchSaveLyrics(items);
+      const ok = r.results.filter(x => x.ok).length;
+      setError(`Saved ${ok}/${items.length} .lrc files + USLT`);
+      setBatchResults(null);
+    } catch (e: any) { setError(e.message); }
+    finally { setBatchRunning(false); }
+  };
 
   return (
     <div className="app">
@@ -159,7 +183,30 @@ export default function App() {
             onRefresh={refresh}
             playing={!!player.playingId}
             onStop={player.handleStop}
+            onBatchLyrics={runBatchLyrics}
+            batchRunning={batchRunning}
           />
+          {batchResults && (
+            <div className="glass" style={{ margin: '12px 0', padding: 12, borderRadius: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <b style={{ fontSize: 13 }}>Batch lyrics preview · {batchResults.length} candidates</b>
+                <button className="btn" onClick={() => setBatchResults(null)}>✕ Close</button>
+              </div>
+              <div style={{ maxHeight: 260, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {batchResults.map(r => (
+                  <div key={r.path} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, fontFamily: 'ui-monospace, monospace', padding: '6px 8px', borderRadius: 8, background: r.status === 'preview' ? 'rgba(46,204,113,0.08)' : r.status === 'not_found' ? 'rgba(255,255,255,0.04)' : 'rgba(255,80,80,0.08)', border: '1px solid var(--border)' }}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.path.split('/').pop()}</span>
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>{r.status}{r.source ? ` · ${r.source}` : ''}</span>
+                    {r.error && <span style={{ color: 'var(--danger)' }}>{r.error.slice(0, 80)}</span>}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary" onClick={confirmBatchSave} disabled={batchRunning || !batchResults.some(r => r.status === 'preview')}>Save all previews ({batchResults.filter(r => r.status === 'preview').length})</button>
+                <span style={{ fontSize: 11, color: 'var(--muted)', alignSelf: 'center' }}>Saves .lrc + USLT for each preview. Review in player before/after.</span>
+              </div>
+            </div>
+          )}
           <TrackList
             tracks={lib.filteredSorted}
             playingId={player.playingId}

@@ -1,6 +1,13 @@
 import { createServer } from 'http';
 import { join, resolve, dirname, basename, extname } from 'path';
 import { existsSync, promises as fs, createReadStream, statSync } from 'fs';
+// ensure local whisper venv is on PATH (created by ./start.sh --setup)
+try {
+  const venvBin = join(process.cwd(), '.whisper-venv', 'bin');
+  if (existsSync(join(venvBin, 'whisper')) && !String(process.env.PATH || '').split(':').includes(venvBin)) {
+    process.env.PATH = `${venvBin}:${process.env.PATH || ''}`;
+  }
+} catch {}
 import { parseFile } from 'music-metadata';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -355,6 +362,126 @@ async function sliceSegment(
     out,
   ])) as any;
 }
+// ── Lyrics helpers ──
+function formatLrcTime(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  const cs = Math.floor((ms % 1000) / 10);
+  return `[${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}]`;
+}
+function parseLrcToSynced(lrc: string): { ms: number; text: string }[] | null {
+  const lines = lrc.split('\n');
+  const out: { ms: number; text: string }[] = [];
+  for (const line of lines) {
+    const m = line.match(/\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\](.*)/);
+    if (m) {
+      const min = Number(m[1]), sec = Number(m[2]), msPart = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0;
+      const ms = (min * 60 + sec) * 1000 + msPart;
+      const text = (m[4] ?? '').trim();
+      if (text) out.push({ ms, text });
+    }
+  }
+  return out.length ? out.sort((a, b) => a.ms - b.ms) : null;
+}
+function lrcFromSegments(segments: { start: number; text: string }[]): string {
+  return segments.map(s => `${formatLrcTime(Math.round(s.start * 1000))}${s.text.trim()}`).join('\n');
+}
+async function fetchLrclib(artist: string, title: string, album?: string, durationSec?: number): Promise<{ plainLyrics: string; syncedLyrics: string; trackName: string; artistName: string; albumName: string; instrumental: boolean; duration: number } | null> {
+  artist = artist.trim(); title = title.trim();
+  if (!artist || !title || artist.toLowerCase() === 'unknown' || title.toLowerCase() === 'unknown') return null;
+  const LRCLIB = 'https://lrclib.net';
+  const HEADERS = { 'User-Agent': 'music-library/1.0' };
+  const params = new URLSearchParams({ artist_name: artist, track_name: title });
+  if (album && album.trim() && album.toLowerCase() !== 'unknown') params.set('album_name', album.trim());
+  if (durationSec && durationSec > 0) params.set('duration', String(Math.round(durationSec)));
+  try {
+    const r = await fetch(`${LRCLIB}/api/get?${params}`, { headers: HEADERS, signal: AbortSignal.timeout(12000) });
+    if (r.ok) {
+      const d: any = await r.json();
+      if (d?.plainLyrics || d?.syncedLyrics) return normalizeLrclib(d);
+    }
+  } catch {}
+  try {
+    const qParts = [artist, title];
+    if (album && album.trim().length >= 2 && album.toLowerCase() !== 'unknown') qParts.push(album.trim());
+    const q = qParts.join(' ');
+    const r2 = await fetch(`${LRCLIB}/api/search?q=${encodeURIComponent(q)}`, { headers: HEADERS, signal: AbortSignal.timeout(12000) });
+    if (r2.ok) {
+      const arr: any = await r2.json();
+      if (Array.isArray(arr) && arr.length) {
+        const best = pickBestLrclib(arr, artist, title, album);
+        if (best && (best.plainLyrics || best.syncedLyrics)) return normalizeLrclib(best);
+      }
+    }
+  } catch {}
+  return null;
+}
+function pickBestLrclib(cands: any[], artist: string, title: string, album?: string): any {
+  const al = artist.toLowerCase(), tl = title.toLowerCase(), albumL = (album || '').trim().toLowerCase();
+  const score = (c: any) => {
+    let s = 0;
+    const ca = (c.artistName || '').toLowerCase(), ct = (c.trackName || '').toLowerCase();
+    if (ca === al) s += 10; else if (ca.includes(al) || al.includes(ca)) s += 5;
+    if (ct === tl) s += 10; else if (ct.includes(tl) || tl.includes(ct)) s += 5;
+    if (albumL) { const cal = (c.albumName || '').toLowerCase(); if (cal === albumL) s += 8; else if (cal.includes(albumL) || albumL.includes(cal)) s += 4; }
+    if (c.plainLyrics) s += 3; if (c.syncedLyrics) s += 5; if (!c.instrumental) s += 1;
+    return s;
+  };
+  return [...cands].sort((a, b) => score(b) - score(a))[0];
+}
+function normalizeLrclib(d: any) {
+  let plain = (d.plainLyrics || '').trim();
+  const synced = (d.syncedLyrics || '').trim();
+  if (!plain && synced) plain = synced.replace(/\[\d{1,3}:\d{2}(?:\.\d{1,3})?\]/g, '').split('\n').map((l: string) => l.trim()).join('\n').trim().replace(/\n{3,}/g, '\n\n');
+  return { trackName: d.trackName || '', artistName: d.artistName || '', albumName: d.albumName || '', duration: d.duration || 0, instrumental: !!d.instrumental, plainLyrics: plain, syncedLyrics: synced };
+}
+async function transcribeWithWhisper(filePath: string, model = 'base', language?: string): Promise<{ lrc: string; plain: string; synced: { ms: number; text: string }[] | null; rawSegments: { start: number; text: string }[] }> {
+  const tmpDir = join(dirname(filePath), '.whisper-tmp');
+  // use `whisper` CLI (openai-whisper). Check availability first
+  const args = [filePath, '--model', model, '--output_format', 'json', '--fp16', 'False', '--verbose', 'False'];
+  if (language && language.trim()) args.push('--language', language.trim());
+  // whisper writes <basename>.json next to input by default; use --output_dir to control
+  const outDir = join('/tmp', `ml-whisper-${Date.now().toString(36)}`);
+  await fs.mkdir(outDir, { recursive: true });
+  args.push('--output_dir', outDir);
+  try {
+    await execFileAsync('whisper', args, { maxBuffer: 20 * 1024 * 1024, timeout: 300000 } as any);
+  } catch (e: any) {
+    // whisper returns 0 on success; if binary missing, surface 503
+    const msg = e?.message || String(e);
+    if (msg.includes('ENOENT') || msg.includes('not found')) throw Object.assign(new Error('whisper CLI not found — run ./start.sh --setup (auto-creates .whisper-venv) or pip install openai-whisper'), { code: 'WHISPER_NOT_FOUND' });
+    // if stderr contains error but json was still written, continue
+    if (!existsSync(outDir)) throw e;
+  }
+  const base = basename(filePath).replace(/\.[^.]+$/, '');
+  const jsonPath = join(outDir, `${base}.json`);
+  let segs: { start: number; text: string }[] = [];
+  let plain = '';
+  try {
+    const raw = await fs.readFile(jsonPath, 'utf-8');
+    const j = JSON.parse(raw);
+    plain = (j.text || '').trim();
+    const segments = j.segments || [];
+    for (const s of segments) {
+      const txt = String(s.text || '').trim();
+      if (txt) segs.push({ start: Number(s.start || 0), text: txt });
+    }
+    if (!segs.length && plain) {
+      // fallback split on sentence punctuation
+      const parts = plain.split(/(?<=[.!?])\s+/).map((p: string) => p.trim()).filter(Boolean);
+      // distribute evenly if no timestamps
+      segs = parts.map((p: string, i: number) => ({ start: i * 3, text: p }));
+    }
+  } finally {
+    try { await fs.rm(outDir, { recursive: true, force: true }); } catch {}
+  }
+  if (!segs.length) throw new Error('Whisper produced no segments');
+  const lrc = lrcFromSegments(segs);
+  const synced = parseLrcToSynced(lrc);
+  return { lrc, plain, synced, rawSegments: segs };
+}
+
 function isAllowedPath(resolved: string, tracks: Track[], folders: string[]): boolean {
   if (tracks.some(t => resolve(t.filePath) === resolved)) return true;
   for (const f of folders)
@@ -1023,6 +1150,153 @@ const server = createServer(async (req, res) => {
         }
       } catch {}
       return json(res, 200, { ok: true, files: created, count: created.length });
+    }
+
+    // ── Lyrics auto-detect (LRClib + Whisper base) — preview+confirm, Node-only ──
+    if (url.pathname === '/api/lyrics/lookup' && req.method === 'GET') {
+      const filePath = url.searchParams.get('path');
+      if (!filePath) return json(res, 400, { error: 'path query required' });
+      const resolved = resolve(filePath);
+      const tracks = getTracks(); const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const tr = getTrackByPath(resolved);
+      const artist = url.searchParams.get('artist') || tr?.artist || '';
+      const title = url.searchParams.get('title') || tr?.title || '';
+      const album = url.searchParams.get('album') || tr?.album || undefined;
+      const dur = tr?.duration;
+      const hit = await fetchLrclib(artist, title, album, dur);
+      if (!hit || (!hit.plainLyrics && !hit.syncedLyrics)) return json(res, 404, { error: 'No lyrics found on LRClib for this artist/title' });
+      if (hit.instrumental) return json(res, 404, { error: 'Track is marked as instrumental' });
+      const synced = hit.syncedLyrics ? parseLrcToSynced(hit.syncedLyrics) : null;
+      return json(res, 200, { ...hit, synced, source: 'lrclib' });
+    }
+    if (url.pathname === '/api/lyrics/detect' && req.method === 'POST') {
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath;
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const resolved = resolve(filePath);
+      const tracks = getTracks(); const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const source: string = (body.source || 'auto').toString().toLowerCase(); // auto|lrclib|whisper
+      const model: string = (body.model || 'base').toString();
+      const language: string | undefined = body.language ? String(body.language) : undefined;
+      const tr = getTrackByPath(resolved);
+      const artist = (body.artist || tr?.artist || '').toString();
+      const title = (body.title || tr?.title || '').toString();
+      const album = (body.album || tr?.album || undefined) as string|undefined;
+      // try LRClib unless whisper-only
+      if (source === 'auto' || source === 'lrclib') {
+        const hit = await fetchLrclib(artist, title, album, tr?.duration);
+        if (hit && (hit.plainLyrics || hit.syncedLyrics) && !hit.instrumental) {
+          const synced = hit.syncedLyrics ? parseLrcToSynced(hit.syncedLyrics) : null;
+          const lrc = hit.syncedLyrics || (synced ? lrcFromSegments(synced.map(s => ({ start: s.ms/1000, text: s.text }))) : hit.plainLyrics);
+          // preview only — do not save
+          return json(res, 200, { source: 'lrclib', plainLyrics: hit.plainLyrics, syncedLyrics: hit.syncedLyrics, lrc, synced, trackName: hit.trackName, artistName: hit.artistName });
+        }
+        if (source === 'lrclib') return json(res, 404, { error: 'No lyrics on LRClib — try source: whisper or auto' });
+      }
+      // fallback to whisper
+      try {
+        const w = await transcribeWithWhisper(resolved, model, language);
+        return json(res, 200, { source: 'whisper', model, plainLyrics: w.plain, syncedLyrics: w.lrc, lrc: w.lrc, synced: w.synced });
+      } catch (e: any) {
+        if ((e as any).code === 'WHISPER_NOT_FOUND') return json(res, 503, { error: e.message, hint: 'Run ./start.sh --setup to auto-install whisper into .whisper-venv (or pip install openai-whisper). First transcribe downloads base model ~140MB.' });
+        return json(res, 500, { error: `Whisper failed: ${e.message}` });
+      }
+    }
+    if (url.pathname === '/api/lyrics' && req.method === 'POST') {
+      // save previewed LRC (sidecar + USLT)
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath;
+      const lrc: string | undefined = body.lrc ?? body.lyrics ?? body.syncedLyrics;
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      if (!lrc || !String(lrc).trim()) return json(res, 400, { error: 'lrc (LRC/lyrics text) required' });
+      const resolved = resolve(filePath);
+      const tracks = getTracks(); const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const text = String(lrc).trim();
+      // write sidecar .lrc
+      const lrcPath = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
+      try { await fs.writeFile(lrcPath, text, 'utf-8'); } catch (e: any) { return json(res, 500, { error: `failed to write .lrc: ${e.message}` }); }
+      // also embed USLT via node-id3
+      try {
+        const NodeID3: any = (await import('node-id3')).default;
+        NodeID3.update({ unsynchronisedLyrics: { language: 'eng', text: text } }, resolved);
+      } catch {}
+      const synced = parseLrcToSynced(text);
+      return json(res, 200, { ok: true, lrcPath, synced, lyrics: text });
+    }
+    if (url.pathname === '/api/lyrics/batch' && req.method === 'POST') {
+      const body = await getBody(req);
+      const source: string = (body.source || 'auto').toString().toLowerCase();
+      const model: string = (body.model || 'base').toString();
+      const overwrite: boolean = !!body.overwrite;
+      const limit: number = Math.min(Math.max(Number(body.limit || 50), 1), 200);
+      const all = getTracks();
+      // pick candidates missing lyrics (no .lrc and no USLT)
+      const candidates: Track[] = [];
+      for (const t of all) {
+        if (candidates.length >= limit) break;
+        if (!existsSync(t.filePath)) continue;
+        const lrcPath = join(dirname(t.filePath), basename(t.filePath, extname(t.filePath)) + '.lrc');
+        const hasLrc = existsSync(lrcPath);
+        if (hasLrc && !overwrite) continue;
+        // also check USLT quickly — skip heavy parse if lrc exists handled; else we treat as missing and let detect confirm
+        candidates.push(t);
+      }
+      const results: any[] = [];
+      for (const t of candidates) {
+        try {
+          let hit: any = null; let src = '';
+          if (source === 'auto' || source === 'lrclib') {
+            const h = await fetchLrclib(t.artist, t.title, t.album, t.duration);
+            if (h && (h.plainLyrics || h.syncedLyrics) && !h.instrumental) { hit = h; src = 'lrclib'; }
+            else if (source === 'lrclib') { results.push({ path: t.filePath, status: 'not_found', source: 'lrclib' }); continue; }
+          }
+          if (!hit) {
+            try {
+              const w = await transcribeWithWhisper(t.filePath, model, body.language);
+              hit = { plainLyrics: w.plain, syncedLyrics: w.lrc }; src = 'whisper';
+              const synced = w.synced;
+              results.push({ path: t.filePath, status: 'preview', source: src, plainLyrics: w.plain, syncedLyrics: w.lrc, lrc: w.lrc, synced, needsConfirm: true });
+              continue;
+            } catch (e: any) {
+              results.push({ path: t.filePath, status: 'error', error: e.message, source: 'whisper' });
+              continue;
+            }
+          }
+          const lrc = hit.syncedLyrics || hit.plainLyrics;
+          const synced = hit.syncedLyrics ? parseLrcToSynced(hit.syncedLyrics) : null;
+          results.push({ path: t.filePath, status: 'preview', source: src, plainLyrics: hit.plainLyrics, syncedLyrics: hit.syncedLyrics, lrc, synced, trackName: hit.trackName, artistName: hit.artistName, needsConfirm: true });
+        } catch (e: any) {
+          results.push({ path: t.filePath, status: 'error', error: e.message });
+        }
+      }
+      return json(res, 200, { count: candidates.length, results, note: 'Batch returns previews only — call POST /api/lyrics with {path,lrc} per track to confirm/save.' });
+    }
+    if (url.pathname === '/api/lyrics/batch/save' && req.method === 'POST') {
+      const body = await getBody(req);
+      const items: { path: string; lrc: string }[] = Array.isArray(body.items) ? body.items : [];
+      if (!items.length) return json(res, 400, { error: 'items: [{path,lrc}] required' });
+      const out: any[] = [];
+      for (const it of items) {
+        const resolved = resolve(it.path);
+        const tracks = getTracks(); const cfg = await getConfig();
+        if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) { out.push({ path: it.path, ok: false, error: 'not allowed' }); continue; }
+        if (!existsSync(resolved)) { out.push({ path: it.path, ok: false, error: 'file not found' }); continue; }
+        const text = String(it.lrc || '').trim();
+        if (!text) { out.push({ path: it.path, ok: false, error: 'empty lrc' }); continue; }
+        const lrcPath = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
+        try {
+          await fs.writeFile(lrcPath, text, 'utf-8');
+          try { const NodeID3: any = (await import('node-id3')).default; NodeID3.update({ unsynchronisedLyrics: { language: 'eng', text } }, resolved); } catch {}
+          out.push({ path: it.path, ok: true, lrcPath });
+        } catch (e: any) { out.push({ path: it.path, ok: false, error: e.message }); }
+      }
+      return json(res, 200, { count: out.length, results: out });
     }
 
     if (url.pathname === '/api/lyrics' && req.method === 'GET') {
