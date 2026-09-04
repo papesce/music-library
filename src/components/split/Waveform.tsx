@@ -66,14 +66,27 @@ export function Waveform({
     onRegionClick,
   });
   useWaveformHotkey({ onAddSplit, cursorMs, ready, focusedIndex, durationMs, splitPoints });
-  useEffect(() => {
-    if (ready) applyZoom(1);
-  }, [focusedIndex, ready, applyZoom]);
+  // NOTE: removed auto applyZoom(1) on focusedIndex change — parent SplitModal now drives zoomTo/resetZoom for focus mode
   useEffect(() => {
     if (wsRef.current)
       (wsRef.current as unknown as { _focused?: boolean })._focused =
         focusedIndex !== null && focusedIndex !== undefined;
   }, [focusedIndex, wsRef]);
+
+  // Ctrl/Cmd + wheel to zoom (horizontal-zoom friendly)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !ready) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.85 : 1.18;
+      const next = Math.max(1, Math.min(800, Math.round((zoom || 1) * delta)));
+      applyZoom(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [ready, zoom, applyZoom]);
   function fmt(ms: number) {
     const s = Math.floor(ms / 1000);
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -92,11 +105,11 @@ export function Waveform({
         style={{
           width: '100%',
           borderRadius: 12,
-          overflow: 'hidden',
+          overflow: 'auto hidden',
           background: '#18181b',
           cursor: 'pointer',
         }}
-        title="Click to position cursor · Drag red markers to adjust"
+        title="Click to position cursor · Drag red markers to adjust · Ctrl+scroll to zoom"
       />
       {error && (
         <div
@@ -191,15 +204,41 @@ export function Waveform({
             {splitPoints.length - 1} segments
           </span>
         )}
-        {ready && zoom > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, border: '1px solid var(--border)', borderRadius: 8, padding: 2 }}>
+          <button
+            onClick={() => applyZoom(Math.max(1, Math.round((zoom || 1) * 0.6)))}
+            disabled={!ready || zoom <= 1}
+            className="btn"
+            title="Zoom out (or Ctrl+scroll)"
+            style={{ padding: '4px 8px', fontSize: 12, minWidth: 28 }}
+          >
+            −
+          </button>
+          <span className="muted" style={{ fontSize: 11, minWidth: 44, textAlign: 'center' }}>
+            {zoom > 1 ? `${zoom}×` : '1×'}
+          </span>
+          <button
+            onClick={() => applyZoom(Math.min(800, Math.round(Math.max(20, (zoom || 1) * 1.6))))}
+            disabled={!ready}
+            className="btn"
+            title="Zoom in (or Ctrl+scroll)"
+            style={{ padding: '4px 8px', fontSize: 12, minWidth: 28 }}
+          >
+            +
+          </button>
           <button
             onClick={() => applyZoom(1)}
+            disabled={!ready || zoom <= 1}
             className="btn"
+            title="Reset to fit"
             style={{ padding: '4px 8px', fontSize: 11 }}
           >
-            Reset zoom
+            Reset
           </button>
-        )}
+        </div>
+        <span className="muted" style={{ fontSize: 11, marginLeft: 4, display: ready ? undefined : 'none' }}>
+          {zoom > 1 ? 'scroll →' : 'Ctrl+scroll to zoom'}
+        </span>
         <button
           onClick={() => setAutoScroll((v: boolean) => !v)}
           className="btn"

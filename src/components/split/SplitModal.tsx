@@ -26,6 +26,7 @@ export function SplitModal({
   const [segmentTitles, setSegmentTitles] = useState<string[]>([]);
   const waveformRef = useRef<WaveformHandle>(null);
   const [waveReady, setWaveReady] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 
   // init points when duration known; if track.duration missing, we get duration from detect result
   useEffect(() => {
@@ -62,9 +63,61 @@ export function SplitModal({
     });
   }, [splitPoints.length]);
 
+  // keep focus valid when track count shrinks
+  useEffect(() => {
+    if (focusedIndex !== null && focusedIndex >= splitPoints.length - 1) setFocusedIndex(null);
+  }, [splitPoints, focusedIndex]);
+
+  // zoom waveform when entering/exiting focus (client-only: keep full audio, just zoom)
+  useEffect(() => {
+    if (!waveReady) return;
+    if (focusedIndex === null) {
+      waveformRef.current?.resetZoom();
+    } else {
+      const s = splitPoints[focusedIndex];
+      const e = splitPoints[focusedIndex + 1];
+      if (s !== undefined && e !== undefined) waveformRef.current?.zoomTo(s, e);
+    }
+  }, [focusedIndex, waveReady, splitPoints]);
+
+  // Esc to exit focus
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && focusedIndex !== null) {
+        e.preventDefault();
+        setFocusedIndex(null);
+        waveformRef.current?.resetZoom();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusedIndex]);
+
   const handleAddSplit = useCallback((posMs: number) => {
     setSplitPoints(prev => [...prev, posMs].sort((a, b) => a - b));
   }, []);
+  const handleEnterFocus = useCallback((idx: number) => setFocusedIndex(idx), []);
+  const handleExitFocus = useCallback(() => {
+    setFocusedIndex(null);
+    waveformRef.current?.resetZoom();
+  }, []);
+  const handleStepFocus = useCallback(
+    (delta: 1 | -1) => {
+      if (focusedIndex === null) return;
+      const next = focusedIndex + delta;
+      if (next < 0 || next >= splitPoints.length - 1) return;
+      setFocusedIndex(next);
+    },
+    [focusedIndex, splitPoints]
+  );
+  const handleSplitFocused = useCallback(() => {
+    if (focusedIndex === null) return;
+    const s = splitPoints[focusedIndex];
+    const e = splitPoints[focusedIndex + 1];
+    if (s === undefined || e === undefined || e - s < 1000) return;
+    const mid = Math.floor((s + e) / 2);
+    setSplitPoints(prev => [...prev, mid].sort((a, b) => a - b));
+  }, [focusedIndex, splitPoints]);
   const handleRemove = (idx: number) => {
     // idx is segment index to delete? we delete boundary after idx
     // simpler: remove point at position idx+1 (except first/last)
@@ -175,6 +228,11 @@ export function SplitModal({
           setSegmentTitles={setSegmentTitles}
           waveformRef={waveformRef}
           onRemove={handleRemove}
+          focusedIndex={focusedIndex}
+          onFocus={handleEnterFocus}
+          onExitFocus={handleExitFocus}
+          onStepFocus={handleStepFocus}
+          onSplitFocused={handleSplitFocused}
         />
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>

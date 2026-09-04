@@ -7,13 +7,71 @@ type Props = {
   setSegmentTitles: React.Dispatch<React.SetStateAction<string[]>>;
   waveformRef: React.RefObject<WaveformHandle | null>;
   onRemove: (idx: number) => void;
+  focusedIndex?: number | null;
+  onFocus?: (idx: number) => void;
+  onExitFocus?: () => void;
+  onStepFocus?: (delta: 1 | -1) => void;
+  onSplitFocused?: () => void;
 };
 
-export function SegmentList({ splitPoints, segmentTitles, setSegmentTitles, waveformRef, onRemove }: Props) {
+export function SegmentList({
+  splitPoints,
+  segmentTitles,
+  setSegmentTitles,
+  waveformRef,
+  onRemove,
+  focusedIndex = null,
+  onFocus,
+  onExitFocus,
+  onStepFocus,
+  onSplitFocused,
+}: Props) {
+  const isFocused = focusedIndex !== null;
+  const trackCount = splitPoints.length - 1;
+  const indices = isFocused ? [focusedIndex as number] : splitPoints.slice(0, -1).map((_, i) => i);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-      {splitPoints.slice(0, -1).map((start, i) => {
+      {isFocused && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>
+            Track {(focusedIndex as number) + 1} / {trackCount} <span className="muted" style={{ fontWeight: 400 }}>focused</span>
+          </span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              className="btn"
+              onClick={() => onStepFocus?.(-1)}
+              disabled={focusedIndex === 0}
+              title="Previous track"
+              style={{ padding: '6px 10px', fontSize: 12 }}
+            >
+              ◀ Prev
+            </button>
+            <button
+              className="btn"
+              onClick={() => onStepFocus?.(1)}
+              disabled={focusedIndex === trackCount - 1}
+              title="Next track"
+              style={{ padding: '6px 10px', fontSize: 12 }}
+            >
+              Next ▶
+            </button>
+            <button className="btn" onClick={onExitFocus} style={{ padding: '6px 10px', fontSize: 12 }}>
+              ← Back to all
+            </button>
+          </div>
+        </div>
+      )}
+      {!isFocused && trackCount > 0 && (
+        <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>
+          Click <span style={{ fontWeight: 600 }}>Focus</span> to edit a single track isolated (zoom + split inside)
+          {trackCount > 1 && ' · Esc to exit focus'}
+        </div>
+      )}
+      {indices.map(i => {
+        const start = splitPoints[i]!;
         const end = splitPoints[i + 1]!;
+        const canSplitInside = end - start >= 1000;
         return (
           <div
             key={i}
@@ -59,12 +117,33 @@ export function SegmentList({ splitPoints, segmentTitles, setSegmentTitles, wave
             <button className="btn" onClick={() => waveformRef.current?.playFrom(start, end)} title="Play segment" style={{ padding: '6px 10px', fontSize: 12 }}>
               ▶
             </button>
+            {!isFocused ? (
+              <button className="btn" onClick={() => onFocus?.(i)} title="Focus this track (zoom, edit solo, split inside)" style={{ padding: '6px 10px', fontSize: 12 }}>
+                ◎ Focus
+              </button>
+            ) : (
+              <button
+                className="btn"
+                onClick={() => onSplitFocused?.()}
+                disabled={!canSplitInside}
+                title={canSplitInside ? 'Split this track in two at midpoint' : 'Track too short to split'}
+                style={{ padding: '6px 10px', fontSize: 12 }}
+              >
+                ✂ Split inside
+              </button>
+            )}
             <button className="btn" onClick={() => onRemove(i)} disabled={splitPoints.length <= 2} title="Remove split after this" style={{ padding: '6px 10px', fontSize: 12 }}>
               ✕
             </button>
           </div>
         );
       })}
+      {isFocused && (
+        <p className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+          Focused waveform is zoomed to this track · drag markers or press <strong>S</strong> at cursor to add splits,
+          or use ✂ Split inside for midpoint. Esc exits focus.
+        </p>
+      )}
     </div>
   );
 }
