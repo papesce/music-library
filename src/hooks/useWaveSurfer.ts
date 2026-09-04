@@ -109,6 +109,7 @@ export function useWaveSurfer({
     ref,
     () => ({
       async playFrom(startMs: number, endMs?: number): Promise<boolean> {
+        console.log('[useWaveSurfer] inner playFrom', { startMs, endMs, ready, zoom, dur: (() => { try { return wsRef.current?.getDuration(); } catch { return 'err'; } })(), durationMs });
         const ws = wsRef.current;
         if (!ws) return false;
         if (!ready) {
@@ -121,6 +122,19 @@ export function useWaveSurfer({
           const dur = ws.getDuration() || durationMs / 1000 || 1;
           ws.seekTo(startMs / 1000 / dur);
           setCursorMs(startMs);
+          // make segment visible when zoomed — scroll minimap window to start
+          try {
+            const z = zoom || 1;
+            if (z > 1) {
+              const target = (startMs / 1000) * z;
+              (ws as unknown as { setScroll: (px: number) => void }).setScroll(target);
+              try {
+                const host = containerRef.current as unknown as { shadowRoot?: ShadowRoot } | null;
+                const sc = host?.shadowRoot?.querySelector('.scroll') as HTMLElement | null;
+                if (sc) sc.scrollLeft = target;
+              } catch {}
+            }
+          } catch {}
           const p = ws.play();
           if (p && typeof (p as Promise<void>).catch === 'function')
             await (p as Promise<void>).catch(err => {
@@ -211,7 +225,7 @@ export function useWaveSurfer({
         }
       },
     }),
-    [durationMs, applyZoom, computeZoomForWindow, ready, onStateChange]
+    [durationMs, applyZoom, computeZoomForWindow, ready, onStateChange, zoom]
   );
 
   useEffect(() => {

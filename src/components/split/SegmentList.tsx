@@ -111,7 +111,10 @@ export function SegmentList({
                 fontSize: 12,
               }}
             />
-            <button className="btn" onClick={() => waveformRef.current?.playFrom(start, end)} title="Play segment" style={{ padding: '6px 10px', fontSize: 12 }}>
+            <button className="btn" onClick={() => {
+              console.log('[SegmentList] click', { i, start, end, isFocused, ref: !!waveformRef.current, ready: waveformRef.current?.isReady?.() });
+              waveformRef.current?.playFrom(start, end);
+            }} title="Play segment" style={{ padding: '6px 10px', fontSize: 12 }}>
               ▶
             </button>
             {!isFocused && (

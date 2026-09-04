@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useWaveSurfer, type WaveformHandle } from '../../hooks/useWaveSurfer';
 import { useWaveformRegions } from '../../hooks/useWaveformRegions';
 import { useWaveformHotkey } from '../../hooks/useWaveformHotkey';
@@ -11,7 +11,6 @@ interface Props {
   onSplitPointsChange: (pts: number[]) => void;
   onRegionClick?: (i: number) => void;
   onAddSplit?: (posMs: number) => void;
-  ref?: React.Ref<WaveformHandle>;
   focusedIndex?: number | null;
   onWaveStateChange?: (
     playing: boolean,
@@ -21,20 +20,22 @@ interface Props {
   onTogglePlay?: () => void;
   onSeekPause?: () => void;
 }
-export function Waveform({
-  audioUrl,
-  splitPoints,
-  durationMs,
-  onSplitPointsChange,
-  onRegionClick,
-  onAddSplit,
+export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
+  {
+    audioUrl,
+    splitPoints,
+    durationMs,
+    onSplitPointsChange,
+    onRegionClick,
+    onAddSplit,
+    focusedIndex,
+    onWaveStateChange,
+    onReadyChange,
+    onTogglePlay,
+    onSeekPause,
+  }: Props,
   ref,
-  focusedIndex,
-  onWaveStateChange,
-  onReadyChange,
-  onTogglePlay,
-  onSeekPause,
-}: Props) {
+) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isFocused = focusedIndex !== null && focusedIndex !== undefined;
@@ -110,6 +111,7 @@ export function Waveform({
   // Expose a translated handle: callers (SegmentList) pass global ms, but isolated waveform uses 0..isolatedDuration
   useImperativeHandle(ref, () => ({
     playFrom: (startMs: number, endMs?: number) => {
+      console.log('[Waveform] outer playFrom', { startMs, endMs, isFocused, focusStart, isolatedDuration, hasInner: !!innerWaveRef.current, innerReady: innerWaveRef.current?.isReady?.() });
       const h = innerWaveRef.current;
       if (!h) return Promise.resolve(false);
       if (isFocused) {
@@ -163,17 +165,17 @@ export function Waveform({
 
   const [viewportMs, setViewportMs] = useState<{ left: number; right: number } | null>(null);
   const [hoverMs, setHoverMs] = useState<number | null>(null);
-  // when focused, viewport is the focused segment window; else derived from scroll/zoom
-  // at 1× we show full-width viewport (instead of null) so minimap isn't empty
+  // minimap is now focused-aware: when isolated, viewport is the visible window
+  // *inside* the isolated track (0..isolatedDuration), not the locked global segment.
+  // At 1× we show full-width viewport so minimap isn't empty.
   // NOTE: WaveSurfer renders inside a shadowRoot (.scroll element), so containerRef
   // light-DOM querySelector never sees the real scroll container. Use WaveSurfer's
   // scroll API (getScroll/setScroll + 'scroll' event) plus shadowRoot fallback.
   useEffect(() => {
     if (!ready) return;
-    if (isFocused) {
-      const s = splitPoints[focusedIndex as number] ?? 0;
-      const e = splitPoints[(focusedIndex as number) + 1] ?? durationMs;
-      setViewportMs({ left: s, right: e });
+    const activeTotal = isFocused ? isolatedDuration : durationMs;
+    if (activeTotal <= 0) {
+      setViewportMs(null);
       return;
     }
     const el = containerRef.current;
@@ -201,13 +203,13 @@ export function Waveform({
     const update = (scrollLeftOverride?: number) => {
       const z = zoom || 1;
       if (z <= 1) {
-        setViewportMs({ left: 0, right: durationMs });
+        setViewportMs({ left: 0, right: activeTotal });
         return;
       }
       const scrollLeft = getScrollLeft(scrollLeftOverride);
       const w = el.clientWidth || 1;
       const left = Math.max(0, Math.round((scrollLeft / z) * 1000));
-      const right = Math.min(durationMs, Math.round(((scrollLeft + w) / z) * 1000));
+      const right = Math.min(activeTotal, Math.round(((scrollLeft + w) / z) * 1000));
       setViewportMs({ left, right });
     };
 
@@ -240,22 +242,20 @@ export function Waveform({
       window.removeEventListener('resize', onElScroll);
       cancelAnimationFrame(id);
     };
-  }, [ready, zoom, durationMs, isFocused, focusedIndex, splitPoints]);
+  }, [ready, zoom, durationMs, isolatedDuration, isFocused]);
 
   const handleMinimapSeek = useCallback(
     (ms: number) => {
       const ws = wsRef.current;
       if (!ws || !ready) return;
+      // minimap is focused-aware: when isolated, ms is already 0..isolatedDuration
       if (isFocused) {
-        const s = focusStart;
-        const e = focusEnd;
-        const clamped = Math.max(s, Math.min(e, ms));
-        const isolatedMs = clamped - s;
+        const clamped = Math.max(0, Math.min(isolatedDuration, ms));
         try {
-          ws.seekTo(isolatedMs / (isolatedDuration || 1));
+          ws.seekTo(clamped / (isolatedDuration || 1));
           ws.pause();
         } catch {}
-        setCursorMs(isolatedMs);
+        setCursorMs(clamped);
         return;
       }
       try {
@@ -264,18 +264,19 @@ export function Waveform({
       } catch {}
       setCursorMs(ms);
     },
-    [ready, isFocused, focusStart, focusEnd, isolatedDuration, setCursorMs]
+    [ready, isFocused, isolatedDuration, setCursorMs]
   );
 
   const handleMinimapPan = useCallback(
     (leftMs: number) => {
-      if (isFocused || !ready) return;
+      if (!ready) return;
       const el = containerRef.current;
       const ws = wsRef.current as unknown as { setScroll?: (px: number) => void } | null;
       if (!el) return;
       const z = zoom || 1;
       if (z <= 1) return;
-      const maxLeft = Math.max(0, durationMs - Math.round((el.clientWidth / z) * 1000));
+      const activeTotal = isFocused ? isolatedDuration : durationMs;
+      const maxLeft = Math.max(0, activeTotal - Math.round((el.clientWidth / z) * 1000));
       const clamped = Math.max(0, Math.min(maxLeft, Math.round(leftMs)));
       const target = (clamped / 1000) * z;
       // prefer WaveSurfer API (works with shadowRoot scroll container)
@@ -298,7 +299,7 @@ export function Waveform({
       scrollEl.scrollLeft = target;
       if (scrollEl !== el) el.scrollLeft = target;
     },
-    [isFocused, ready, zoom, durationMs]
+    [ready, zoom, durationMs, isolatedDuration, isFocused]
   );
 
   // absolute cursor for minimap playhead (focused cursor is track-relative)
@@ -429,11 +430,11 @@ export function Waveform({
       </div>
       {ready ? (
         <WaveformMinimap
-          durationMs={durationMs}
-          splitPoints={splitPoints}
-          focusedIndex={focusedIndex ?? null}
+          durationMs={isFocused ? isolatedDuration : durationMs}
+          splitPoints={isFocused ? isolatedSplitPoints : splitPoints}
+          focusedIndex={null}
           viewportMs={viewportMs}
-          cursorMs={absCursorMs}
+          cursorMs={isFocused ? cursorMs : absCursorMs}
           onSeek={handleMinimapSeek}
           onPan={handleMinimapPan}
         />
@@ -613,4 +614,4 @@ export function Waveform({
       </div>
     </div>
   );
-}
+});
