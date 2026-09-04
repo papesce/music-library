@@ -29,8 +29,46 @@ export function useWaveformRegions({
     regions.clearRegions();
     bandRegionIds.current.clear();
     const isFocused = focusedIndex !== null && focusedIndex !== undefined;
-    if (isFocused) return;
     const colours: [string, string] = ['rgba(124,92,255,0.10)', 'rgba(0,212,255,0.10)'];
+    if (isFocused) {
+      const idx = focusedIndex as number;
+      const s = splitPoints[idx] ?? 0;
+      const e = splitPoints[idx + 1] ?? durationMs;
+      // dim outside focused track
+      if (s > 0) {
+        const dimL = regions.addRegion({
+          start: 0,
+          end: s / 1000,
+          color: 'rgba(0,0,0,0.55)',
+          drag: false,
+          resize: false,
+        });
+        (dimL.element as HTMLElement | null)?.setAttribute('data-dim', 'true');
+        bandRegionIds.current.add(dimL.id);
+      }
+      if (e < durationMs) {
+        const dimR = regions.addRegion({
+          start: e / 1000,
+          end: durationMs / 1000,
+          color: 'rgba(0,0,0,0.55)',
+          drag: false,
+          resize: false,
+        });
+        (dimR.element as HTMLElement | null)?.setAttribute('data-dim', 'true');
+        bandRegionIds.current.add(dimR.id);
+      }
+      // highlight focused band
+      const col = colours[(idx % 2) as 0 | 1].replace('0.10', '0.18');
+      const hl = regions.addRegion({
+        start: s / 1000,
+        end: e / 1000,
+        color: col,
+        drag: false,
+        resize: false,
+      });
+      bandRegionIds.current.add(hl.id);
+      return;
+    }
     const boundaries = splitPoints.slice(1, -1);
     splitPoints.forEach((pt, i) => {
       const next = splitPoints[i + 1];

@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { Track } from '../../types/api.d';
+import { usePersistedState } from '../../lib/persist';
 
 export type SortKey = 'artist' | 'album' | 'title' | 'year' | 'duration';
 export type SortDir = 'asc' | 'desc';
 
+const VALID_KEYS: SortKey[] = ['artist', 'album', 'title', 'year', 'duration'];
+
 export function useLibrary(tracks: Track[]) {
-  const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('artist');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [showDupesOnly, setShowDupesOnly] = useState(false);
-  const [hideReviewed, setHideReviewed] = useState(false);
+  const [search, setSearch] = usePersistedState<string>('lib:search', '');
+  const [sortKeyRaw, setSortKey] = usePersistedState<SortKey>('lib:sortKey', 'artist');
+  const [sortDirRaw, setSortDir] = usePersistedState<SortDir>('lib:sortDir', 'asc');
+  const [showDupesOnly, setShowDupesOnly] = usePersistedState<boolean>('lib:showDupesOnly', false);
+  const [hideReviewed, setHideReviewed] = usePersistedState<boolean>('lib:hideReviewed', false);
+  const sortKey = VALID_KEYS.includes(sortKeyRaw) ? sortKeyRaw : 'artist';
+  const sortDir: SortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -46,7 +51,7 @@ export function useLibrary(tracks: Track[]) {
           : String(av).localeCompare(String(bv));
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [tracks, search, sortKey, sortDir, showDupesOnly]);
+  }, [tracks, search, sortKey, sortDir, showDupesOnly, hideReviewed]);
 
   const dupeCount = useMemo(() => tracks.filter(t => t.duplicateGroupId).length, [tracks]);
   const reviewedCount = useMemo(() => tracks.filter(t => t.reviewed).length, [tracks]);

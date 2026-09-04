@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { WishlistItem } from '../../types/api.d';
 import { api } from '../../api';
+import { usePersistedState } from '../../lib/persist';
 
 export function useWishlist(initial: WishlistItem[] = []) {
   const [wishlist, setWishlist] = useState<WishlistItem[]>(initial);
@@ -11,7 +12,7 @@ export function useWishlist(initial: WishlistItem[] = []) {
   const [editName, setEditName] = useState('');
   const [editArtist, setEditArtist] = useState('');
   const [editPriority, setEditPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
-  const [sortByDate, setSortByDate] = useState(false);
+  const [sortByDate, setSortByDate] = usePersistedState<boolean>('wishlist:sortByDate', false);
 
   const sortedByPriority = useMemo(() => {
     const order = { High: 0, Medium: 1, Low: 2 };

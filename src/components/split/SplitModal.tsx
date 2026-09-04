@@ -5,6 +5,7 @@ import { SegmentList } from './SegmentList';
 import { DetectControls } from './DetectControls';
 import { api } from '../../api';
 import { formatMs } from '../../lib/format';
+import { usePersistedState } from '../../lib/persist';
 
 export function SplitModal({
   track,
@@ -20,8 +21,8 @@ export function SplitModal({
   const [splitPoints, setSplitPoints] = useState<number[]>([0, durationMs || 60000]);
   const [detecting, setDetecting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [minSilenceMs, setMinSilenceMs] = useState(700);
-  const [threshDb, setThreshDb] = useState(-50);
+  const [minSilenceMs, setMinSilenceMs] = usePersistedState<number>('split:minSilenceMs', 700);
+  const [threshDb, setThreshDb] = usePersistedState<number>('split:threshDb', -50);
   const [error, setError] = useState('');
   const [segmentTitles, setSegmentTitles] = useState<string[]>([]);
   const waveformRef = useRef<WaveformHandle>(null);
@@ -103,17 +104,8 @@ export function SplitModal({
     if (focusedIndex !== null && focusedIndex >= splitPoints.length - 1) setFocusedIndex(null);
   }, [splitPoints, focusedIndex]);
 
-  // zoom waveform when entering/exiting focus (client-only: keep full audio, just zoom)
-  useEffect(() => {
-    if (!waveReady) return;
-    if (focusedIndex === null) {
-      waveformRef.current?.resetZoom();
-    } else {
-      const s = splitPoints[focusedIndex];
-      const e = splitPoints[focusedIndex + 1];
-      if (s !== undefined && e !== undefined) waveformRef.current?.zoomTo(s, e);
-    }
-  }, [focusedIndex, waveReady, splitPoints]);
+  // focus isolation is now handled by Waveform itself (it loads a sliced audio URL for the focused segment)
+  // no zoomTo/resetZoom needed — waveform remounts with isolated audio
 
   // Esc to exit focus
   useEffect(() => {
@@ -121,7 +113,6 @@ export function SplitModal({
       if (e.key === 'Escape' && focusedIndex !== null) {
         e.preventDefault();
         setFocusedIndex(null);
-        waveformRef.current?.resetZoom();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -134,7 +125,6 @@ export function SplitModal({
   const handleEnterFocus = useCallback((idx: number) => setFocusedIndex(idx), []);
   const handleExitFocus = useCallback(() => {
     setFocusedIndex(null);
-    waveformRef.current?.resetZoom();
   }, []);
   const handleStepFocus = useCallback(
     (delta: 1 | -1) => {
@@ -145,14 +135,7 @@ export function SplitModal({
     },
     [focusedIndex, splitPoints]
   );
-  const handleSplitFocused = useCallback(() => {
-    if (focusedIndex === null) return;
-    const s = splitPoints[focusedIndex];
-    const e = splitPoints[focusedIndex + 1];
-    if (s === undefined || e === undefined || e - s < 1000) return;
-    const mid = Math.floor((s + e) / 2);
-    setSplitPoints(prev => [...prev, mid].sort((a, b) => a - b));
-  }, [focusedIndex, splitPoints]);
+
   const handleRemove = (idx: number) => {
     // idx is segment index to delete? we delete boundary after idx
     // simpler: remove point at position idx+1 (except first/last)
@@ -170,7 +153,6 @@ export function SplitModal({
     setSplitPoints(durationMs ? [0, durationMs] : [0, 60000]);
     setDraftRestored(false);
     setFocusedIndex(null);
-    waveformRef.current?.resetZoom();
   };
   const handleExport = async () => {
     if (splitPoints.length < 2) return;
@@ -199,8 +181,11 @@ export function SplitModal({
           zIndex: 71,
           width: 'min(920px, calc(100% - 24px))',
           maxHeight: '90vh',
-          overflow: 'auto',
+          overflow: 'hidden',
           padding: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0,
         }}
       >
         <div
@@ -209,6 +194,7 @@ export function SplitModal({
             justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: 12,
+            flexShrink: 0,
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -230,7 +216,7 @@ export function SplitModal({
         </div>
 
         {error && (
-          <div className="toast" style={{ marginBottom: 12 }}>
+          <div className="toast" style={{ marginBottom: 12, flexShrink: 0 }}>
             <span>{error}</span>
             <button onClick={() => setError('')}>✕</button>
           </div>
@@ -242,12 +228,13 @@ export function SplitModal({
             background: 'rgba(0,0,0,0.35)',
             padding: 12,
             marginBottom: 12,
+            flexShrink: 0,
           }}
         >
           <Waveform
             audioUrl={audioUrl}
             splitPoints={splitPoints}
-            durationMs={splitPoints[splitPoints.length - 1] ?? durationMs ?? 60000}
+            durationMs={durationMs || splitPoints[splitPoints.length - 1] || 60000}
             onSplitPointsChange={setSplitPoints}
             onAddSplit={handleAddSplit}
             ref={waveformRef}
@@ -256,31 +243,43 @@ export function SplitModal({
           />
         </div>
 
-        <DetectControls
-          minSilenceMs={minSilenceMs}
-          setMinSilenceMs={setMinSilenceMs}
-          threshDb={threshDb}
-          setThreshDb={setThreshDb}
-          detecting={detecting}
-          onDetect={handleDetect}
-          segmentCount={splitPoints.length - 1}
-          waveReady={waveReady}
-        />
+        <div style={{ flexShrink: 0, marginBottom: 12 }}>
+          <DetectControls
+            minSilenceMs={minSilenceMs}
+            setMinSilenceMs={setMinSilenceMs}
+            threshDb={threshDb}
+            setThreshDb={setThreshDb}
+            detecting={detecting}
+            onDetect={handleDetect}
+            segmentCount={splitPoints.length - 1}
+            waveReady={waveReady}
+          />
+        </div>
 
-        <SegmentList
-          splitPoints={splitPoints}
-          segmentTitles={segmentTitles}
-          setSegmentTitles={setSegmentTitles}
-          waveformRef={waveformRef}
-          onRemove={handleRemove}
-          focusedIndex={focusedIndex}
-          onFocus={handleEnterFocus}
-          onExitFocus={handleExitFocus}
-          onStepFocus={handleStepFocus}
-          onSplitFocused={handleSplitFocused}
-        />
+        <div
+          style={{
+            flex: 1,
+            overflow: 'auto',
+            minHeight: 120,
+            marginBottom: 12,
+            paddingRight: 4,
+            scrollbarGutter: 'stable',
+          }}
+        >
+          <SegmentList
+            splitPoints={splitPoints}
+            segmentTitles={segmentTitles}
+            setSegmentTitles={setSegmentTitles}
+            waveformRef={waveformRef}
+            onRemove={handleRemove}
+            focusedIndex={focusedIndex}
+            onFocus={handleEnterFocus}
+            onExitFocus={handleExitFocus}
+            onStepFocus={handleStepFocus}
+          />
+        </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginTop: 4, flexShrink: 0 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="btn" onClick={handleClearDraft} disabled={exporting} title="Delete persisted draft and reset to single segment">
               ↺ Clear & start over
@@ -302,7 +301,7 @@ export function SplitModal({
             </button>
           </div>
         </div>
-        <p className="muted" style={{ marginTop: 8, fontSize: 11 }}>
+        <p className="muted" style={{ marginTop: 8, fontSize: 11, flexShrink: 0 }}>
           Slices are written next to the original as “{track.title} - part 01.mp3” etc., then appear
           in your library after export (no re-upload).
         </p>

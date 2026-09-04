@@ -16,20 +16,24 @@ import { useLibrary } from './features/library/useLibrary';
 import { usePlayer } from './features/player/usePlayer';
 import { useWishlist } from './features/wishlist/useWishlist';
 import { useToast } from './hooks/useToast';
+import { usePersistedState } from './lib/persist';
 
 type Tab = 'library' | 'wishlist';
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('library');
+  const [tabRaw, setTab] = usePersistedState<Tab>('app:tab', 'library');
+  const tab: Tab = tabRaw === 'wishlist' ? 'wishlist' : 'library';
   const [tracks, setTracks] = useState<Track[]>([]);
   const [scanning, setScanning] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = usePersistedState<boolean>('app:drawerOpen', false);
   const [confirmTrack, setConfirmTrack] = useState<Track | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editTrack, setEditTrack] = useState<Track | null>(null);
-  const [splitTrack, setSplitTrack] = useState<Track | null>(null);
-  const [nowOpen, setNowOpen] = useState(true);
+  const [splitTrackPath, setSplitTrackPath] = usePersistedState<string | null>('app:splitTrackPath', null);
+  const [nowOpen, setNowOpen] = usePersistedState<boolean>('app:nowOpen', true);
   const [coverBust, setCoverBust] = useState<Record<string, number>>({});
+  const splitTrack = splitTrackPath ? (tracks.find(t => t.filePath === splitTrackPath) ?? null) : null;
+  const setSplitTrack = (t: Track | null) => setSplitTrackPath(t?.filePath ?? null);
 
   const { error, setError, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
@@ -42,6 +46,12 @@ export default function App() {
   useEffect(() => {
     if (!player.playingTrack) setNowOpen(false);
   }, [player.playingTrack]);
+  // clear stale persisted split path if track no longer exists
+  useEffect(() => {
+    if (splitTrackPath && tracks.length > 0 && !tracks.some(t => t.filePath === splitTrackPath)) {
+      setSplitTrackPath(null);
+    }
+  }, [tracks, splitTrackPath]);
   const lib = useLibrary(tracks);
   const wishlistCtl = useWishlist();
 

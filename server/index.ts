@@ -941,6 +941,51 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true, mode, destination: destResolved, count: reviewedTracks.length, exported: okCount, results });
     }
 
+    if (url.pathname === '/api/peaks' && req.method === 'GET') {
+      const filePath = url.searchParams.get('path');
+      const samples = Math.min(2000, Math.max(200, Number(url.searchParams.get('samples') ?? '800')));
+      if (!filePath) return json(res, 400, { error: 'path query required' });
+      const resolved = resolve(filePath);
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      try {
+        // decode to 8k mono s16le, then downsample to peaks
+        const { spawn } = await import('child_process');
+        const args = ['-v', 'quiet', '-i', resolved, '-ac', '1', '-ar', '8000', '-f', 's16le', '-acodec', 'pcm_s16le', '-'];
+        const child = spawn('ffmpeg', args);
+        const chunks: Buffer[] = [];
+        child.stdout.on('data', (d: Buffer) => chunks.push(d));
+        let stderr = '';
+        child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+        const buf: Buffer = await new Promise((resolveP, reject) => {
+          child.on('error', reject);
+          child.on('close', (code: number | null) => {
+            if (code !== 0 && code !== null) return reject(new Error(`ffmpeg peaks exit ${code}: ${stderr.slice(0, 800)}`));
+            resolveP(Buffer.concat(chunks));
+          });
+        });
+        const totalSamples = buf.length / 2;
+        const blockSize = Math.max(1, Math.floor(totalSamples / samples));
+        const peaks: number[] = [];
+        for (let i = 0; i < samples; i++) {
+          const start = i * blockSize;
+          const end = Math.min(totalSamples, start + blockSize);
+          let max = 0;
+          for (let j = start; j < end; j++) {
+            const v = Math.abs(buf.readInt16LE(j * 2)) / 32768;
+            if (v > max) max = v;
+          }
+          peaks.push(Math.round(max * 1000) / 1000);
+        }
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return json(res, 200, { path: resolved, samples, peaks });
+      } catch (e: any) {
+        return json(res, 500, { error: e.message });
+      }
+    }
+
     if (url.pathname === '/api/stream' && req.method === 'GET') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return json(res, 400, { error: 'path query required' });
@@ -959,6 +1004,46 @@ const server = createServer(async (req, res) => {
         if (!inFolder) return json(res, 403, { error: 'file not in library/folders' });
       }
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      // slice support for focus-isolated waveform: ?start_ms=&end_ms=
+      const hasSlice = url.searchParams.has('start_ms') || url.searchParams.has('end_ms');
+      if (hasSlice) {
+        const sMs = Number(url.searchParams.get('start_ms') ?? '0');
+        const eMsRaw = url.searchParams.get('end_ms');
+        const eMs = eMsRaw !== null ? Number(eMsRaw) : NaN;
+        if (isNaN(sMs) || sMs < 0) return json(res, 400, { error: 'invalid start_ms' });
+        if (eMsRaw !== null && (isNaN(eMs) || eMs <= sMs)) return json(res, 400, { error: 'invalid end_ms' });
+        const startSec = sMs / 1000;
+        const durSec = !isNaN(eMs) ? (eMs - sMs) / 1000 : undefined;
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'audio/mpeg');
+        // accurate slice: seek after input + re-encode so waveform & playback stay sample-aligned
+        // (copy+pre-seek is ~26ms off due to MP3 frame boundaries, very noticeable when zoomed)
+        const args = ['-v', 'quiet', '-i', resolved, '-ss', String(startSec)];
+        if (durSec !== undefined) args.push('-t', String(durSec));
+        args.push('-vn', '-c:a', 'libmp3lame', '-b:a', '320k', '-write_xing', '1', '-f', 'mp3', '-');
+        try {
+          const { spawn } = await import('child_process');
+          const child = spawn('ffmpeg', args);
+          res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' });
+          child.stdout.pipe(res);
+          let stderr = '';
+          child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+          child.on('error', (err: any) => {
+            if (!res.headersSent) json(res, 500, { error: err.message });
+            else try { res.end(); } catch {}
+          });
+          child.on('close', (code: number | null) => {
+            if (code !== 0 && code !== null) {
+              console.error(`[stream slice] ffmpeg exit ${code}: ${stderr.slice(0, 500)}`);
+              if (!res.writableEnded) try { res.end(); } catch {}
+            }
+          });
+          req.on('close', () => { try { child.kill(); } catch {} });
+          return;
+        } catch (e: any) {
+          return json(res, 500, { error: e.message });
+        }
+      }
       try {
         const stat = statSync(resolved);
         const range = req.headers.range as string | undefined;

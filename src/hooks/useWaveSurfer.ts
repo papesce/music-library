@@ -32,6 +32,7 @@ export function useWaveSurfer({
   const regionsRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingPct, setLoadingPct] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [cursorMs, setCursorMs] = useState<number | null>(null);
@@ -58,19 +59,48 @@ export function useWaveSurfer({
     const ws = wsRef.current;
     if (!ws) return;
     try {
-      const c = Math.max(1, pxPerSec);
+      const c = Math.max(0.05, pxPerSec);
       ws.zoom(c);
       setZoom(c);
+      // when going back to ~1× fit, reset scroll to start so waveform actually fits
+      if (c <= 1) {
+        const resetScroll = () => {
+          try {
+            (ws as unknown as { setScroll: (px: number) => void }).setScroll(0);
+          } catch {}
+          try {
+            const host = containerRef.current as unknown as { shadowRoot?: ShadowRoot } | null;
+            const sc = host?.shadowRoot?.querySelector('.scroll') as HTMLElement | null;
+            if (sc) sc.scrollLeft = 0;
+            else if (containerRef.current) containerRef.current.scrollLeft = 0;
+          } catch {}
+        };
+        resetScroll();
+        // WaveSurfer's reRender is async and may restore scrollLeft; force again
+        requestAnimationFrame(() => {
+          resetScroll();
+          requestAnimationFrame(resetScroll);
+        });
+        setTimeout(resetScroll, 60);
+        setTimeout(resetScroll, 180);
+        try {
+          const onRedraw = () => {
+            try { (ws as unknown as { un: (e: string, cb: unknown) => void }).un('redraw', onRedraw); } catch {}
+            resetScroll();
+          };
+          (ws as unknown as { on: (e: string, cb: unknown) => void }).on('redraw', onRedraw);
+        } catch {}
+      }
     } catch (err) {
       console.warn('[Waveform] zoom ignored', err);
     }
   }, []);
   const computeZoomForWindow = useCallback(
     (startMs: number, endMs: number): number => {
-      const w = containerRef.current?.clientWidth ?? 800;
+      const w = (containerRef.current?.clientWidth ?? 800) - 16;
       const segDurSec = (endMs - startMs) / 1000;
       if (segDurSec <= 0) return 1;
-      return Math.round(w / segDurSec);
+      return Math.max(20, Math.min(800, Math.round(w / segDurSec)));
     },
     [containerRef]
   );
@@ -88,7 +118,8 @@ export function useWaveSurfer({
         try {
           stopAtRef.current = endMs !== undefined ? endMs / 1000 : null;
           ws.pause();
-          ws.seekTo(startMs / (durationMs || 1));
+          const dur = ws.getDuration() || durationMs / 1000 || 1;
+          ws.seekTo(startMs / 1000 / dur);
           setCursorMs(startMs);
           const p = ws.play();
           if (p && typeof (p as Promise<void>).catch === 'function')
@@ -125,27 +156,41 @@ export function useWaveSurfer({
         try {
           const z = computeZoomForWindow(startMs, endMs);
           applyZoom(z);
-          const durMs = durationMs || ws.getDuration() * 1000 || 1;
-          ws.seekTo(startMs / durMs);
+          const dur = ws.getDuration() || durationMs / 1000 || 1;
+          ws.seekTo(startMs / 1000 / dur);
           setCursorMs(startMs);
-          // ensure scroll shows the focused window (ws zoom is async layout)
           const container = containerRef.current;
           if (container) {
-            requestAnimationFrame(() => {
+            // ws.zoom triggers async redraw; double rAF + fallback redraw listener
+            const doScroll = () => {
               try {
                 const wrapper = container.querySelector('div') as HTMLElement | null;
                 const scrollEl = wrapper ?? container;
+                const target = Math.round((startMs / 1000) * z);
                 const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
-                const target = (startMs / durMs) * maxScroll;
                 scrollEl.scrollLeft = Math.max(0, Math.min(maxScroll, target));
               } catch {}
-            });
+            };
+            const onRedraw = () => {
+              try { ws.un('redraw' as unknown as Parameters<typeof ws.on>[0], onRedraw as unknown as Parameters<typeof ws.on>[1]); } catch {}
+              requestAnimationFrame(doScroll);
+            };
+            try { ws.on('redraw' as unknown as Parameters<typeof ws.on>[0], onRedraw as unknown as Parameters<typeof ws.on>[1]); } catch {}
+            requestAnimationFrame(() => requestAnimationFrame(doScroll));
+            setTimeout(doScroll, 120);
           }
         } catch {}
       },
       resetZoom() {
         if (!ready) return;
-        applyZoom(1);
+        // fit-to-width, not hardcoded 1px/sec (which stays scrollable for long files)
+        const w = containerRef.current?.clientWidth ?? 0;
+        const durSec = durationMs / 1000 || 1;
+        const fit = w > 0 ? w / durSec : 1;
+        // WaveSurfer uses fillParent when minPxPerSec is very small; use fit clamped to at least 0.05
+        const target = Math.max(0.05, Math.min(1, fit));
+        // if fit >=1, true 1× is already fit; otherwise use fit to actually fit
+        applyZoom(target >= 1 ? 1 : target);
       },
       getCursorMs() {
         if (cursorMsRef.current !== null) return cursorMsRef.current;
@@ -184,18 +229,23 @@ export function useWaveSurfer({
       container: containerRef.current,
       waveColor: '#a1a1aa',
       progressColor: '#7c5cff',
-      height: 140,
-      normalize: true,
+      height: 110,
+      normalize: false,
       autoScroll,
       autoCenter: false,
       plugins: [regions],
-    });
+    } as any);
     setError(null);
+    setLoadingPct(5);
+    ws.on('loading', (pct: number) => {
+      setLoadingPct(Math.round(pct));
+    });
     ws.load(audioUrl).catch((err: unknown) => {
       if (err instanceof Error && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : String(err));
     });
     ws.on('ready', () => {
+      setLoadingPct(100);
       setReady(true);
       onReadyChange?.(true);
       setError(null);
@@ -204,7 +254,8 @@ export function useWaveSurfer({
         pendingPlayRef.current = null;
         try {
           stopAtRef.current = endMs !== undefined ? endMs / 1000 : null;
-          ws.seekTo(startMs / (ws.getDuration() * 1000 || 1));
+          const dur = ws.getDuration() || durationMs / 1000 || 1;
+          ws.seekTo(startMs / 1000 / dur);
           setCursorMs(startMs);
           const p = ws.play();
           if (p && typeof (p as Promise<void>).catch === 'function')
@@ -278,6 +329,7 @@ export function useWaveSurfer({
     regionsRef,
     ready,
     error,
+    loadingPct,
     playing,
     zoom,
     cursorMs,

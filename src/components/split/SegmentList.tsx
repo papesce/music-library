@@ -11,7 +11,6 @@ type Props = {
   onFocus?: (idx: number) => void;
   onExitFocus?: () => void;
   onStepFocus?: (delta: 1 | -1) => void;
-  onSplitFocused?: () => void;
 };
 
 export function SegmentList({
@@ -24,7 +23,6 @@ export function SegmentList({
   onFocus,
   onExitFocus,
   onStepFocus,
-  onSplitFocused,
 }: Props) {
   const isFocused = focusedIndex !== null;
   const trackCount = splitPoints.length - 1;
@@ -64,14 +62,13 @@ export function SegmentList({
       )}
       {!isFocused && trackCount > 0 && (
         <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>
-          Click <span style={{ fontWeight: 600 }}>Focus</span> to edit a single track isolated (zoom + split inside)
+          Click <span style={{ fontWeight: 600 }}>Focus</span> to edit a single track isolated
           {trackCount > 1 && ' · Esc to exit focus'}
         </div>
       )}
       {indices.map(i => {
         const start = splitPoints[i]!;
         const end = splitPoints[i + 1]!;
-        const canSplitInside = end - start >= 1000;
         return (
           <div
             key={i}
@@ -117,19 +114,9 @@ export function SegmentList({
             <button className="btn" onClick={() => waveformRef.current?.playFrom(start, end)} title="Play segment" style={{ padding: '6px 10px', fontSize: 12 }}>
               ▶
             </button>
-            {!isFocused ? (
-              <button className="btn" onClick={() => onFocus?.(i)} title="Focus this track (zoom, edit solo, split inside)" style={{ padding: '6px 10px', fontSize: 12 }}>
+            {!isFocused && (
+              <button className="btn" onClick={() => onFocus?.(i)} title="Focus this track (zoom, edit solo)" style={{ padding: '6px 10px', fontSize: 12 }}>
                 ◎ Focus
-              </button>
-            ) : (
-              <button
-                className="btn"
-                onClick={() => onSplitFocused?.()}
-                disabled={!canSplitInside}
-                title={canSplitInside ? 'Split this track in two at midpoint' : 'Track too short to split'}
-                style={{ padding: '6px 10px', fontSize: 12 }}
-              >
-                ✂ Split inside
               </button>
             )}
             <button className="btn" onClick={() => onRemove(i)} disabled={splitPoints.length <= 2} title="Remove split after this" style={{ padding: '6px 10px', fontSize: 12 }}>
@@ -140,8 +127,8 @@ export function SegmentList({
       })}
       {isFocused && (
         <p className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-          Focused waveform is zoomed to this track · drag markers or press <strong>S</strong> at cursor to add splits,
-          or use ✂ Split inside for midpoint. Esc exits focus.
+          Focused waveform is zoomed to this track · drag markers or press <strong>S</strong> at cursor to add splits.
+          Esc exits focus.
         </p>
       )}
     </div>
