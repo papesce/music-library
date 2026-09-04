@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWaveSurfer, type WaveformHandle } from '../../hooks/useWaveSurfer';
 import { useWaveformRegions } from '../../hooks/useWaveformRegions';
 import { useWaveformHotkey } from '../../hooks/useWaveformHotkey';
@@ -73,6 +73,34 @@ export function Waveform({
         focusedIndex !== null && focusedIndex !== undefined;
   }, [focusedIndex, wsRef]);
 
+  // viewport time preview while horizontal scrolling (zoomed)
+  const [viewportMs, setViewportMs] = useState<{ left: number; right: number } | null>(null);
+  const [hoverMs, setHoverMs] = useState<number | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !ready) return;
+    const update = () => {
+      const z = zoom || 1; // pxPerSec
+      if (z <= 1) {
+        setViewportMs(null);
+        return;
+      }
+      const left = Math.max(0, Math.round((el.scrollLeft / z) * 1000));
+      const right = Math.min(durationMs, Math.round(((el.scrollLeft + el.clientWidth) / z) * 1000));
+      setViewportMs({ left, right });
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    // update after zoom changes layout
+    const id = requestAnimationFrame(update);
+    return () => {
+      el.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      cancelAnimationFrame(id);
+    };
+  }, [ready, zoom, durationMs]);
+
   // Ctrl/Cmd + wheel to zoom (horizontal-zoom friendly)
   useEffect(() => {
     const el = containerRef.current;
@@ -100,17 +128,62 @@ export function Waveform({
   })();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          borderRadius: 12,
-          overflow: 'auto hidden',
-          background: '#18181b',
-          cursor: 'pointer',
-        }}
-        title="Click to position cursor · Drag red markers to adjust · Ctrl+scroll to zoom"
-      />
+      <div style={{ position: 'relative', width: '100%' }}>
+        <div
+          ref={containerRef}
+          onMouseMove={e => {
+            if (!ready || zoom <= 1) {
+              setHoverMs(null);
+              return;
+            }
+            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+            const x = e.clientX - rect.left + (e.currentTarget as HTMLDivElement).scrollLeft;
+            const ms = Math.max(0, Math.min(durationMs, Math.round((x / (zoom || 1)) * 1000)));
+            setHoverMs(ms);
+          }}
+          onMouseLeave={() => setHoverMs(null)}
+          style={{
+            width: '100%',
+            borderRadius: 12,
+            overflow: focusedIndex != null ? 'hidden' : 'auto hidden',
+            background: '#18181b',
+            cursor: 'pointer',
+          }}
+          title="Click to position cursor · Drag red markers to adjust · Ctrl+scroll to zoom"
+        />
+        {ready && viewportMs && zoom > 1 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              zIndex: 2,
+              display: 'flex',
+              gap: 6,
+              alignItems: 'center',
+              pointerEvents: 'none',
+              fontSize: 11,
+              fontFamily: 'ui-monospace, monospace',
+              background: 'rgba(0,0,0,0.75)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              borderRadius: 8,
+              padding: '4px 8px',
+              color: '#e4e4e7',
+              backdropFilter: 'blur(6px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            }}
+            title={`Visible window · total ${fmt(durationMs)}`}
+          >
+            <span style={{ color: '#a1a1aa' }}>{fmt(viewportMs.left)}</span>
+            <span style={{ opacity: 0.6 }}>→</span>
+            <span>{fmt(viewportMs.right)}</span>
+            <span style={{ opacity: 0.5, marginLeft: 4 }}>/ {fmt(durationMs)}</span>
+            {hoverMs !== null && (
+              <span style={{ marginLeft: 6, color: '#7c5cff', fontWeight: 600 }}>· hover {fmt(hoverMs)}</span>
+            )}
+          </div>
+        )}
+      </div>
       {error && (
         <div
           style={{

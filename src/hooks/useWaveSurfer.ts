@@ -70,7 +70,7 @@ export function useWaveSurfer({
       const w = containerRef.current?.clientWidth ?? 800;
       const segDurSec = (endMs - startMs) / 1000;
       if (segDurSec <= 0) return 1;
-      return Math.round(w / (segDurSec * 1.2));
+      return Math.round(w / segDurSec);
     },
     [containerRef]
   );
@@ -123,9 +123,24 @@ export function useWaveSurfer({
         const ws = wsRef.current;
         if (!ws || !ready) return;
         try {
-          applyZoom(computeZoomForWindow(startMs, endMs));
-          ws.seekTo(startMs / (durationMs || 1));
+          const z = computeZoomForWindow(startMs, endMs);
+          applyZoom(z);
+          const durMs = durationMs || ws.getDuration() * 1000 || 1;
+          ws.seekTo(startMs / durMs);
           setCursorMs(startMs);
+          // ensure scroll shows the focused window (ws zoom is async layout)
+          const container = containerRef.current;
+          if (container) {
+            requestAnimationFrame(() => {
+              try {
+                const wrapper = container.querySelector('div') as HTMLElement | null;
+                const scrollEl = wrapper ?? container;
+                const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+                const target = (startMs / durMs) * maxScroll;
+                scrollEl.scrollLeft = Math.max(0, Math.min(maxScroll, target));
+              } catch {}
+            });
+          }
         } catch {}
       },
       resetZoom() {
@@ -169,7 +184,7 @@ export function useWaveSurfer({
       container: containerRef.current,
       waveColor: '#a1a1aa',
       progressColor: '#7c5cff',
-      height: 96,
+      height: 140,
       normalize: true,
       autoScroll,
       autoCenter: false,
@@ -247,7 +262,7 @@ export function useWaveSurfer({
       setReady(false);
       onReadyChange?.(false);
     };
-  }, [audioUrl, autoScroll, containerRef, durationMs, onReadyChange, onStateChange, onAudioProcess]);
+  }, [audioUrl, containerRef, durationMs, onReadyChange, onStateChange, onAudioProcess]);
 
   useEffect(() => {
     const ws = wsRef.current;

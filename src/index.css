@@ -269,7 +269,7 @@ body {
 .track-list-header,
 .track-row {
   display: grid;
-  grid-template-columns: 32px minmax(180px, 1.6fr) 32px 140px 140px 80px 72px 64px 48px;
+  grid-template-columns: 32px minmax(180px, 1.6fr) 32px 140px 140px 80px 96px 64px 48px;
   align-items: center;
   gap: 0;
 }
@@ -291,6 +291,10 @@ body {
   padding: 0 10px;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+.header-cell.cell-duration {
+  overflow: visible;
 }
 .sort-btn {
   background: none;
@@ -825,7 +829,7 @@ body {
 @media (max-width: 900px) {
   .track-list-header,
   .track-row {
-    grid-template-columns: 32px minmax(140px, 1fr) 32px 120px 72px 48px;
+    grid-template-columns: 32px minmax(140px, 1fr) 32px 120px 96px 48px;
   }
   .header-cell.cell-album,
   .track-row-cell.cell-album,

@@ -251,6 +251,7 @@ export function SplitModal({
             onSplitPointsChange={setSplitPoints}
             onAddSplit={handleAddSplit}
             ref={waveformRef}
+            focusedIndex={focusedIndex}
             onReadyChange={setWaveReady}
           />
         </div>
