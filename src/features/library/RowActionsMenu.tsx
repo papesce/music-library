@@ -3,12 +3,30 @@ import { createPortal } from 'react-dom';
 
 type Props = {
   trackTitle: string;
+  trackArtist?: string;
   onSplit: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
 };
 
-export function RowActionsMenu({ trackTitle, onSplit, onEdit, onDelete }: Props) {
+async function copyThenOpenChosic(title: string, artist?: string) {
+  const q = artist?.trim() && title?.trim() ? `${artist.trim()} - ${title.trim()}` : title?.trim() || artist?.trim() || '';
+  if (q) {
+    try {
+      await navigator.clipboard.writeText(q);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = q;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+  }
+  window.open('https://www.chosic.com/playlist-generator/', '_blank');
+}
+
+export function RowActionsMenu({ trackTitle, trackArtist, onSplit, onEdit, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -85,8 +103,8 @@ export function RowActionsMenu({ trackTitle, onSplit, onEdit, onDelete }: Props)
             <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(onSplit)}>
               <span aria-hidden>✂</span> Split
             </button>
-            <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(onEdit)}>
-              <span aria-hidden>✎</span> Edit tags
+            <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(() => { void copyThenOpenChosic(trackTitle, trackArtist); })}>
+              <span aria-hidden>♪</span> Find similar (Chosic)
             </button>
             <div className="row-menu-separator" />
             <button role="menuitem" className="row-menu-item danger" onClick={() => closeAnd(onDelete)}>

@@ -14,6 +14,7 @@ export function LibraryHero({
   totalCount,
   playing,
   onStop,
+  onPlayRandom,
   onExported,
   setError,
 }: {
@@ -29,11 +30,13 @@ export function LibraryHero({
   totalCount: number;
   playing: boolean;
   onStop: () => void;
+  onPlayRandom?: () => void;
   onExported?: () => void;
   setError?: (msg: string) => void;
 }) {
   const [exportDest, setExportDest] = useState(() => localStorage.getItem('exportDest') || '');
   const [exportMode, setExportMode] = useState<'copy' | 'move' | 'm3u'>(() => (localStorage.getItem('exportMode') as any) || 'copy');
+  const [playlistName, setPlaylistName] = useState(() => localStorage.getItem('playlistName') || 'Completed.m3u8');
   const [exporting, setExporting] = useState(false);
   const [showExport, setShowExport] = useState(false);
   return (
@@ -64,6 +67,15 @@ export function LibraryHero({
             style={{ borderColor: hideReviewed ? 'rgba(46,204,113,0.35)' : undefined, background: hideReviewed ? 'rgba(46,204,113,0.14)' : undefined }}
           >
             {hideReviewed ? '✓ Unreviewed only' : `Hide done ${reviewedCount > 0 ? `· ${reviewedCount}` : ''}`}
+          </button>
+          <button
+            className="btn glass-soft"
+            onClick={() => onPlayRandom?.()}
+            disabled={!filteredCount}
+            title={filteredCount ? `Play random from ${filteredCount} shown tracks` : 'No tracks to play'}
+            style={{ padding: '6px 12px', opacity: filteredCount ? 1 : 0.5 }}
+          >
+            🔀 Random
           </button>
         </div>
         <div className="meta-row">
@@ -145,15 +157,24 @@ export function LibraryHero({
             <span style={{ fontSize: 11, color: 'var(--muted)' }}>
               {exportMode === 'copy' && 'Copies done songs (incl. .lrc) — safe, idempotent.'}
               {exportMode === 'move' && 'Moves files & updates library — frees source folder.'}
-              {exportMode === 'm3u' && 'Creates Completed.m3u8 in folder — no duplication, ideal for players.'}
+              {exportMode === 'm3u' && 'Creates M3U in folder — no duplication, ideal for players.'}
             </span>
+            {exportMode === 'm3u' && (
+              <input
+                placeholder="Filename, e.g. Completed.m3u8"
+                value={playlistName}
+                onChange={e => { setPlaylistName(e.target.value); localStorage.setItem('playlistName', e.target.value); }}
+                title="M3U filename — .m3u / .m3u8 auto-appended if missing"
+                style={{ width: 180, padding: '9px 12px', borderRadius: 999, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', outline: 'none', fontSize: 13 }}
+              />
+            )}
             <button
               className="btn btn-primary"
               disabled={exporting}
               onClick={async () => {
                 setExporting(true);
                 try {
-                  const r = await api.exportReviewed({ destination: exportDest || undefined, mode: exportMode, overwrite: true });
+                  const r = await api.exportReviewed({ destination: exportDest || undefined, mode: exportMode, playlistName: exportMode === 'm3u' ? (playlistName.trim() || 'Completed.m3u8') : undefined, overwrite: true });
                   setError?.('');
                   // toast via setError with success? use alert via setError empty then show info
                   const msg = r.mode === 'm3u'

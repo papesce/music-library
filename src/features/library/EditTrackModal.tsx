@@ -156,6 +156,15 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     const q = buildGoogleQuery();
     window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank');
   };
+  const openChosic = async () => {
+    // Chosic playlist-generator only deep-links via Spotify ID (?artist=ID / ?track=ID), not via name
+    // so we just open the generator and copy "Artist - Title" to clipboard to ease pasting.
+    const q = `${artist.trim()} - ${title.trim()}`.trim().replace(/^-\s*|\s*-$/g, '') || title.trim() || artist.trim();
+    if (q) {
+      try { await navigator.clipboard.writeText(q); } catch { /* ignore */ }
+    }
+    window.open('https://www.chosic.com/playlist-generator/', '_blank');
+  };
   const detectLyrics = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
     setLyricsDetecting(true); setLyricsError(''); setLyricsSaved(false);
     try {
@@ -376,6 +385,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
               <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={buildGoogleQuery()}>{buildGoogleQuery()}</span>
               <button className="btn" onClick={copyGoogleQuery} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>{copied ? '✓ Copied' : 'Copy'}</button>
               <button className="btn" onClick={openGoogle} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>Google ↗</button>
+              <button className="btn" onClick={openChosic} title="Open Chosic Similar Songs Finder (copies Artist - Title to clipboard, Chosic only pre-fills via Spotify ID)" style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>Chosic ↗</button>
             </div>
             <p className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Writes ID3v2 tags. Google query uses current field values with quoted exact phrases.</p>
           </div>

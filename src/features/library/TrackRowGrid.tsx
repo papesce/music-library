@@ -123,7 +123,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
       </div>
 
       <div role="gridcell" className="track-row-cell cell-actions">
-        <RowActionsMenu trackTitle={track.title} onSplit={onSplit} onEdit={onEdit} onDelete={onDelete} />
+        <RowActionsMenu trackTitle={track.title} trackArtist={track.artist} onSplit={onSplit} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </div>
   );

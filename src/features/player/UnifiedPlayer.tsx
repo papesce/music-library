@@ -19,6 +19,10 @@ type Props = {
   onCollapse: () => void;
   onEdit?: () => void;
   coverBust?: number;
+  volume: number;
+  muted: boolean;
+  onVolumeChange: (v: number) => void;
+  onMutedChange: (m: boolean) => void;
 };
 
 function LyricsView({
@@ -62,7 +66,29 @@ function LyricsView({
   return <div className="lyrics-plain">{lyrics}</div>;
 }
 
-export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, coverBust }: Props) {
+function VolumeControl({ volume, muted, onVolumeChange, onMutedChange, size = 'compact' }: { volume: number; muted: boolean; onVolumeChange: (v: number) => void; onMutedChange: (m: boolean) => void; size?: 'compact' | 'full' }) {
+  const icon = muted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊';
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+      <button className="btn" onClick={() => onMutedChange(!muted)} title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} style={{ padding: '6px 8px', minWidth: 32 }}>
+        {icon}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={muted ? 0 : volume}
+        onChange={e => onVolumeChange(Number(e.target.value))}
+        aria-label="Volume"
+        title={`Volume ${Math.round((muted ? 0 : volume) * 100)}%`}
+        style={{ width: size === 'compact' ? 70 : 100, accentColor: 'var(--accent)', cursor: 'pointer' }}
+      />
+    </span>
+  );
+}
+
+export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, coverBust, volume, muted, onVolumeChange, onMutedChange }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
@@ -122,6 +148,7 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
         <div className="unified-collapsed-progress-fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="player-controls" onClick={e => e.stopPropagation()}>
+        <VolumeControl volume={volume} muted={muted} onVolumeChange={onVolumeChange} onMutedChange={onMutedChange} size="compact" />
         <span className="muted" style={{ fontSize: 11, minWidth: 36, textAlign: 'right' }}>
           {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration || track.duration || 0))}
         </span>
@@ -246,13 +273,14 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
               {formatDuration(Math.floor(duration || track.duration || 0))}
             </span>
           </div>
-          <div className="now-controls">
+          <div className="now-controls" style={{ alignItems: 'center' }}>
             <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
               {isPaused ? '▶' : '⏸'}
             </button>
             <button className="play-btn ghost" onClick={onStop} aria-label="Stop">
               ⏹
             </button>
+            <VolumeControl volume={volume} muted={muted} onVolumeChange={onVolumeChange} onMutedChange={onMutedChange} size="full" />
           </div>
         </div>
       </div>

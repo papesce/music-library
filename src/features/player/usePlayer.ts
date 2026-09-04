@@ -8,6 +8,11 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
   const [isPaused, setIsPaused] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolumeState] = useState(() => {
+    const v = Number(localStorage.getItem('playerVolume') ?? '1');
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  });
+  const [muted, setMutedState] = useState(() => localStorage.getItem('playerMuted') === 'true');
 
   const playingTrack = useMemo(
     () => tracks.find(t => t.id === playingId) ?? null,
@@ -61,6 +66,33 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
     setCurrentTime(sec);
   }, []);
 
+  const setVolume = useCallback((v: number) => {
+    const clamped = Math.min(1, Math.max(0, v));
+    setVolumeState(clamped);
+    localStorage.setItem('playerVolume', String(clamped));
+    const a = audioRef.current;
+    if (a) a.volume = clamped;
+    if (clamped > 0 && muted) {
+      setMutedState(false);
+      localStorage.setItem('playerMuted', 'false');
+      if (a) a.muted = false;
+    }
+  }, [muted]);
+
+  const setMuted = useCallback((m: boolean) => {
+    setMutedState(m);
+    localStorage.setItem('playerMuted', String(m));
+    const a = audioRef.current;
+    if (a) a.muted = m;
+  }, []);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.volume = volume;
+    a.muted = muted;
+  }, []); // sync initial volume/muted once
+
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -80,5 +112,5 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
     };
   }, []);
 
-  return { audioRef, playingId, isPaused, playingTrack, handlePlay, handleStop, setPlayingId, setIsPaused, currentTime, duration, seek };
+  return { audioRef, playingId, isPaused, playingTrack, handlePlay, handleStop, setPlayingId, setIsPaused, currentTime, duration, seek, volume, muted, setVolume, setMuted };
 }

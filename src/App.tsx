@@ -113,6 +113,14 @@ export default function App() {
     }
   };
 
+  const playRandom = () => {
+    const pool = lib.filteredSorted;
+    if (pool.length === 0) { setError('No tracks match current filters'); return; }
+    const pick = pool[Math.floor(Math.random() * pool.length)]!;
+    player.handlePlay(pick);
+    setNowOpen(true);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -157,6 +165,7 @@ export default function App() {
             totalCount={tracks.length}
             playing={!!player.playingId}
             onStop={player.handleStop}
+            onPlayRandom={playRandom}
             onExported={refresh}
             setError={setError}
           />
@@ -240,6 +249,10 @@ export default function App() {
         onCollapse={() => setNowOpen(false)}
         onEdit={player.playingTrack ? () => setEditTrack(player.playingTrack!) : undefined}
         coverBust={player.playingTrack ? coverBust[player.playingTrack.filePath] : undefined}
+        volume={player.volume}
+        muted={player.muted}
+        onVolumeChange={player.setVolume}
+        onMutedChange={player.setMuted}
       />
 
       {splitTrack && (
