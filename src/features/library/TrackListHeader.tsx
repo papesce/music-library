@@ -46,7 +46,9 @@ export function TrackListHeader({ sortKey, sortDir, toggleSort }: Props) {
         Genre
       </div>
       <div role="columnheader" className="header-cell cell-duration">
-        Duration
+        <SortButton active={sortKey === 'duration'} dir={sortDir} onClick={() => toggleSort('duration')}>
+          Duration
+        </SortButton>
       </div>
       <div role="columnheader" className="header-cell cell-year">
         <SortButton active={sortKey === 'year'} dir={sortDir} onClick={() => toggleSort('year')}>

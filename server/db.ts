@@ -68,7 +68,24 @@ function initSchema(database: DatabaseSync) {
       priority TEXT NOT NULL,
       dateAdded TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS split_drafts (
+      filePath TEXT PRIMARY KEY,
+      splitPoints TEXT NOT NULL,
+      segmentTitles TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
   `);
+  // ensure split_drafts exists for DBs created before this migration
+  try {
+    database.exec(
+      `CREATE TABLE IF NOT EXISTS split_drafts (
+        filePath TEXT PRIMARY KEY,
+        splitPoints TEXT NOT NULL,
+        segmentTitles TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )`
+    );
+  } catch {}
 }
 
 function migrateFromJsonIfNeeded(database: DatabaseSync) {
@@ -442,6 +459,62 @@ export function getTrackByPath(filePath: string): Track | null {
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
   };
+}
+
+// --- Split drafts (persist work-in-progress split decisions across restarts) ---
+export type SplitDraft = {
+  filePath: string;
+  splitPoints: number[];
+  segmentTitles: string[];
+  updatedAt: string;
+};
+
+export function getSplitDraft(filePath: string): SplitDraft | null {
+  const d = getDb();
+  const resolved = resolve(filePath);
+  const row = d.prepare('SELECT * FROM split_drafts WHERE filePath = ?').get(resolved) as any;
+  if (!row) return null;
+  try {
+    return {
+      filePath: row.filePath,
+      splitPoints: JSON.parse(row.splitPoints),
+      segmentTitles: JSON.parse(row.segmentTitles),
+      updatedAt: row.updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function setSplitDraft(
+  filePath: string,
+  splitPoints: number[],
+  segmentTitles: string[]
+): SplitDraft {
+  const d = getDb();
+  const resolved = resolve(filePath);
+  const now = new Date().toISOString();
+  d.prepare(
+    `INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, updatedAt)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(filePath) DO UPDATE SET splitPoints=excluded.splitPoints, segmentTitles=excluded.segmentTitles, updatedAt=excluded.updatedAt`
+  ).run(resolved, JSON.stringify(splitPoints), JSON.stringify(segmentTitles), now);
+  return { filePath: resolved, splitPoints, segmentTitles, updatedAt: now };
+}
+
+export function deleteSplitDraft(filePath: string): boolean {
+  const d = getDb();
+  const resolved = resolve(filePath);
+  const r = d.prepare('DELETE FROM split_drafts WHERE filePath = ?').run(resolved);
+  return r.changes > 0;
+}
+
+export function renameSplitDraft(oldPath: string, newPath: string): void {
+  const d = getDb();
+  const o = resolve(oldPath);
+  const n = resolve(newPath);
+  if (o === n) return;
+  d.prepare('UPDATE OR IGNORE split_drafts SET filePath = ? WHERE filePath = ?').run(n, o);
 }
 
 export function renameTrackPath(oldPath: string, newPath: string): Track | null {

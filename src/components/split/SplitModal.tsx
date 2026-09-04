@@ -27,11 +27,46 @@ export function SplitModal({
   const waveformRef = useRef<WaveformHandle>(null);
   const [waveReady, setWaveReady] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
 
-  // init points when duration known; if track.duration missing, we get duration from detect result
+  // restore persisted draft on open (survives server restart); fallback to [0, duration]
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { draft } = await api.getSplitDraft(track.filePath);
+        if (cancelled || !draft) return;
+        const pts = (draft.splitPoints ?? []).map(Number).filter(n => !isNaN(n) && n >= 0).sort((a,b)=>a-b);
+        if (pts.length >= 2) {
+          setSplitPoints(pts);
+          setSegmentTitles(draft.segmentTitles ?? pts.slice(0, -1).map(() => ''));
+          setDraftRestored(true);
+        }
+      } catch {}
+      finally { if (!cancelled) setDraftLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [track.filePath]);
+
+  // init points when duration known (only if no draft was restored and draft fetch finished)
+  useEffect(() => {
+    if (!draftLoaded || draftRestored) return;
     if (durationMs) setSplitPoints([0, durationMs]);
-  }, [durationMs]);
+  }, [durationMs, draftLoaded, draftRestored]);
+
+  // auto-save draft debounced (server persists across restarts)
+  useEffect(() => {
+    if (!draftLoaded) return;
+    if (splitPoints.length < 2) return;
+    const t = setTimeout(async () => {
+      setDraftSaving(true);
+      try { await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles); } catch {}
+      finally { setDraftSaving(false); }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [splitPoints, segmentTitles, draftLoaded, track.filePath]);
 
   const handleDetect = useCallback(async () => {
     setDetecting(true);
@@ -127,6 +162,15 @@ export function SplitModal({
       next.splice(idx + 1, 1);
       return next;
     });
+  };
+  const handleClearDraft = async () => {
+    if (!confirm('Clear saved split and start over? This removes the persisted draft.')) return;
+    try { await api.deleteSplitDraft(track.filePath); } catch {}
+    setSegmentTitles([]);
+    setSplitPoints(durationMs ? [0, durationMs] : [0, 60000]);
+    setDraftRestored(false);
+    setFocusedIndex(null);
+    waveformRef.current?.resetZoom();
   };
   const handleExport = async () => {
     if (splitPoints.length < 2) return;
@@ -235,17 +279,27 @@ export function SplitModal({
           onSplitFocused={handleSplitFocused}
         />
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          <button className="btn" onClick={onClose} disabled={exporting}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleExport}
-            disabled={exporting || splitPoints.length < 2}
-          >
-            {exporting ? 'Exporting…' : `Export ${splitPoints.length - 1} files`}
-          </button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn" onClick={handleClearDraft} disabled={exporting} title="Delete persisted draft and reset to single segment">
+              ↺ Clear & start over
+            </button>
+            <span className="muted" style={{ fontSize: 11 }}>
+              {!draftLoaded ? 'Loading draft…' : draftSaving ? 'Saving…' : draftRestored ? 'Draft restored · auto-saved' : 'Auto-saved'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={onClose} disabled={exporting}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleExport}
+              disabled={exporting || splitPoints.length < 2}
+            >
+              {exporting ? 'Exporting…' : `Export ${splitPoints.length - 1} files`}
+            </button>
+          </div>
         </div>
         <p className="muted" style={{ marginTop: 8, fontSize: 11 }}>
           Slices are written next to the original as “{track.title} - part 01.mp3” etc., then appear

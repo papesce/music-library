@@ -79,6 +79,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segments }),
     }),
+  getSplitDraft: (filePath: string) =>
+    req<{ draft: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string } | null }>(
+      `/api/split/draft?path=${encodeURIComponent(filePath)}`
+    ),
+  saveSplitDraft: (filePath: string, splitPoints: number[], segmentTitles: string[]) =>
+    req<{ draft: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string } }>(
+      '/api/split/draft',
+      { method: 'PUT', body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles }) }
+    ),
+  deleteSplitDraft: (filePath: string) =>
+    req<{ ok: boolean }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' }),
   getLyrics: (filePath: string) =>
     req<{ lyrics: string | null; synced: { ms: number; text: string }[] | null }>(
       `/api/lyrics?path=${encodeURIComponent(filePath)}`

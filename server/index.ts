@@ -27,6 +27,10 @@ import {
   renameTrackPath,
   setTrackReviewed,
   setTrackIsCover,
+  getSplitDraft,
+  setSplitDraft,
+  deleteSplitDraft,
+  renameSplitDraft,
 } from './db.js';
 const execFileAsync = promisify(execFile);
 
@@ -622,6 +626,7 @@ const server = createServer(async (req, res) => {
       // if file doesn't exist, just remove from DB
       if (!existsSync(resolved)) {
         deleteTrackByPath(resolved);
+        try { deleteSplitDraft(resolved); } catch {}
         return json(res, 200, {
           ok: true,
           deleted: false,
@@ -635,6 +640,7 @@ const server = createServer(async (req, res) => {
         return json(res, 500, { error: `failed to move file to Trash: ${e.message}` });
       }
       deleteTrackByPath(resolved);
+      try { deleteSplitDraft(resolved); } catch {}
       return json(res, 200, { ok: true, trashed: true, deleted: true });
     }
 
@@ -808,6 +814,7 @@ const server = createServer(async (req, res) => {
       } catch {}
 
       const updated = renameTrackPath(resolved, newResolved);
+      try { renameSplitDraft(resolved, newResolved); } catch {}
       if (!updated) {
         // fallback: re-scan that file minimally
         return json(res, 200, { ok: true, filePath: newResolved, oldFilePath: resolved });
@@ -1257,7 +1264,52 @@ const server = createServer(async (req, res) => {
           setTracks(uniq);
         }
       } catch {}
+      // clear draft after successful export — work is done
+      try { deleteSplitDraft(resolved); } catch {}
       return json(res, 200, { ok: true, files: created, count: created.length });
+    }
+
+    // ── Split draft persistence (survives server restart) ──
+    if (url.pathname === '/api/split/draft' && req.method === 'GET') {
+      const filePath = url.searchParams.get('path');
+      if (!filePath) return json(res, 400, { error: 'path query required' });
+      const resolved = resolve(filePath);
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, getTracks(), cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
+      const draft = getSplitDraft(resolved);
+      if (!draft) return json(res, 200, { draft: null });
+      return json(res, 200, { draft });
+    }
+    if (url.pathname === '/api/split/draft' && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath = body.path || body.filePath;
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const resolved = resolve(filePath);
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, getTracks(), cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
+      if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
+      const splitPoints: number[] = body.split_points_ms ?? body.splitPoints ?? body.points;
+      const segmentTitles: string[] = Array.isArray(body.segmentTitles) ? body.segmentTitles : Array.isArray(body.segments) ? body.segments.map((s: any) => (typeof s === 'string' ? s : s?.title ?? '')) : [];
+      if (!Array.isArray(splitPoints) || splitPoints.length < 2)
+        return json(res, 400, { error: 'split_points_ms must be array with >=2 entries' });
+      const sorted = [...new Set(splitPoints.map(Number).filter(n => !isNaN(n) && n >= 0))].sort((a, b) => a - b);
+      if (sorted.length < 2) return json(res, 400, { error: 'invalid split points' });
+      const titles = sorted.slice(0, -1).map((_, i) => String(segmentTitles[i] ?? ''));
+      const draft = setSplitDraft(resolved, sorted, titles);
+      return json(res, 200, { draft });
+    }
+    if (url.pathname === '/api/split/draft' && req.method === 'DELETE') {
+      let filePath: string | null = url.searchParams.get('path');
+      if (!filePath) {
+        try { const b = await getBody(req); filePath = b.path || b.filePath || null; } catch {}
+      }
+      if (!filePath) return json(res, 400, { error: 'path query required' });
+      const resolved = resolve(filePath);
+      // allow clearing even if file not in library (orphan draft)
+      deleteSplitDraft(resolved);
+      return json(res, 200, { ok: true });
     }
 
     // ── Lyrics auto-detect (LRClib + Whisper base) — preview+confirm, Node-only ──

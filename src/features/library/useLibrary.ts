@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Track } from '../../types/api.d';
 
-export type SortKey = 'artist' | 'album' | 'title' | 'year';
+export type SortKey = 'artist' | 'album' | 'title' | 'year' | 'duration';
 export type SortDir = 'asc' | 'desc';
 
 export function useLibrary(tracks: Track[]) {
@@ -32,6 +32,12 @@ export function useLibrary(tracks: Track[]) {
       );
     });
     return [...arr].sort((a, b) => {
+      if (sortKey === 'duration') {
+        const av = a.duration ?? -1;
+        const bv = b.duration ?? -1;
+        const cmp = av - bv;
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
       const av = (a[sortKey] ?? '') as string | number;
       const bv = (b[sortKey] ?? '') as string | number;
       const cmp =
