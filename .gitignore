@@ -12,6 +12,8 @@ data/*.sqlite
 data/*.sqlite-*
 data/*.wal
 data/*.shm
+backups/
+backups
 
 # env / secrets
 .env
