@@ -27,6 +27,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
     <div
       role="row"
       aria-selected={isActive}
+      data-track-id={track.id}
       title={track.filePath}
       style={{ ...style, opacity: track.reviewed ? 0.62 : undefined }}
       className={`track-row ${isActive ? 'playing' : ''} ${track.duplicateGroupId ? 'dup' : ''} ${track.reviewed ? 'reviewed' : ''}`}

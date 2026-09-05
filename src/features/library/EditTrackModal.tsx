@@ -97,6 +97,38 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     }).catch(() => {}).finally(() => setLyricsLoading(false));
   }, [track.filePath]);
 
+  const sanitizeForFilename = (s: string) =>
+    s
+      .trim()
+      // strip control chars + chars illegal on Windows/macOS
+      .replace(/[\x00-\x1F\x7F]/g, '')
+      .replace(/[\\/:*?"<>|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^\.+/, '')
+      .replace(/\.+$/g, '')
+      .trim();
+
+  const buildSuggestedFilename = (artistVal: string, titleVal: string, yearVal: string, coverFlag: boolean): string | null => {
+    const a = sanitizeForFilename(artistVal);
+    const t = sanitizeForFilename(titleVal);
+    const isUnknown = (v: string) => !v || v.toLowerCase() === 'unknown';
+    const aOk = !isUnknown(a);
+    const tOk = !isUnknown(t);
+    let base: string | null = null;
+    if (aOk && tOk) base = `${a} - ${t}`;
+    else if (tOk) base = t;
+    else if (aOk) base = `${a} - Untitled`;
+    else return null;
+    const y = yearVal.trim();
+    if (/^\d{3,4}$/.test(y)) base += ` (${y})`;
+    if (coverFlag) base += ' (cover)';
+    // enforce max 250 chars before .mp3 (255 - 4)
+    if (base.length > 250) base = base.slice(0, 250).trim().replace(/\s+$/g, '');
+    return `${base}.mp3`;
+  };
+
+  const suggestedFilename = buildSuggestedFilename(artist, title, year, isCover);
+
   const validateFilename = (v: string): string | null => {
     const t = v.trim();
     if (!t) return 'Filename cannot be empty';
@@ -469,6 +501,27 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
               />
               {filenameError ? <span style={{ color: '#ff6b6b', fontSize: 11 }}>{filenameError}</span> : <span style={{ fontSize: 11, opacity: 0.6 }}>Renames the file on disk. Must end with .mp3 and stay in the same folder.</span>}
             </label>
+            {suggestedFilename ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: suggestedFilename === filename ? 'rgba(46,204,113,0.08)' : 'rgba(124,92,255,0.10)', border: `1px solid ${suggestedFilename === filename ? 'rgba(46,204,113,0.22)' : 'rgba(124,92,255,0.22)'}`, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: 'var(--muted)', flex: '1 1 auto', minWidth: 0 }}>
+                  Suggested: <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--text)', wordBreak: 'break-all' }}>{suggestedFilename}</span>
+                  <span style={{ opacity: 0.6 }}> — Artist - Title{year.trim() && /^\d{3,4}$/.test(year.trim()) ? ' (Year)' : ''}{isCover ? ' (cover)' : ''}</span>
+                </span>
+                {suggestedFilename !== filename ? (
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999, flexShrink: 0 }}
+                    onClick={() => { setFilename(suggestedFilename); setFilenameError(''); }}
+                  >
+                    ✨ Use suggested
+                  </button>
+                ) : (
+                  <span style={{ fontSize: 11, color: '#2ecc71', fontWeight: 600, flexShrink: 0 }}>✓ In use</span>
+                )}
+              </div>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>Set Artist and Title (Details tab) to get a standardized filename suggestion.</span>
+            )}
             <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6 }}>Full path</div>
               <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'var(--text)', wordBreak: 'break-all', opacity: 0.85 }}>{track.filePath}</div>

@@ -31,6 +31,7 @@ export default function App() {
   const [editTrack, setEditTrack] = useState<Track | null>(null);
   const [splitTrackPath, setSplitTrackPath] = usePersistedState<string | null>('app:splitTrackPath', null);
   const [nowOpen, setNowOpen] = usePersistedState<boolean>('app:nowOpen', true);
+  const [revealId, setRevealId] = useState<string | null>(null);
   const [coverBust, setCoverBust] = useState<Record<string, number>>({});
   const splitTrack = splitTrackPath ? (tracks.find(t => t.filePath === splitTrackPath) ?? null) : null;
   const setSplitTrack = (t: Track | null) => setSplitTrackPath(t?.filePath ?? null);
@@ -134,8 +135,13 @@ export default function App() {
     const pool = lib.filteredSorted;
     if (pool.length === 0) { setError('No tracks match current filters'); return; }
     const pick = pool[Math.floor(Math.random() * pool.length)]!;
-    player.handlePlay(pick);
-    setNowOpen(true);
+    // reveal row first so it stays in view when player collapses
+    setRevealId(pick.id);
+    // let TrackList scroll before opening the player
+    requestAnimationFrame(() => {
+      player.handlePlay(pick);
+      setNowOpen(true);
+    });
   };
 
   return (
@@ -202,7 +208,9 @@ export default function App() {
             sortKey={lib.sortKey}
             sortDir={lib.sortDir}
             toggleSort={lib.toggleSort}
+            revealId={revealId}
             onPlay={t => {
+              setRevealId(t.id);
               player.handlePlay(t);
               setNowOpen(true);
             }}

@@ -9,17 +9,23 @@ const VALID_KEYS: SortKey[] = ['artist', 'album', 'title', 'year', 'duration'];
 
 export function useLibrary(tracks: Track[]) {
   const [search, setSearch] = usePersistedState<string>('lib:search', '');
-  const [sortKeyRaw, setSortKey] = usePersistedState<SortKey>('lib:sortKey', 'artist');
+  const [sortKeyRaw, setSortKey] = usePersistedState<SortKey | null>('lib:sortKey', 'artist');
   const [sortDirRaw, setSortDir] = usePersistedState<SortDir>('lib:sortDir', 'asc');
   const [showDupesOnly, setShowDupesOnly] = usePersistedState<boolean>('lib:showDupesOnly', false);
   const [hideReviewed, setHideReviewed] = usePersistedState<boolean>('lib:hideReviewed', false);
-  const sortKey = VALID_KEYS.includes(sortKeyRaw) ? sortKeyRaw : 'artist';
+  const sortKey: SortKey | null =
+    sortKeyRaw === null ? null : VALID_KEYS.includes(sortKeyRaw as SortKey) ? (sortKeyRaw as SortKey) : 'artist';
   const sortDir: SortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
-    else {
+    if (sortKey !== key) {
       setSortKey(key);
+      setSortDir('asc');
+    } else if (sortDir === 'asc') {
+      setSortDir('desc');
+    } else {
+      // third click → unsorted (original scan order)
+      setSortKey(null);
       setSortDir('asc');
     }
   };
@@ -36,6 +42,7 @@ export function useLibrary(tracks: Track[]) {
         t.album.toLowerCase().includes(q)
       );
     });
+    if (sortKey === null) return arr;
     return [...arr].sort((a, b) => {
       if (sortKey === 'duration') {
         const av = a.duration ?? -1;

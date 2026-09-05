@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Track } from '../../types/api.d';
 import type { SortKey, SortDir } from './useLibrary';
@@ -9,7 +9,7 @@ type Props = {
   tracks: Track[];
   playingId: string | null;
   isPaused: boolean;
-  sortKey: SortKey;
+  sortKey: SortKey | null;
   sortDir: SortDir;
   toggleSort: (k: SortKey) => void;
   onPlay: (t: Track) => void;
@@ -19,11 +19,12 @@ type Props = {
   onToggleReviewed?: (t: Track) => void;
   showDupesOnly: boolean;
   coverBust?: Record<string, number>;
+  revealId?: string | null;
 };
 
 const ROW_HEIGHT = 64;
 
-export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, showDupesOnly, coverBust }: Props) {
+export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, showDupesOnly, coverBust, revealId }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
@@ -32,6 +33,21 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
     estimateSize: () => ROW_HEIGHT,
     overscan: 10,
   });
+
+  useEffect(() => {
+    if (!revealId) return;
+    const idx = tracks.findIndex(t => t.id === revealId);
+    if (idx < 0) return;
+    // wait for virtualizer to measure, then center the row
+    requestAnimationFrame(() => {
+      try {
+        virtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+      } catch {
+        // fallback: direct DOM scroll
+        parentRef.current?.querySelector(`[data-track-id="${revealId}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+  }, [revealId, tracks, virtualizer]);
 
   if (tracks.length === 0) {
     return (
