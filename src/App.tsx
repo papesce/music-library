@@ -342,6 +342,7 @@ export default function App() {
         muted={player.muted}
         onVolumeChange={player.setVolume}
         onMutedChange={player.setMuted}
+        onPlayRandom={playRandom}
       />
 
       {splitTrack && (

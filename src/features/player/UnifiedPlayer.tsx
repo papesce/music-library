@@ -25,6 +25,7 @@ type Props = {
   muted: boolean;
   onVolumeChange: (v: number) => void;
   onMutedChange: (m: boolean) => void;
+  onPlayRandom?: () => void;
 };
 
 function LyricsView({
@@ -90,7 +91,7 @@ function VolumeControl({ volume, muted, onVolumeChange, onMutedChange, size = 'c
   );
 }
 
-export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, onSplit, coverBust, volume, muted, onVolumeChange, onMutedChange }: Props) {
+export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, onSplit, coverBust, volume, muted, onVolumeChange, onMutedChange, onPlayRandom }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
@@ -158,6 +159,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
         <span className="muted" style={{ fontSize: 11, minWidth: 36, textAlign: 'right' }}>
           {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration || track.duration || 0))}
         </span>
+        {onPlayRandom && (
+          <button className="btn" onClick={onPlayRandom} aria-label="Play random" title="Play random track" style={{ padding: '6px 10px' }}>
+            🔀
+          </button>
+        )}
         <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
           {isPaused ? '▶' : '⏸'}
         </button>
@@ -287,6 +293,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             </span>
           </div>
           <div className="now-controls" style={{ alignItems: 'center' }}>
+            {onPlayRandom && (
+              <button className="btn" onClick={onPlayRandom} aria-label="Play random" title="Play random track (from current filter)" style={{ padding: '6px 12px' }}>
+                🔀 Random
+              </button>
+            )}
             <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
               {isPaused ? '▶' : '⏸'}
             </button>
