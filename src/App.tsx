@@ -14,6 +14,8 @@ import { UnifiedPlayer } from './features/player/UnifiedPlayer';
 import { useFolders } from './features/settings/useFolders';
 import { useLibrary } from './features/library/useLibrary';
 import { usePlayer } from './features/player/usePlayer';
+import { usePlayHistory } from './features/player/usePlayHistory';
+import { PlayHistory } from './features/player/PlayHistory';
 import { useWishlist } from './features/wishlist/useWishlist';
 import { useToast } from './hooks/useToast';
 import { usePersistedState } from './lib/persist';
@@ -39,6 +41,14 @@ export default function App() {
   const { error, setError, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
   const player = usePlayer(tracks, setError);
+  const history = usePlayHistory(tracks);
+
+  // record history when a track actually starts playing (not on pause toggle)
+  useEffect(() => {
+    if (player.playingTrack && !player.isPaused) {
+      history.push(player.playingTrack.id);
+    }
+  }, [player.playingTrack?.id, player.isPaused]);
 
   // auto-expand unified player when a new track starts (0 clicks to lyrics)
   useEffect(() => {
@@ -60,13 +70,7 @@ export default function App() {
       player.setIsPaused(true);
     }
   }, [splitTrackPath]);
-  // pause preview when opening Edit dialog (user requested: can't pause from edit)
-  useEffect(() => {
-    if (editTrack && player.playingId && !player.isPaused) {
-      player.audioRef.current?.pause();
-      player.setIsPaused(true);
-    }
-  }, [editTrack?.id]);
+
   const lib = useLibrary(tracks);
   const wishlistCtl = useWishlist();
 
@@ -207,6 +211,19 @@ export default function App() {
             onPlayRandom={playRandom}
             onExported={refresh}
             setError={setError}
+          />
+          <PlayHistory
+            tracks={history.historyTracks}
+            playingId={player.playingId}
+            isPaused={player.isPaused}
+            onPlay={t => {
+              setRevealId(t.id);
+              player.handlePlay(t);
+              setNowOpen(true);
+            }}
+            onClear={history.clear}
+            onRemove={history.remove}
+            coverBust={coverBust}
           />
           <TrackList
             tracks={lib.filteredSorted}
