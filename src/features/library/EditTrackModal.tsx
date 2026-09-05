@@ -36,7 +36,7 @@ function Field({ label, value, onChange, placeholder, inputMode }: { label: stri
   );
 }
 
-export function EditTrackModal({ track, onClose, onUpdated, setError }: { track: Track; onClose: () => void; onUpdated: (t: Track, oldFilePath?: string) => void; setError: (m: string) => void }) {
+export function EditTrackModal({ track, onClose, onUpdated, setError, playback }: { track: Track; onClose: () => void; onUpdated: (t: Track, oldFilePath?: string) => void; setError: (m: string) => void; playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void } }) {
   const getFilename = (p: string) => p.split('/').pop()?.split('\\').pop() ?? p;
   const getDir = (p: string) => {
     const f = getFilename(p);
@@ -191,17 +191,6 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     } catch (e: any) { setLyricsError(e.message); }
     finally { setLyricsDetecting(false); }
   };
-  const saveLyrics = async () => {
-    if (!lyricsPreview.trim()) { setLyricsError('Lyrics empty'); return; }
-    setLyricsDetecting(true); setLyricsError('');
-    try {
-      await api.saveLyrics(track.filePath, lyricsPreview);
-      setLyricsText(lyricsPreview); setLyricsSaved(true);
-      setTimeout(() => setLyricsSaved(false), 2000);
-    } catch (e: any) { setLyricsError(e.message); }
-    finally { setLyricsDetecting(false); }
-  };
-
   const save = async () => {
     const filenameTrimmed = filename.trim();
     const originalFilename = getFilename(track.filePath);
@@ -209,6 +198,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
     const reviewedChanged = reviewed !== !!track.reviewed;
     const isCoverChanged = isCover !== !!track.isCover;
     const coverChanged = !!coverPreview || coverRemove;
+    const lyricsDirtyAtSave = lyricsPreview !== (lyricsText ?? '') && lyricsPreview.trim() !== '';
     if (filenameChanged) {
       const err = validateFilename(filenameTrimmed);
       if (err) {
@@ -256,7 +246,19 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
       if (reviewedChanged) {
         currentTrack = await api.setReviewed(currentTrack.filePath, reviewed);
       }
-      if (!hasPatch && !reviewedChanged && !isCoverChanged && !didRename && !coverChanged) {
+      if (lyricsDirtyAtSave) {
+        if (!lyricsPreview.trim()) {
+          setLyricsError('Lyrics empty');
+          setActiveTab('lyrics');
+          setSaving(false);
+          return;
+        }
+        await api.saveLyrics(currentTrack.filePath, lyricsPreview);
+        setLyricsText(lyricsPreview);
+        setLyricsSaved(true);
+        setTimeout(() => setLyricsSaved(false), 2000);
+      }
+      if (!hasPatch && !reviewedChanged && !isCoverChanged && !didRename && !coverChanged && !lyricsDirtyAtSave) {
         onClose();
         return;
       }
@@ -310,7 +312,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
   };
 
   return (
-    <Modal onClose={() => !saving && onClose()} width="min(640px, calc(100% - 32px))">
+    <Modal onClose={() => !saving && !lyricsDetecting && onClose()} width="min(640px, calc(100% - 32px))">
       {/* Header — always visible */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
         <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)', display: 'grid', placeItems: 'center' }}>
@@ -324,6 +326,17 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
           <p style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.artist} {track.album ? `· ${track.album}` : ''}</p>
           <p className="muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', opacity: 0.7, marginTop: 2 }}>{track.filePath}</p>
         </div>
+        {playback && (
+          <button
+            className="play-btn"
+            onClick={playback.onToggle}
+            aria-label={playback.isActive && !playback.isPaused ? 'Pause preview' : 'Play preview'}
+            title={playback.isActive && !playback.isPaused ? 'Pause preview' : 'Play preview'}
+            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 999, fontSize: 14 }}
+          >
+            {playback.isActive && !playback.isPaused ? '⏸' : '▶'}
+          </button>
+        )}
       </div>
 
       {/* Tab bar — keyboard: ArrowLeft/Right, Home/End */}
@@ -460,25 +473,25 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
               </div>
             )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} aria-busy={lyricsDetecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{lyricsDetecting ? <><span className="btn-spinner" aria-hidden /><span>Detecting…</span></> : '✨ Detect (auto)'}</button>
-              <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>LRClib</button>
-              <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Whisper</button>
+              <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting || saving} aria-busy={lyricsDetecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{lyricsDetecting ? <><span className="btn-spinner" aria-hidden /><span>Detecting…</span></> : '✨ Detect (auto)'}</button>
+              <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting || saving} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>LRClib</button>
+              <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting || saving} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Whisper</button>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--muted)' }}>
                 model
                 <select
                   value={whisperModel}
                   onChange={e => setWhisperModel(e.target.value as WhisperModel)}
-                  disabled={lyricsDetecting}
+                  disabled={lyricsDetecting || saving}
                   style={{ padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 11, outline: 'none' }}
                 >
                   {WHISPER_MODELS.map(m => <option key={m} value={m}>{m}{m === 'base' ? ' (default)' : ''}</option>)}
                 </select>
               </label>
               <span style={{ flex: 1 }} />
-              <button className="btn btn-primary" onClick={saveLyrics} disabled={lyricsDetecting || !lyricsPreview.trim()} style={{ padding: '6px 14px', fontSize: 12, borderRadius: 999 }}>Save to .lrc + USLT</button>
+              {lyricsDirty ? <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>• will be saved with Save</span> : <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>No changes</span>}
             </div>
             {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
-            <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>Auto tries LRClib (synced) → fallback Whisper {whisperModel} (local, first run downloads model ~{whisperModel === 'tiny' ? 40 : whisperModel === 'base' ? 140 : whisperModel === 'small' ? 460 : whisperModel === 'medium' ? 1500 : 2900} MB). Edits here are not persisted until you click "Save to .lrc + USLT" — the dialog's Save writes only tags/cover/file.</span>
+            <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>Auto tries LRClib (synced) → fallback Whisper {whisperModel} (local, first run downloads model ~{whisperModel === 'tiny' ? 40 : whisperModel === 'base' ? 140 : whisperModel === 'small' ? 460 : whisperModel === 'medium' ? 1500 : 2900} MB). Edits are staged here and saved together with <b>Save</b> (footer) → writes .lrc + USLT.</span>
           </div>
         )}
 
@@ -530,10 +543,10 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
         )}
       </div>
 
-      {/* Sticky footer */}
+      {/* Sticky footer — single save for all tabs including lyrics */}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
-        <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+        <button className="btn" onClick={onClose} disabled={saving || lyricsDetecting}>Cancel</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving || lyricsDetecting}>{saving ? 'Saving…' : lyricsDirty ? 'Save •' : 'Save'}</button>
       </div>
     </Modal>
   );

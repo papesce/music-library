@@ -60,6 +60,13 @@ export default function App() {
       player.setIsPaused(true);
     }
   }, [splitTrackPath]);
+  // pause preview when opening Edit dialog (user requested: can't pause from edit)
+  useEffect(() => {
+    if (editTrack && player.playingId && !player.isPaused) {
+      player.audioRef.current?.pause();
+      player.setIsPaused(true);
+    }
+  }, [editTrack?.id]);
   const lib = useLibrary(tracks);
   const wishlistCtl = useWishlist();
 
@@ -271,7 +278,7 @@ export default function App() {
 
       {confirmTrack && <DeleteTrackModal track={confirmTrack} deleting={deleting} onCancel={() => setConfirmTrack(null)} onConfirm={confirmDeleteTrack} />}
 
-      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); setCoverBust(prev => ({ ...prev, [t.filePath]: Date.now() })); if (oldFilePath && oldFilePath !== t.filePath) setCoverBust(prev => { const { [oldFilePath]: _, ...rest } = prev; return rest; }); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); }} setError={setError} />}
+      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); setCoverBust(prev => ({ ...prev, [t.filePath]: Date.now() })); if (oldFilePath && oldFilePath !== t.filePath) setCoverBust(prev => { const { [oldFilePath]: _, ...rest } = prev; return rest; }); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); }} setError={setError} playback={{ isActive: player.playingId === editTrack.id, isPaused: player.isPaused, onToggle: () => player.handlePlay(editTrack) }} />}
 
       <UnifiedPlayer
         track={player.playingTrack}
