@@ -142,6 +142,15 @@ export default function App() {
     }
   };
 
+  const setLoudness = async (t: Track, v: 'quiet' | 'normal' | 'loud' | null) => {
+    try {
+      const updated = await api.setLoudness(t.filePath, v);
+      setTracks(prev => prev.map(x => (x.filePath === t.filePath ? updated : x)));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const playRandom = () => {
     const pool = lib.filteredSorted;
     if (pool.length === 0) { setError('No tracks match current filters'); return; }
@@ -211,6 +220,9 @@ export default function App() {
             onPlayRandom={playRandom}
             onExported={refresh}
             setError={setError}
+            loudnessFilter={lib.loudnessFilter}
+            setLoudnessFilter={lib.setLoudnessFilter}
+            loudnessCount={lib.loudnessCount}
           />
           <PlayHistory
             tracks={history.historyTracks}
@@ -249,6 +261,7 @@ export default function App() {
             onEdit={setEditTrack}
             onDelete={setConfirmTrack}
             onToggleReviewed={toggleReviewed}
+            onSetLoudness={setLoudness}
             showDupesOnly={lib.showDupesOnly}
             coverBust={coverBust}
           />

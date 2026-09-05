@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, resolve } from 'path';
 
+export type Loudness = 'quiet' | 'normal' | 'loud';
 export type Track = {
   id: string;
   filePath: string;
@@ -16,6 +17,7 @@ export type Track = {
   reviewed?: boolean;
   reviewedAt?: string;
   isCover?: boolean;
+  loudness?: Loudness | null;
 };
 export type WishlistItem = {
   id: string;
@@ -59,7 +61,8 @@ function initSchema(database: DatabaseSync) {
       hasCover INTEGER DEFAULT 0,
       reviewed INTEGER DEFAULT 0,
       reviewedAt TEXT,
-      isCover INTEGER DEFAULT 0
+      isCover INTEGER DEFAULT 0,
+      loudness TEXT
     );
     CREATE TABLE IF NOT EXISTS wishlist (
       id TEXT PRIMARY KEY,
@@ -195,6 +198,7 @@ function ensureTrackMigrations(d: DatabaseSync) {
     ['reviewed', 'ALTER TABLE tracks ADD COLUMN reviewed INTEGER DEFAULT 0'],
     ['reviewedAt', 'ALTER TABLE tracks ADD COLUMN reviewedAt TEXT'],
     ['isCover', 'ALTER TABLE tracks ADD COLUMN isCover INTEGER DEFAULT 0'],
+    ['loudness', 'ALTER TABLE tracks ADD COLUMN loudness TEXT'],
   ] as const) {
     try {
       d.prepare(`SELECT ${col} FROM tracks LIMIT 1`).get();
@@ -224,6 +228,7 @@ export function getTracks(): Track[] {
     reviewed: !!r.reviewed,
     reviewedAt: r.reviewedAt ?? undefined,
     isCover: !!r.isCover,
+    loudness: (r.loudness as Loudness | null) ?? null,
   }));
 }
 
@@ -234,7 +239,7 @@ export function setTracks(tracks: Track[]) {
   try {
     d.prepare('DELETE FROM tracks').run();
     const stmt = d.prepare(
-      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt, isCover) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt, isCover, loudness) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     for (const t of tracks) {
       stmt.run(
@@ -250,7 +255,8 @@ export function setTracks(tracks: Track[]) {
         t.hasCover ? 1 : 0,
         t.reviewed ? 1 : 0,
         t.reviewedAt ?? null,
-        t.isCover ? 1 : 0
+        t.isCover ? 1 : 0,
+        t.loudness ?? null
       );
     }
     d.exec('COMMIT');
@@ -340,7 +346,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
   if (!existing) return null;
   const merged = { ...existing, ...patch, filePath: existing.filePath, id: existing.id };
   d.prepare(
-    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ?, isCover = ? WHERE filePath = ?'
+    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ?, isCover = ?, loudness = ? WHERE filePath = ?'
   ).run(
     merged.title,
     merged.artist,
@@ -353,6 +359,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     merged.reviewed ? 1 : 0,
     merged.reviewedAt ?? null,
     merged.isCover ? 1 : 0,
+    merged.loudness ?? null,
     existing.filePath
   );
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
@@ -371,6 +378,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
+    loudness: (row.loudness as Loudness | null) ?? null,
   };
 }
 
@@ -399,6 +407,7 @@ export function setTrackIsCover(filePath: string, isCover: boolean): Track | nul
     reviewed: !!row2.reviewed,
     reviewedAt: row2.reviewedAt ?? undefined,
     isCover: !!row2.isCover,
+    loudness: (row2.loudness as Loudness | null) ?? null,
   };
 }
 
@@ -428,6 +437,7 @@ export function setTrackReviewed(filePath: string, reviewed: boolean): Track | n
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
+    loudness: (row.loudness as Loudness | null) ?? null,
   };
 }
 
@@ -458,6 +468,8 @@ export function getTrackByPath(filePath: string): Track | null {
     hasCover: !!row.hasCover,
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
+    isCover: !!row.isCover,
+    loudness: (row.loudness as Loudness | null) ?? null,
   };
 }
 
@@ -550,5 +562,37 @@ export function renameTrackPath(oldPath: string, newPath: string): Track | null 
     reviewed: !!row.reviewed,
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
+    loudness: (row.loudness as Loudness | null) ?? null,
+  };
+}
+
+// helpers for loudness
+export function setTrackLoudness(filePath: string, loudness: Loudness | null): Track | null {
+  const d = getDb();
+  ensureTrackMigrations(d);
+  const resolved = resolve(filePath);
+  const existing =
+    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
+    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+  if (!existing) return null;
+  if (loudness !== null && !['quiet','normal','loud'].includes(loudness)) throw new Error('invalid loudness');
+  d.prepare('UPDATE tracks SET loudness = ? WHERE filePath = ?').run(loudness, existing.filePath);
+  const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    filePath: row.filePath,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    genre: row.genre,
+    year: row.year ?? undefined,
+    duration: row.duration ?? undefined,
+    duplicateGroupId: row.duplicateGroupId ?? undefined,
+    hasCover: !!row.hasCover,
+    reviewed: !!row.reviewed,
+    reviewedAt: row.reviewedAt ?? undefined,
+    isCover: !!row.isCover,
+    loudness: (row.loudness as Loudness | null) ?? null,
   };
 }

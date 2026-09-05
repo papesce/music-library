@@ -27,6 +27,7 @@ import {
   renameTrackPath,
   setTrackReviewed,
   setTrackIsCover,
+  setTrackLoudness,
   getSplitDraft,
   setSplitDraft,
   deleteSplitDraft,
@@ -37,6 +38,7 @@ const execFileAsync = promisify(execFile);
 // Ensure DB initialized (creates file + migrates JSON if needed)
 getDb();
 
+type Loudness = 'quiet' | 'normal' | 'loud';
 type Track = {
   id: string;
   filePath: string;
@@ -51,6 +53,7 @@ type Track = {
   reviewed?: boolean;
   reviewedAt?: string;
   isCover?: boolean;
+  loudness?: Loudness | null;
 };
 type WishlistItem = {
   id: string;
@@ -134,6 +137,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         reviewed: prev?.reviewed ?? false,
         reviewedAt: prev?.reviewedAt,
         isCover: prev?.isCover ?? false,
+        loudness: prev?.loudness ?? null,
       });
     } catch {
       const fb = fallbackFromFilename(filePath);
@@ -148,6 +152,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         reviewed: prev?.reviewed ?? false,
         reviewedAt: prev?.reviewedAt,
         isCover: prev?.isCover ?? false,
+        loudness: prev?.loudness ?? null,
       });
     }
   }
@@ -849,6 +854,26 @@ const server = createServer(async (req, res) => {
       if (!existing) return json(res, 404, { error: 'track not found' });
       const updated = setTrackIsCover(resolved, isCover);
       if (!updated) return json(res, 500, { error: 'failed to update cover/original mark' });
+      return json(res, 200, updated);
+    }
+
+    if (url.pathname === '/api/tracks/loudness' && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const raw = body.loudness;
+      // allow null to clear
+      let loudness: Loudness | null = null;
+      if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+        const v = String(raw).trim().toLowerCase();
+        if (!['quiet','normal','loud'].includes(v)) return json(res, 400, { error: 'loudness must be quiet|normal|loud or null' });
+        loudness = v as Loudness;
+      }
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      if (!existing) return json(res, 404, { error: 'track not found' });
+      const updated = setTrackLoudness(resolved, loudness);
+      if (!updated) return json(res, 500, { error: 'failed to update loudness' });
       return json(res, 200, updated);
     }
 

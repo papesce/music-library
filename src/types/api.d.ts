@@ -1,3 +1,5 @@
+export type Loudness = 'quiet' | 'normal' | 'loud';
+
 export type Track = {
   id: string;
   filePath: string;
@@ -12,6 +14,7 @@ export type Track = {
   reviewed?: boolean;
   reviewedAt?: string;
   isCover?: boolean;
+  loudness?: Loudness | null;
 };
 export type WishlistItem = {
   id: string;

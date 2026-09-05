@@ -53,6 +53,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
   const [copied, setCopied] = useState(false);
   const [reviewed, setReviewed] = useState(!!track.reviewed);
   const [isCover, setIsCover] = useState(!!track.isCover);
+  const [loudness, setLoudness] = useState<Track['loudness']>(track.loudness ?? null);
   const [activeTab, setActiveTab] = useState<Tab>('details');
   // artwork state
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -85,6 +86,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
     setFilenameError('');
     setReviewed(!!track.reviewed);
     setIsCover(!!track.isCover);
+    setLoudness(track.loudness ?? null);
     setCoverPreview(null);
     setCoverMime(null);
     setCoverError('');
@@ -249,6 +251,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
     const filenameChanged = filenameTrimmed !== originalFilename;
     const reviewedChanged = reviewed !== !!track.reviewed;
     const isCoverChanged = isCover !== !!track.isCover;
+    const loudnessChanged = (loudness ?? null) !== (track.loudness ?? null);
     const coverChanged = !!coverPreview || coverRemove;
     const lyricsDirtyAtSave = lyricsPreview !== (lyricsText ?? '') && lyricsPreview.trim() !== '';
     if (filenameChanged) {
@@ -295,6 +298,9 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
       if (isCoverChanged) {
         currentTrack = await api.setIsCover(currentTrack.filePath, isCover);
       }
+      if (loudnessChanged) {
+        currentTrack = await api.setLoudness(currentTrack.filePath, loudness ?? null);
+      }
       if (reviewedChanged) {
         currentTrack = await api.setReviewed(currentTrack.filePath, reviewed);
       }
@@ -310,7 +316,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
         setLyricsSaved(true);
         setTimeout(() => setLyricsSaved(false), 2000);
       }
-      if (!hasPatch && !reviewedChanged && !isCoverChanged && !didRename && !coverChanged && !lyricsDirtyAtSave) {
+      if (!hasPatch && !reviewedChanged && !isCoverChanged && !loudnessChanged && !didRename && !coverChanged && !lyricsDirtyAtSave) {
         onClose();
         return;
       }
@@ -330,7 +336,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
   const isSynced = lyricsText ? /\[\d{1,3}:\d{2}/.test(lyricsText) : false;
 
   // per-tab dirty
-  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || reviewed !== !!track.reviewed || isCover !== !!track.isCover;
+  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || reviewed !== !!track.reviewed || isCover !== !!track.isCover || (loudness ?? null) !== (track.loudness ?? null);
   const fileDirty = filename.trim() !== getFilename(track.filePath);
   const lyricsDirty = lyricsPreview !== (lyricsText ?? '') && lyricsPreview.trim() !== '';
 
@@ -443,7 +449,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
               <div style={{ width: 120 }}><Field label="Year" value={year} onChange={setYear} placeholder="2024" inputMode="numeric" /></div>
             </div>
 
-            {/* Reviewed + Cover/Original toggles */}
+            {/* Reviewed + Cover/Original + Loudness */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <label style={{ flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.10)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} style={{ accentColor: '#2ecc71', width: 16, height: 16 }} />
@@ -459,6 +465,30 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
                   <span style={{ fontSize: 11, color: 'var(--muted)' }}>{isCover ? 'Mark as cover (badge in list)' : 'Mark if this is a cover'}</span>
                 </span>
               </label>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>Loudness</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}>
+                {([['quiet','🔈 Quiet'],['normal','🔉 Normal'],['loud','🔊 Loud']] as const).map(([v,label]) => {
+                  const active = loudness === v;
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setLoudness(active ? null : v)}
+                      title={active ? 'Click to clear' : `Mark as ${v}`}
+                      style={{
+                        padding: '5px 10px', borderRadius: 999, border: `1px solid ${active ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`,
+                        background: active ? 'rgba(124,92,255,0.18)' : 'rgba(255,255,255,0.06)',
+                        color: active ? '#c4b5ff' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {loudness && <button type="button" onClick={() => setLoudness(null)} style={{ marginLeft: 'auto', padding: '5px 8px', borderRadius: 999, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 11, cursor: 'pointer' }}>Clear</button>}
             </div>
 
             {/* Google validation — inline, not a big card */}
