@@ -196,6 +196,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {onPlayRandom && (
+              <button className="btn" onClick={onPlayRandom} aria-label="Play random" title="Play random track (from current filter)" style={{ padding: '6px 12px' }}>
+                🔀 Random
+              </button>
+            )}
             {onEdit && (
               <button className="btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title="Edit metadata, artwork and lyrics" style={{ padding: '6px 12px' }}>
                 ✎ Edit
@@ -293,11 +298,6 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             </span>
           </div>
           <div className="now-controls" style={{ alignItems: 'center' }}>
-            {onPlayRandom && (
-              <button className="btn" onClick={onPlayRandom} aria-label="Play random" title="Play random track (from current filter)" style={{ padding: '6px 12px' }}>
-                🔀 Random
-              </button>
-            )}
             <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
               {isPaused ? '▶' : '⏸'}
             </button>
