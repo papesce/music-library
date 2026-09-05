@@ -13,9 +13,9 @@ export function buildGoogleQuery(opts: {
   const y = String(opts.year ?? '').trim();
   const isUnknown = (v: string) => !v || v.toLowerCase() === 'unknown';
   const parts: string[] = [];
-  if (!isUnknown(a)) parts.push(`"${a}"`);
-  if (!isUnknown(t)) parts.push(`"${t}"`);
-  if (!isUnknown(al)) parts.push(`album "${al}"`);
+  if (!isUnknown(a)) parts.push(a);
+  if (!isUnknown(t)) parts.push(t);
+  if (!isUnknown(al)) parts.push(`album ${al}`);
   if (!isUnknown(g)) parts.push(g);
   if (y) parts.push(y);
   if (parts.length === 0) {

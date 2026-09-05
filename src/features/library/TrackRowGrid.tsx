@@ -2,6 +2,7 @@ import { memo, useState, useEffect } from 'react';
 import type { Track } from '../../types/api.d';
 import { coverUrl, splitFile } from '../../lib/path';
 import { formatDuration, truncateMiddle } from '../../lib/format';
+import { highlightMatch } from '../../lib/highlight';
 import { RowActionsMenu } from './RowActionsMenu';
 
 type Props = {
@@ -16,9 +17,10 @@ type Props = {
   onToggleReviewed?: (t: Track) => void;
   style?: React.CSSProperties;
   coverBust?: number;
+  searchQuery?: string;
 };
 
-export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, style, coverBust }: Props) {
+export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, style, coverBust, searchQuery }: Props) {
   const { folder, file } = splitFile(track.filePath);
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => { setCoverFailed(false); }, [track.filePath, coverBust]);
@@ -77,7 +79,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
           </button>
           <div className="track-main">
             <span className="track-title">
-              {track.title}
+              {searchQuery ? highlightMatch(track.title, searchQuery) : track.title}
               {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff' }}>cover</span> : <span className="dup-badge" style={{ background: 'rgba(255,255,255,0.14)', color: 'var(--muted)', border: '1px solid var(--border-soft)' }}>orig</span>}
               {track.duplicateGroupId && <span className="dup-badge">dup</span>}
               {track.reviewed && <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f' }}>✓ done</span>}
@@ -108,10 +110,10 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
       </div>
 
       <div role="gridcell" className="track-row-cell cell-artist">
-        {track.artist}
+        {searchQuery ? highlightMatch(track.artist, searchQuery) : track.artist}
       </div>
       <div role="gridcell" className="track-row-cell cell-album">
-        {track.album}
+        {searchQuery ? highlightMatch(track.album, searchQuery) : track.album}
       </div>
       <div role="gridcell" className="track-row-cell cell-genre muted">
         {track.genre || '—'}

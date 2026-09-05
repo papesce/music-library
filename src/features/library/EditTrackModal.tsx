@@ -217,7 +217,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
       snippet = (lastSpace > maxChars * 0.7 ? cut.slice(0, lastSpace) : cut).trim();
     }
     if (!snippet) return;
-    const query = `"${snippet.replace(/"/g, "'")}" lyrics`;
+    const query = snippet;
     try {
       await navigator.clipboard.writeText(snippet);
     } catch {

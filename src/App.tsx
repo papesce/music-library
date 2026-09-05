@@ -216,6 +216,7 @@ export default function App() {
             sortDir={lib.sortDir}
             toggleSort={lib.toggleSort}
             revealId={revealId}
+            searchQuery={lib.search}
             onPlay={t => {
               setRevealId(t.id);
               player.handlePlay(t);

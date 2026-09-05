@@ -79,16 +79,15 @@ export function LibraryHero({
           </button>
         </div>
         <div className="meta-row">
-          <span className="muted">
-            {filteredCount} tracks {search && `(from ${totalCount})`}
-          </span>
-          {dupeCount > 0 && <span className="muted">· duplicates by artist+title+album</span>}
+          {dupeCount > 0 && <span className="muted">duplicates by artist+title+album</span>}
+
           {playing && (
             <button className="btn glass-soft" style={{ marginLeft: 'auto' }} onClick={onStop}>
               ⏹ Stop
             </button>
           )}
         </div>
+
       </div>
       <div className="stats">
         <div className="glass stat">
@@ -115,6 +114,14 @@ export function LibraryHero({
           <div className="glass stat">
             <b>{totalCount - reviewedCount}</b>
             <span>pending</span>
+          </div>
+        )}
+        {totalCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4, minWidth: 0 }} title={`${reviewedCount}/${totalCount} done · ${Math.round((reviewedCount / totalCount) * 100)}%`} aria-label={`Progress ${reviewedCount} of ${totalCount} done`}>
+            <div style={{ width: 84, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', border: '1px solid var(--border-soft)', flexShrink: 0 }}>
+              <div style={{ height: '100%', width: `${Math.round((reviewedCount / totalCount) * 100)}%`, background: '#2ecc71', borderRadius: 999, transition: 'width 0.3s' }} />
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(238,241,255,0.75)', whiteSpace: 'nowrap' }}>{reviewedCount}/{totalCount} · {Math.round((reviewedCount / totalCount) * 100)}%</span>
           </div>
         )}
         {reviewedCount > 0 && (
