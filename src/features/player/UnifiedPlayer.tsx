@@ -140,7 +140,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
         )}
       </div>
       <div className="unified-collapsed-info">
-        <b>{track.title} {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff', verticalAlign: 'middle', marginLeft: 6 }}>cover</span> : null}{track.reviewed ? <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f', verticalAlign: 'middle', marginLeft: 6 }}>✓ done</span> : null}</b>
+        <b style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' }}>{track.title}</span>
+          {track.isCover ? <span className="dup-badge dup-badge--sm" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff', flexShrink: 0, marginLeft: 0 }}>cover</span> : null}
+          {track.reviewed ? <span className="dup-badge dup-badge--sm" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f', flexShrink: 0, marginLeft: 0 }}>✓ done</span> : null}
+        </b>
         <span>
           {track.artist} · {track.album}
           {hasSynced && <span className="lyrics-dot" title="Synced lyrics available"> ● LRC</span>}

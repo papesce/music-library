@@ -71,6 +71,9 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
   const [lyricsError, setLyricsError] = useState('');
   const [lyricsSaved, setLyricsSaved] = useState(false);
   const [whisperModel, setWhisperModel] = useState<WhisperModel>('base');
+  const [lyricsCopied, setLyricsCopied] = useState(false);
+  const lyricsTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [lyricsSelection, setLyricsSelection] = useState('');
 
   useEffect(() => {
     setTitle(track.title);
@@ -90,7 +93,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
     coverKey.current += 1;
     setActiveTab('details');
     // load current lyrics
-    setLyricsText(null); setLyricsPreview(''); setLyricsSource(''); setLyricsError(''); setLyricsSaved(false);
+    setLyricsText(null); setLyricsPreview(''); setLyricsSource(''); setLyricsError(''); setLyricsSaved(false); setLyricsSelection('');
     setLyricsLoading(true);
     api.getLyrics(track.filePath).then(r => {
       if (r.lyrics) { setLyricsText(r.lyrics); setLyricsPreview(r.lyrics); }
@@ -163,13 +166,14 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
   };
 
   const googleQuery = buildGoogleQuery({ title, artist, album, genre, year, filePath: track.filePath });
+  const googleQueryForSearch = `${googleQuery} metadata`;
 
   const copyGoogleQuery = async () => {
     try {
-      await navigator.clipboard.writeText(googleQuery);
+      await navigator.clipboard.writeText(googleQueryForSearch);
     } catch {
       const ta = document.createElement('textarea');
-      ta.value = googleQuery;
+      ta.value = googleQueryForSearch;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
@@ -179,8 +183,55 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
     setTimeout(() => setCopied(false), 1800);
   };
 
-  const handleOpenGoogle = () => openGoogle(googleQuery);
+  const handleOpenGoogle = () => openGoogle(googleQueryForSearch);
   const openChosic = () => { void copyThenOpenChosic(title, artist); };
+
+  const stripLyricsMetadata = (raw: string): string =>
+    raw
+      .split('\n')
+      .map(l => {
+        let s = l.replace(/(\[\d{1,3}:\d{2}(?:\.\d{1,3})?\])+/g, '').trim();
+        if (/^\[(ar|ti|al|by|offset):/i.test(s)) return '';
+        return s;
+      })
+      .join('\n');
+
+  const updateLyricsSelection = () => {
+    const el = lyricsTextareaRef.current;
+    if (!el) return;
+    const sel = el.value.slice(el.selectionStart, el.selectionEnd).trim();
+    // strip timestamps/metadata so button enable reflects usable content
+    const cleaned = stripLyricsMetadata(sel).replace(/\s+/g, ' ').trim();
+    setLyricsSelection(cleaned);
+  };
+
+  const handleLyricsGoogle = async () => {
+    const el = lyricsTextareaRef.current;
+    const rawSel = el ? el.value.slice(el.selectionStart, el.selectionEnd) : '';
+    let snippet = stripLyricsMetadata(rawSel).replace(/\s+/g, ' ').trim();
+    // keep it Google-friendly: cap ~480 chars on word boundary
+    const maxChars = 480;
+    if (snippet.length > maxChars) {
+      const cut = snippet.slice(0, maxChars);
+      const lastSpace = cut.lastIndexOf(' ');
+      snippet = (lastSpace > maxChars * 0.7 ? cut.slice(0, lastSpace) : cut).trim();
+    }
+    if (!snippet) return;
+    const query = `"${snippet.replace(/"/g, "'")}" lyrics`;
+    try {
+      await navigator.clipboard.writeText(snippet);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = snippet;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    setLyricsCopied(true);
+    setTimeout(() => setLyricsCopied(false), 1800);
+    openGoogle(query);
+  };
   const detectLyrics = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
     setLyricsDetecting(true); setLyricsError(''); setLyricsSaved(false);
     try {
@@ -188,6 +239,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
       const r = await api.detectLyrics(track.filePath, { source, model, artist: artist.trim(), title: title.trim(), album: album.trim() });
       setLyricsPreview(r.lrc || r.syncedLyrics || r.plainLyrics || '');
       setLyricsSource(r.source);
+      setLyricsSelection('');
     } catch (e: any) { setLyricsError(e.message); }
     finally { setLyricsDetecting(false); }
   };
@@ -411,7 +463,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
 
             {/* Google validation — inline, not a big card */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQuery}>{googleQuery}</span>
+              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQueryForSearch}>{googleQueryForSearch}</span>
               <button className="btn" onClick={copyGoogleQuery} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>{copied ? '✓ Copied' : 'Copy'}</button>
               <button className="btn" onClick={handleOpenGoogle} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>Google ↗</button>
               <button className="btn" onClick={openChosic} title="Open Chosic Similar Songs Finder (copies Artist - Title to clipboard, Chosic only pre-fills via Spotify ID)" style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>Chosic ↗</button>
@@ -459,9 +511,13 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
               <span style={{ fontSize: 11, color: 'var(--muted)' }}>{lyricsLoading ? 'loading…' : hasLyrics ? `${lyricsLines} lines${isSynced ? ' · synced' : ''}` : 'no lyrics yet'}</span>
             </div>
             <textarea
+              ref={lyricsTextareaRef}
               value={lyricsPreview}
-              onChange={e => { setLyricsPreview(e.target.value); setLyricsSaved(false); }}
-              placeholder="[00:12.00]Lyric line — or plain lyrics&#10;Edit before saving. Supports LRC synced format."
+              onChange={e => { setLyricsPreview(e.target.value); setLyricsSaved(false); setTimeout(updateLyricsSelection, 0); }}
+              onSelect={updateLyricsSelection}
+              onKeyUp={updateLyricsSelection}
+              onMouseUp={updateLyricsSelection}
+              placeholder="[00:12.00]Lyric line — or plain lyrics&#10;Select 3–4 lines and use Google lyrics to identify the track."
               rows={10}
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', outline: 'none', minHeight: 160 }}
             />
@@ -489,6 +545,19 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
               </label>
               <span style={{ flex: 1 }} />
               {lyricsDirty ? <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>• will be saved with Save</span> : <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>No changes</span>}
+            </div>
+            {/* Identify song from lyrics — uses current selection, stripped of timestamps/metadata */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
+              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, minWidth: 120 }}>{lyricsSelection ? 'Selection ready — search Google to identify track.' : 'Select lyrics above to enable search.'}</span>
+              <button
+                className="btn"
+                onClick={handleLyricsGoogle}
+                disabled={!lyricsSelection || lyricsDetecting || saving}
+                title={!lyricsSelection ? 'Select 3–4 lines in the lyrics above first' : 'Copy selection (no timestamps) and open Google to identify the track'}
+                style={{ padding: '5px 12px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
+              >
+                {lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}
+              </button>
             </div>
             {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
             <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>Auto tries LRClib (synced) → fallback Whisper {whisperModel} (local, first run downloads model ~{whisperModel === 'tiny' ? 40 : whisperModel === 'base' ? 140 : whisperModel === 'small' ? 460 : whisperModel === 'medium' ? 1500 : 2900} MB). Edits are staged here and saved together with <b>Save</b> (footer) → writes .lrc + USLT.</span>
