@@ -566,6 +566,33 @@ export function renameTrackPath(oldPath: string, newPath: string): Track | null 
   };
 }
 
+// state export/import helpers (only non-derived fields)
+export function getAllSplitDrafts(): SplitDraft[] {
+  const d = getDb();
+  const rows = d.prepare('SELECT * FROM split_drafts ORDER BY filePath').all() as any[];
+  return rows.map(r => ({
+    filePath: r.filePath,
+    splitPoints: JSON.parse(r.splitPoints),
+    segmentTitles: JSON.parse(r.segmentTitles),
+    updatedAt: r.updatedAt,
+  }));
+}
+
+export function setAllSplitDrafts(drafts: SplitDraft[]) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    d.prepare('DELETE FROM split_drafts').run();
+    const stmt = d.prepare('INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, updatedAt) VALUES (?, ?, ?, ?)');
+    for (const dr of drafts) stmt.run(resolve(dr.filePath), JSON.stringify(dr.splitPoints), JSON.stringify(dr.segmentTitles), dr.updatedAt);
+    d.exec('COMMIT');
+  } catch (e) { d.exec('ROLLBACK'); throw e; }
+}
+
+export function clearWishlist() {
+  getDb().prepare('DELETE FROM wishlist').run();
+}
+
 // helpers for loudness
 export function setTrackLoudness(filePath: string, loudness: Loudness | null): Track | null {
   const d = getDb();

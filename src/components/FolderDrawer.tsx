@@ -1,3 +1,6 @@
+import { useRef, useState } from 'react';
+import { api } from '../api';
+
 export function FolderDrawer({
   open,
   onClose,
@@ -9,6 +12,8 @@ export function FolderDrawer({
   onBrowse,
   onScan,
   scanning,
+  onStateImported,
+  setError,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,7 +25,11 @@ export function FolderDrawer({
   onBrowse: () => void;
   onScan: () => void;
   scanning: boolean;
+  onStateImported?: (tracks: import('../types/api.d').Track[], wishlist: import('../types/api.d').WishlistItem[]) => void;
+  setError?: (m: string) => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
   if (!open) return null;
   const short = (p: string) => {
     const n = p.replace(/\/+$/, '');
@@ -84,6 +93,73 @@ export function FolderDrawer({
             <b>No folders</b>Add one above
           </div>
         )}
+
+        {/* App state export/import (non-derived) */}
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-soft)' }}>
+          <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>App state</h4>
+          <p className="muted" style={{ fontSize: 11, marginBottom: 10, lineHeight: 1.4 }}>
+            Exports folders, reviewed / cover / loudness marks, wishlist and split drafts. File metadata stays on disk.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn glass-soft"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const data = await api.exportState();
+                  // include local history (client-only)
+                  let history: string[] | null = null;
+                  try { const raw = localStorage.getItem('app:playHistory'); if (raw) history = JSON.parse(raw); } catch {}
+                  const payload = { ...data, playHistory: history };
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `music-library-state-${new Date().toISOString().slice(0,10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e: any) { setError?.(e.message); }
+                finally { setBusy(false); }
+              }}
+              title="Download JSON with app state"
+            >
+              ⤓ Export
+            </button>
+            <button className="btn glass-soft" disabled={busy} onClick={() => fileRef.current?.click()} title="Restore from exported JSON">
+              ⤒ Import
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: 'none' }}
+              onChange={async e => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                setBusy(true);
+                try {
+                  const text = await f.text();
+                  const json = JSON.parse(text);
+                  // server part
+                  const res = await api.importState({ folders: json.folders, tracks: json.tracks, wishlist: json.wishlist, splitDrafts: json.splitDrafts, mode: 'merge' });
+                  // local history restore (merge, dedup, cap 20)
+                  if (Array.isArray(json.playHistory)) {
+                    try {
+                      const incoming: string[] = json.playHistory.filter((x: any) => typeof x === 'string');
+                      const existing: string[] = JSON.parse(localStorage.getItem('app:playHistory') || '[]');
+                      const merged = [...incoming, ...existing].filter((v,i,a) => a.indexOf(v)===i).slice(0,20);
+                      localStorage.setItem('app:playHistory', JSON.stringify(merged));
+                    } catch {}
+                  }
+                  onStateImported?.(res.library, res.wishlistItems);
+                  setError?.(`Imported: ${res.tracks} tracks, ${res.wishlist} wishlist, ${res.splitDrafts} drafts`);
+                } catch (err: any) { setError?.(err.message); }
+                finally { setBusy(false); e.target.value=''; }
+              }}
+            />
+          </div>
+        </div>
       </div>
     </>
   );

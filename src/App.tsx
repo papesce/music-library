@@ -305,6 +305,8 @@ export default function App() {
         onBrowse={foldersCtl.browseFolder}
         onScan={doScan}
         scanning={scanning}
+        onStateImported={(libTracks, wl) => { setTracks(libTracks); foldersCtl.setFolders(libTracks.length ? foldersCtl.folders : []); wishlistCtl.setWishlist(wl); }}
+        setError={setError}
       />
 
       {confirmTrack && <DeleteTrackModal track={confirmTrack} deleting={deleting} onCancel={() => setConfirmTrack(null)} onConfirm={confirmDeleteTrack} />}

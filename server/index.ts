@@ -32,6 +32,9 @@ import {
   setSplitDraft,
   deleteSplitDraft,
   renameSplitDraft,
+  getAllSplitDrafts,
+  setAllSplitDrafts,
+  clearWishlist,
 } from './db.js';
 const execFileAsync = promisify(execFile);
 
@@ -875,6 +878,68 @@ const server = createServer(async (req, res) => {
       const updated = setTrackLoudness(resolved, loudness);
       if (!updated) return json(res, 500, { error: 'failed to update loudness' });
       return json(res, 200, updated);
+    }
+
+    // ——— App state export/import (non-derived: reviewed/isCover/loudness, wishlist, folders, split drafts) ———
+    if (url.pathname === '/api/state/export' && req.method === 'GET') {
+      const tracks = getTracks().map(t => ({ filePath: t.filePath, reviewed: !!t.reviewed, reviewedAt: t.reviewedAt ?? null, isCover: !!t.isCover, loudness: t.loudness ?? null }));
+      const wishlist = getWishlist();
+      const folders = getFolders();
+      const splitDrafts = getAllSplitDrafts();
+      return json(res, 200, { version: 1, exportedAt: new Date().toISOString(), folders, tracks, wishlist, splitDrafts });
+    }
+    if (url.pathname === '/api/state/import' && req.method === 'POST') {
+      const body = await getBody(req);
+      const mode = body.mode === 'replace' ? 'replace' : 'merge';
+      const folders: string[] | undefined = Array.isArray(body.folders) ? body.folders : undefined;
+      const tracks: { filePath: string; reviewed?: boolean; reviewedAt?: string | null; isCover?: boolean; loudness?: string | null }[] | undefined = Array.isArray(body.tracks) ? body.tracks : undefined;
+      const wishlist: { id: string; name: string; artist?: string; priority?: string; dateAdded?: string }[] | undefined = Array.isArray(body.wishlist) ? body.wishlist : undefined;
+      const splitDrafts: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt?: string }[] | undefined = Array.isArray(body.splitDrafts) ? body.splitDrafts : undefined;
+      let updatedTracks = 0, updatedWishlist = 0;
+      if (folders) {
+        try { dbSetFolders(folders); } catch (e: any) { return json(res, 400, { error: `folders: ${e.message}` }); }
+      }
+      if (tracks) {
+        for (const t of tracks) {
+          if (!t.filePath) continue;
+          const existing = getTrackByPath(t.filePath);
+          if (!existing) continue;
+          let patch: any = {};
+          if (typeof t.reviewed === 'boolean') { patch.reviewed = t.reviewed; patch.reviewedAt = t.reviewedAt ?? (t.reviewed ? new Date().toISOString() : null); }
+          if (typeof t.isCover === 'boolean') patch.isCover = t.isCover;
+          if (t.loudness === null || ['quiet','normal','loud'].includes(String(t.loudness))) patch.loudness = t.loudness ?? null;
+          if (Object.keys(patch).length) {
+            // use granular setters to preserve reviewedAt semantics
+            if ('loudness' in patch) setTrackLoudness(t.filePath, patch.loudness);
+            if ('isCover' in patch) setTrackIsCover(t.filePath, patch.isCover);
+            if ('reviewed' in patch) setTrackReviewed(t.filePath, patch.reviewed);
+            updatedTracks++;
+          }
+        }
+      }
+      if (wishlist !== undefined) {
+        if (mode === 'replace') clearWishlist();
+        const existingIds = new Set(getWishlist().map(w => w.id));
+        for (const w of wishlist) {
+          if (!w.name?.trim()) continue;
+          if (existingIds.has(w.id)) {
+            updateWishlistItem(w.id, { name: w.name, artist: w.artist, priority: (w.priority as any) ?? 'Medium', dateAdded: w.dateAdded ?? new Date().toISOString() });
+          } else {
+            try { addWishlistItem({ id: w.id || Date.now().toString(36)+Math.random().toString(36).slice(2,6), name: w.name.trim(), artist: w.artist?.trim() || undefined, priority: (w.priority as any) ?? 'Medium', dateAdded: w.dateAdded ?? new Date().toISOString() }); } catch {}
+          }
+          updatedWishlist++;
+        }
+      }
+      if (splitDrafts !== undefined) {
+        if (mode === 'replace') setAllSplitDrafts(splitDrafts.map(d => ({ filePath: d.filePath, splitPoints: d.splitPoints ?? [], segmentTitles: d.segmentTitles ?? [], updatedAt: d.updatedAt ?? new Date().toISOString() })));
+        else {
+          for (const d of splitDrafts) {
+            if (!d.filePath) continue;
+            try { setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? []); } catch {}
+          }
+        }
+      }
+      return json(res, 200, { ok: true, mode, folders: folders?.length ?? 0, tracks: updatedTracks, wishlist: updatedWishlist, splitDrafts: splitDrafts?.length ?? 0, library: getTracks(), wishlistItems: getWishlist() });
     }
 
     if (url.pathname === '/api/tracks/export-reviewed' && req.method === 'POST') {

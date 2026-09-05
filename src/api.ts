@@ -139,4 +139,7 @@ export const api = {
       '/api/tracks/export-reviewed',
       { method: 'POST', body: JSON.stringify(opts) }
     ),
+  exportState: () => req<{ version: number; exportedAt: string; folders: string[]; tracks: { filePath: string; reviewed: boolean; reviewedAt: string | null; isCover: boolean; loudness: string | null }[]; wishlist: WishlistItem[]; splitDrafts: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string }[] }>('/api/state/export'),
+  importState: (data: { folders?: string[]; tracks?: { filePath: string; reviewed?: boolean; reviewedAt?: string | null; isCover?: boolean; loudness?: string | null }[]; wishlist?: WishlistItem[]; splitDrafts?: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt?: string }[]; mode?: 'merge' | 'replace' }) =>
+    req<{ ok: boolean; mode: string; folders: number; tracks: number; wishlist: number; splitDrafts: number; library: Track[]; wishlistItems: WishlistItem[] }>('/api/state/import', { method: 'POST', body: JSON.stringify(data) }),
 };
