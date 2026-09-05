@@ -61,7 +61,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path: filePath, isCover }),
     }),
-  setLoudness: (filePath: string, loudness: 'quiet' | 'normal' | 'loud' | null) =>
+  setLoudness: (filePath: string, loudness: 'normal' | 'loud' | null) =>
     req<Track>('/api/tracks/loudness', {
       method: 'PUT',
       body: JSON.stringify({ path: filePath, loudness }),

@@ -469,7 +469,7 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>Loudness</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}>
-                {([['quiet','🔈 Quiet'],['normal','🔉 Normal'],['loud','🔊 Loud']] as const).map(([v,label]) => {
+                {([['normal','🔉 Normal'],['loud','🔊 Loud']] as const).map(([v,label]) => {
                   const active = loudness === v;
                   return (
                     <button

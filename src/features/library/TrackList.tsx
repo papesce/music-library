@@ -17,7 +17,7 @@ type Props = {
   onEdit: (t: Track) => void;
   onDelete: (t: Track) => void;
   onToggleReviewed?: (t: Track) => void;
-  onSetLoudness?: (t: Track, v: 'quiet' | 'normal' | 'loud' | null) => void;
+  onSetLoudness?: (t: Track, v: 'normal' | 'loud' | null) => void;
   showDupesOnly: boolean;
   coverBust?: Record<string, number>;
   revealId?: string | null;

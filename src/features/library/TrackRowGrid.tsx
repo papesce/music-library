@@ -15,7 +15,7 @@ type Props = {
   onEdit: () => void;
   onDelete: () => void;
   onToggleReviewed?: (t: Track) => void;
-  onSetLoudness?: (t: Track, v: 'quiet' | 'normal' | 'loud' | null) => void;
+  onSetLoudness?: (t: Track, v: 'normal' | 'loud' | null) => void;
   style?: React.CSSProperties;
   coverBust?: number;
   searchQuery?: string;
@@ -84,7 +84,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
               {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff' }}>cover</span> : <span className="dup-badge" style={{ background: 'rgba(255,255,255,0.14)', color: 'var(--muted)', border: '1px solid var(--border-soft)' }}>orig</span>}
               {track.duplicateGroupId && <span className="dup-badge">dup</span>}
               {track.reviewed && <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f' }}>✓ done</span>}
-              {track.loudness && <span className="dup-badge" style={{ background: track.loudness === 'loud' ? 'rgba(255,77,109,0.18)' : track.loudness === 'quiet' ? 'rgba(0,212,255,0.18)' : 'rgba(255,193,7,0.18)', color: track.loudness === 'loud' ? '#ff8fa0' : track.loudness === 'quiet' ? '#7eeaff' : '#ffd08a', border: `1px solid ${track.loudness === 'loud' ? 'rgba(255,77,109,0.3)' : track.loudness === 'quiet' ? 'rgba(0,212,255,0.3)' : 'rgba(255,193,7,0.3)'}` }}>{track.loudness === 'loud' ? '🔊 loud' : track.loudness === 'quiet' ? '🔈 quiet' : '🔉 normal'}</span>}
+              {track.loudness && <span className="dup-badge" style={{ background: track.loudness === 'loud' ? 'rgba(255,77,109,0.18)' : 'rgba(255,193,7,0.18)', color: track.loudness === 'loud' ? '#ff8fa0' : '#ffd08a', border: `1px solid ${track.loudness === 'loud' ? 'rgba(255,77,109,0.3)' : 'rgba(255,193,7,0.3)'}` }}>{track.loudness === 'loud' ? '🔊 loud' : '🔉 normal'}</span>}
             </span>
             <span className="track-file" title={track.filePath}>
               <span className="track-file-folder">{folder}/</span>

@@ -8,7 +8,7 @@ type Props = {
   onSplit: () => void;
   onEdit?: () => void;
   onDelete: () => void;
-  onSetLoudness?: (v: 'quiet' | 'normal' | 'loud' | null) => void;
+  onSetLoudness?: (v: 'normal' | 'loud' | null) => void;
   loudness?: string | null;
 };
 
@@ -96,7 +96,6 @@ export function RowActionsMenu({ trackTitle, trackArtist, onSplit, onEdit, onDel
               <>
                 <div className="row-menu-separator" />
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', padding: '4px 8px 2px', textTransform: 'uppercase', letterSpacing: 0.04+'em' }}>Loudness</div>
-                <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(() => onSetLoudness('quiet'))} style={{ background: loudness === 'quiet' ? 'rgba(124,92,255,0.12)' : undefined }}>🔈 Quiet</button>
                 <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(() => onSetLoudness('normal'))} style={{ background: loudness === 'normal' ? 'rgba(124,92,255,0.12)' : undefined }}>🔉 Normal</button>
                 <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(() => onSetLoudness('loud'))} style={{ background: loudness === 'loud' ? 'rgba(124,92,255,0.12)' : undefined }}>🔊 Loud</button>
                 {loudness && <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(() => onSetLoudness(null))}>✕ Clear</button>}

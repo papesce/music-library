@@ -142,7 +142,7 @@ export default function App() {
     }
   };
 
-  const setLoudness = async (t: Track, v: 'quiet' | 'normal' | 'loud' | null) => {
+  const setLoudness = async (t: Track, v: 'normal' | 'loud' | null) => {
     try {
       const updated = await api.setLoudness(t.filePath, v);
       setTracks(prev => prev.map(x => (x.filePath === t.filePath ? updated : x)));

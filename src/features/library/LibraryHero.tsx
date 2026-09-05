@@ -38,7 +38,7 @@ export function LibraryHero({
   setError?: (msg: string) => void;
   loudnessFilter?: string | null;
   setLoudnessFilter?: (v: string | null) => void;
-  loudnessCount?: { quiet: number; normal: number; loud: number };
+  loudnessCount?: { normal: number; loud: number };
 }) {
   const [exportDest, setExportDest] = useState(() => localStorage.getItem('exportDest') || '');
   const [exportMode, setExportMode] = useState<'copy' | 'move' | 'm3u'>(() => (localStorage.getItem('exportMode') as any) || 'copy');
@@ -83,10 +83,9 @@ export function LibraryHero({
           >
             🔀 Random
           </button>
-          {setLoudnessFilter && loudnessCount && (loudnessCount.quiet + loudnessCount.normal + loudnessCount.loud > 0) && (
+          {setLoudnessFilter && loudnessCount && (loudnessCount.normal + loudnessCount.loud > 0) && (
             <div className="glass segmented" style={{ marginLeft: 4 }}>
               <button className={!loudnessFilter ? 'active' : ''} onClick={() => setLoudnessFilter(null)} title="All loudness">All</button>
-              <button className={loudnessFilter === 'quiet' ? 'active' : ''} onClick={() => setLoudnessFilter(loudnessFilter === 'quiet' ? null : 'quiet')} title="Quiet tracks">🔈 {loudnessCount.quiet}</button>
               <button className={loudnessFilter === 'normal' ? 'active' : ''} onClick={() => setLoudnessFilter(loudnessFilter === 'normal' ? null : 'normal')} title="Normal loudness">🔉 {loudnessCount.normal}</button>
               <button className={loudnessFilter === 'loud' ? 'active' : ''} onClick={() => setLoudnessFilter(loudnessFilter === 'loud' ? null : 'loud')} title="Loud tracks">🔊 {loudnessCount.loud}</button>
             </div>

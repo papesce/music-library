@@ -41,7 +41,7 @@ const execFileAsync = promisify(execFile);
 // Ensure DB initialized (creates file + migrates JSON if needed)
 getDb();
 
-type Loudness = 'quiet' | 'normal' | 'loud';
+type Loudness = 'normal' | 'loud';
 type Track = {
   id: string;
   filePath: string;
@@ -865,11 +865,12 @@ const server = createServer(async (req, res) => {
       const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
       if (!filePath) return json(res, 400, { error: 'path required' });
       const raw = body.loudness;
-      // allow null to clear
+      // allow null to clear; legacy 'quiet' coerced to 'normal'
       let loudness: Loudness | null = null;
       if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
-        const v = String(raw).trim().toLowerCase();
-        if (!['quiet','normal','loud'].includes(v)) return json(res, 400, { error: 'loudness must be quiet|normal|loud or null' });
+        let v = String(raw).trim().toLowerCase();
+        if (v === 'quiet') v = 'normal';
+        if (!['normal','loud'].includes(v)) return json(res, 400, { error: 'loudness must be normal|loud or null' });
         loudness = v as Loudness;
       }
       const resolved = resolve(filePath);
@@ -907,7 +908,11 @@ const server = createServer(async (req, res) => {
           let patch: any = {};
           if (typeof t.reviewed === 'boolean') { patch.reviewed = t.reviewed; patch.reviewedAt = t.reviewedAt ?? (t.reviewed ? new Date().toISOString() : null); }
           if (typeof t.isCover === 'boolean') patch.isCover = t.isCover;
-          if (t.loudness === null || ['quiet','normal','loud'].includes(String(t.loudness))) patch.loudness = t.loudness ?? null;
+          if (t.loudness === null || ['normal','loud'].includes(String(t.loudness)) || String(t.loudness)==='quiet') {
+            let lv: string | null = t.loudness as any;
+            if (lv === 'quiet') lv = 'normal';
+            if (lv === null || ['normal','loud'].includes(lv)) patch.loudness = lv as any;
+          }
           if (Object.keys(patch).length) {
             // use granular setters to preserve reviewedAt semantics
             if ('loudness' in patch) setTrackLoudness(t.filePath, patch.loudness);

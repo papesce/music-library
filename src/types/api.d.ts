@@ -1,4 +1,4 @@
-export type Loudness = 'quiet' | 'normal' | 'loud';
+export type Loudness = 'normal' | 'loud';
 
 export type Track = {
   id: string;

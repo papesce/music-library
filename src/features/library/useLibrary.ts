@@ -13,7 +13,8 @@ export function useLibrary(tracks: Track[]) {
   const [sortDirRaw, setSortDir] = usePersistedState<SortDir>('lib:sortDir', 'asc');
   const [showDupesOnly, setShowDupesOnly] = usePersistedState<boolean>('lib:showDupesOnly', false);
   const [hideReviewed, setHideReviewed] = usePersistedState<boolean>('lib:hideReviewed', false);
-  const [loudnessFilter, setLoudnessFilter] = usePersistedState<string | null>('lib:loudnessFilter', null);
+  const [loudnessFilterRaw, setLoudnessFilter] = usePersistedState<string | null>('lib:loudnessFilter', null);
+  const loudnessFilter = loudnessFilterRaw === 'quiet' ? null : loudnessFilterRaw;
   const sortKey: SortKey | null =
     sortKeyRaw === null ? null : VALID_KEYS.includes(sortKeyRaw as SortKey) ? (sortKeyRaw as SortKey) : 'artist';
   const sortDir: SortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
@@ -66,7 +67,6 @@ export function useLibrary(tracks: Track[]) {
   const reviewedCount = useMemo(() => tracks.filter(t => t.reviewed).length, [tracks]);
 
   const loudnessCount = useMemo(() => ({
-    quiet: tracks.filter(t => t.loudness === 'quiet').length,
     normal: tracks.filter(t => t.loudness === 'normal').length,
     loud: tracks.filter(t => t.loudness === 'loud').length,
   }), [tracks]);

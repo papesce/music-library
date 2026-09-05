@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, resolve } from 'path';
 
-export type Loudness = 'quiet' | 'normal' | 'loud';
+export type Loudness = 'normal' | 'loud';
 export type Track = {
   id: string;
   filePath: string;
@@ -208,13 +208,19 @@ function ensureTrackMigrations(d: DatabaseSync) {
       } catch {}
     }
   }
+  // migrate legacy 'quiet' -> 'normal'
+  try { d.prepare("UPDATE tracks SET loudness='normal' WHERE loudness='quiet'").run(); } catch {}
 }
 
 export function getTracks(): Track[] {
   const d = getDb();
   ensureTrackMigrations(d);
   const rows = d.prepare('SELECT * FROM tracks ORDER BY artist, album, title').all() as any[];
-  return rows.map(r => ({
+  return rows.map(r => {
+    let loud: Loudness | null = (r.loudness as Loudness | null) ?? null;
+    if ((loud as any) === 'quiet') loud = 'normal';
+    if (loud !== null && loud !== 'normal' && loud !== 'loud') loud = null;
+    return {
     id: r.id,
     filePath: r.filePath,
     title: r.title,
@@ -228,8 +234,8 @@ export function getTracks(): Track[] {
     reviewed: !!r.reviewed,
     reviewedAt: r.reviewedAt ?? undefined,
     isCover: !!r.isCover,
-    loudness: (r.loudness as Loudness | null) ?? null,
-  }));
+    loudness: loud,
+  };});
 }
 
 export function setTracks(tracks: Track[]) {
@@ -602,7 +608,7 @@ export function setTrackLoudness(filePath: string, loudness: Loudness | null): T
     (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
     (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
   if (!existing) return null;
-  if (loudness !== null && !['quiet','normal','loud'].includes(loudness)) throw new Error('invalid loudness');
+  if (loudness !== null && !['normal','loud'].includes(loudness)) throw new Error('invalid loudness');
   d.prepare('UPDATE tracks SET loudness = ? WHERE filePath = ?').run(loudness, existing.filePath);
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
   if (!row) return null;
