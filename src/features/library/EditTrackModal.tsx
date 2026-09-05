@@ -13,15 +13,24 @@ const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const;
 type WhisperModel = typeof WHISPER_MODELS[number];
 
 function Field({ label, value, onChange, placeholder, inputMode }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'] }) {
+  const isUnknown = value.trim().toLowerCase() === 'unknown';
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
       {label}
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
+        onFocus={e => { if (isUnknown) { const t = e.target as HTMLInputElement; requestAnimationFrame(() => t.select()); } }}
+        onMouseUp={e => { if (isUnknown) e.preventDefault(); }}
+        onClick={e => { if (isUnknown) (e.target as HTMLInputElement).select(); }}
         placeholder={placeholder}
         inputMode={inputMode}
-        style={{ padding: '9px 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', outline: 'none' }}
+        style={{
+          padding: '9px 12px', borderRadius: 12, border: '1px solid var(--border)',
+          background: 'rgba(255,255,255,0.06)', color: isUnknown ? 'var(--muted)' : 'var(--text)',
+          fontStyle: isUnknown ? 'italic' : 'normal',
+          outline: 'none',
+        }}
       />
     </label>
   );
@@ -411,8 +420,15 @@ export function EditTrackModal({ track, onClose, onUpdated, setError }: { track:
               rows={10}
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', outline: 'none', minHeight: 160 }}
             />
+            {lyricsDetecting && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }} aria-busy="true" aria-live="polite">
+                <span className="btn-spinner" aria-hidden />
+                <span style={{ fontSize: 12, color: 'var(--text)' }}>Detecting lyrics…</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>LRClib → Whisper (may take 10–30s)</span>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>{lyricsDetecting ? '…' : '✨ Detect (auto)'}</button>
+              <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} aria-busy={lyricsDetecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{lyricsDetecting ? <><span className="btn-spinner" aria-hidden /><span>Detecting…</span></> : '✨ Detect (auto)'}</button>
               <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>LRClib</button>
               <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Whisper</button>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--muted)' }}>

@@ -225,11 +225,17 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
               <span>Lyrics</span>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {hasSynced && <span className="muted" style={{ fontSize: 11 }}>synced</span>}
-                <button className="btn" style={{ padding: '4px 8px', fontSize: 11, borderRadius: 999 }} onClick={() => handleDetect('auto')} disabled={detecting} title="Auto: try LRClib then Whisper (base, local)">{detecting ? '…' : '✨ Detect'}</button>
+                <button className="btn" style={{ padding: '4px 8px', fontSize: 11, borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => handleDetect('auto')} disabled={detecting} aria-busy={detecting} title="Auto: try LRClib then Whisper (base, local)">{detecting ? <><span className="btn-spinner" aria-hidden /><span>Detecting…</span></> : '✨ Detect'}</button>
               </span>
             </div>
             <div className="unified-lyrics-body">
-              {preview ? (
+              {detecting && !preview ? (
+                <div className="lyrics-loading" aria-busy="true" aria-live="polite">
+                  <span className="btn-spinner" style={{ width: 18, height: 18, borderWidth: 2.5 }} aria-hidden />
+                  <span>Detecting lyrics…</span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>Trying LRClib, then local Whisper (base) if needed — may take 10–30s</span>
+                </div>
+              ) : preview ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>Preview · source: <b style={{ color: 'var(--text)' }}>{preview.source}</b> · synced: {preview.synced?.length ?? 0} lines — edit then Save</div>
                   <textarea value={previewText} onChange={e => setPreviewText(e.target.value)} rows={10} style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical' }} placeholder="[00:12.00]Lyric line" />
