@@ -1093,7 +1093,17 @@ const server = createServer(async (req, res) => {
       try {
         const meta = await parseFile(resolved);
         const pic = meta.common.picture?.[0];
-        if (!pic) return json(res, 404, { error: 'no cover' });
+        if (!pic) {
+          // return 1x1 transparent PNG instead of 404 to avoid browser console noise for files without embedded art
+          const placeholder = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+          res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Content-Length': placeholder.length,
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*',
+          });
+          return res.end(placeholder);
+        }
         res.writeHead(200, {
           'Content-Type': pic.format || 'image/jpeg',
           'Content-Length': pic.data.length,
@@ -1245,8 +1255,10 @@ const server = createServer(async (req, res) => {
       const base = basename(resolved, ext);
       // For custom titles: optional per-segment metadata array [{title,artist,album}]
       const metas: any[] = Array.isArray(body.segments) ? body.segments : [];
+      const skipSet = new Set<number>(Array.isArray(body.skipIndices) ? body.skipIndices.map(Number).filter(n => !isNaN(n)) : Array.isArray(body.skip_indices) ? body.skip_indices.map(Number).filter(n => !isNaN(n)) : []);
       const created: string[] = [];
       for (let i = 0; i < sorted.length - 1; i++) {
+        if (skipSet.has(i)) continue;
         const s = sorted[i]!,
           e = sorted[i + 1]!;
         if (e - s < 200) continue;

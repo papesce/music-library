@@ -11,10 +11,12 @@ export function SplitModal({
   track,
   onClose,
   onExported,
+  libraryTracks,
 }: {
   track: Track;
   onClose: () => void;
   onExported: () => void;
+  libraryTracks?: Track[];
 }) {
   const audioUrl = `/api/stream?path=${encodeURIComponent(track.filePath)}`;
   const durationMs = (track.duration ?? 0) * 1000;
@@ -31,6 +33,7 @@ export function SplitModal({
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [skipped, setSkipped] = useState<Set<number>>(new Set());
 
   // restore persisted draft on open (survives server restart); fallback to [0, duration]
   useEffect(() => {
@@ -104,6 +107,15 @@ export function SplitModal({
     if (focusedIndex !== null && focusedIndex >= splitPoints.length - 1) setFocusedIndex(null);
   }, [splitPoints, focusedIndex]);
 
+  // keep skipped valid when track count shrinks
+  useEffect(() => {
+    setSkipped(prev => {
+      const next = new Set<number>();
+      for (const idx of prev) if (idx < splitPoints.length - 1) next.add(idx);
+      return next;
+    });
+  }, [splitPoints.length]);
+
   // focus isolation is now handled by Waveform itself (it loads a sliced audio URL for the focused segment)
   // no zoomTo/resetZoom needed — waveform remounts with isolated audio
 
@@ -156,11 +168,14 @@ export function SplitModal({
   };
   const handleExport = async () => {
     if (splitPoints.length < 2) return;
+    const skipArr = [...skipped].sort((a,b)=>a-b);
+    const toExportCount = splitPoints.length - 1 - skipArr.length;
+    if (toExportCount <= 0) { setError('All tracks marked as skipped — nothing to export'); return; }
     setExporting(true);
     setError('');
     try {
       const segs = segmentTitles.map(t => (t.trim() ? { title: t.trim() } : {}));
-      const res = await api.applySplit(track.filePath, splitPoints, segs);
+      const res = await api.applySplit(track.filePath, splitPoints, segs, skipArr);
       setError('');
       onExported();
       onClose();
@@ -276,6 +291,15 @@ export function SplitModal({
             onFocus={handleEnterFocus}
             onExitFocus={handleExitFocus}
             onStepFocus={handleStepFocus}
+            libraryTracks={libraryTracks ?? []}
+            skipped={skipped}
+            onToggleSkip={(idx) => setSkipped(prev => {
+              const next = new Set(prev);
+              if (next.has(idx)) next.delete(idx);
+              else next.add(idx);
+              return next;
+            })}
+            sourceTrack={track}
           />
         </div>
 
@@ -295,9 +319,10 @@ export function SplitModal({
             <button
               className="btn btn-primary"
               onClick={handleExport}
-              disabled={exporting || splitPoints.length < 2}
+              disabled={exporting || splitPoints.length - 1 - skipped.size < 1}
+              title={skipped.size ? `${skipped.size} skipped — will export ${splitPoints.length - 1 - skipped.size}` : undefined}
             >
-              {exporting ? 'Exporting…' : `Export ${splitPoints.length - 1} files`}
+              {exporting ? 'Exporting…' : `Export ${splitPoints.length - 1 - skipped.size} files${skipped.size ? ` (${skipped.size} skipped)` : ''}`}
             </button>
           </div>
         </div>

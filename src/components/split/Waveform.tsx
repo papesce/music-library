@@ -111,7 +111,6 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
   // Expose a translated handle: callers (SegmentList) pass global ms, but isolated waveform uses 0..isolatedDuration
   useImperativeHandle(ref, () => ({
     playFrom: (startMs: number, endMs?: number) => {
-      console.log('[Waveform] outer playFrom', { startMs, endMs, isFocused, focusStart, isolatedDuration, hasInner: !!innerWaveRef.current, innerReady: innerWaveRef.current?.isReady?.() });
       const h = innerWaveRef.current;
       if (!h) return Promise.resolve(false);
       if (isFocused) {

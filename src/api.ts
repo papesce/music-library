@@ -73,11 +73,12 @@ export const api = {
   applySplit: (
     filePath: string,
     splitPoints: number[],
-    segments?: { title?: string; artist?: string; album?: string; year?: string; genre?: string }[]
+    segments?: { title?: string; artist?: string; album?: string; year?: string; genre?: string }[],
+    skipIndices?: number[]
   ) =>
     req<{ ok: boolean; files: string[]; count: number }>('/api/split/apply', {
       method: 'POST',
-      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segments }),
+      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segments, skipIndices }),
     }),
   getSplitDraft: (filePath: string) =>
     req<{ draft: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string } | null }>(

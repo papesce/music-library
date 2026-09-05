@@ -277,6 +277,7 @@ export default function App() {
       {splitTrack && (
         <SplitModal
           track={splitTrack}
+          libraryTracks={tracks}
           onClose={() => setSplitTrack(null)}
           onExported={async () => {
             try {

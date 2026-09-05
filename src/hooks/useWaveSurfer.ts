@@ -109,7 +109,6 @@ export function useWaveSurfer({
     ref,
     () => ({
       async playFrom(startMs: number, endMs?: number): Promise<boolean> {
-        console.log('[useWaveSurfer] inner playFrom', { startMs, endMs, ready, zoom, dur: (() => { try { return wsRef.current?.getDuration(); } catch { return 'err'; } })(), durationMs });
         const ws = wsRef.current;
         if (!ws) return false;
         if (!ready) {
