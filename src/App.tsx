@@ -52,6 +52,13 @@ export default function App() {
       setSplitTrackPath(null);
     }
   }, [tracks, splitTrackPath]);
+  // pause preview player when entering split (avoids overlapping playback with SplitModal's waveform)
+  useEffect(() => {
+    if (splitTrackPath && player.playingId && !player.isPaused) {
+      player.audioRef.current?.pause();
+      player.setIsPaused(true);
+    }
+  }, [splitTrackPath]);
   const lib = useLibrary(tracks);
   const wishlistCtl = useWishlist();
 
@@ -199,7 +206,13 @@ export default function App() {
               player.handlePlay(t);
               setNowOpen(true);
             }}
-            onSplit={setSplitTrack}
+            onSplit={t => {
+              if (player.playingId && !player.isPaused) {
+                player.audioRef.current?.pause();
+                player.setIsPaused(true);
+              }
+              setSplitTrack(t);
+            }}
             onEdit={setEditTrack}
             onDelete={setConfirmTrack}
             onToggleReviewed={toggleReviewed}
@@ -267,6 +280,17 @@ export default function App() {
         onExpand={() => setNowOpen(true)}
         onCollapse={() => setNowOpen(false)}
         onEdit={player.playingTrack ? () => setEditTrack(player.playingTrack!) : undefined}
+        onSplit={
+          player.playingTrack
+            ? () => {
+                if (!player.isPaused) {
+                  player.audioRef.current?.pause();
+                  player.setIsPaused(true);
+                }
+                setSplitTrack(player.playingTrack!);
+              }
+            : undefined
+        }
         coverBust={player.playingTrack ? coverBust[player.playingTrack.filePath] : undefined}
         volume={player.volume}
         muted={player.muted}

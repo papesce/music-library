@@ -4,6 +4,7 @@ import { coverUrl } from '../../lib/path';
 import { formatDuration } from '../../lib/format';
 import { useLyrics } from './useLyrics';
 import { ArtworkLightbox } from '../../components/ui/ArtworkLightbox';
+import { PlayerActionsMenu } from './PlayerActionsMenu';
 import { api } from '../../api';
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   onExpand: () => void;
   onCollapse: () => void;
   onEdit?: () => void;
+  onSplit?: () => void;
   coverBust?: number;
   volume: number;
   muted: boolean;
@@ -88,7 +90,7 @@ function VolumeControl({ volume, muted, onVolumeChange, onMutedChange, size = 'c
   );
 }
 
-export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, coverBust, volume, muted, onVolumeChange, onMutedChange }: Props) {
+export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, onSplit, coverBust, volume, muted, onVolumeChange, onMutedChange }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
@@ -183,12 +185,13 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
               {track.artist} · {track.album} {track.year ? `· ${track.year}` : ''} {hasSynced ? '· synced' : ''} {track.isCover ? '· cover' : '· orig'}
             </span>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {onEdit && (
               <button className="btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title="Edit metadata, artwork and lyrics" style={{ padding: '6px 12px' }}>
                 ✎ Edit
               </button>
             )}
+            <PlayerActionsMenu track={track} onSplit={onSplit} />
             <button className="btn" onClick={onCollapse} aria-label="Collapse" style={{ padding: '6px 10px' }}>
               ⌄
             </button>
