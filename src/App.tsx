@@ -201,11 +201,12 @@ export default function App() {
         </div>
       </header>
 
-      <Toast toast={toast} onDismiss={dismiss} />
+      <main className="app-main">
+        <Toast toast={toast} onDismiss={dismiss} />
 
-      {tab === 'library' && (
-        <>
-          <LibraryHero
+        {tab === 'library' && (
+          <>
+            <LibraryHero
             search={lib.search}
             setSearch={lib.setSearch}
             showDupesOnly={lib.showDupesOnly}
@@ -270,8 +271,8 @@ export default function App() {
         </>
       )}
 
-      {tab === 'wishlist' && (
-        <WishlistTab
+        {tab === 'wishlist' && (
+          <WishlistTab
           wName={wishlistCtl.wName}
           setWName={wishlistCtl.setWName}
           wArtist={wishlistCtl.wArtist}
@@ -294,7 +295,8 @@ export default function App() {
           onSaveEdit={wishlistCtl.saveEdit}
           onDelete={wishlistCtl.del}
         />
-      )}
+        )}
+      </main>
 
       <FolderDrawer
         open={drawerOpen}

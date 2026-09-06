@@ -18,8 +18,8 @@ export function PlayHistory({ tracks, playingId, isPaused, onPlay, onClear, onRe
   return (
     <div className="glass history-wrap" aria-label="Recently played">
       <div className="history-head">
-        <span className="history-title">Recently played <span className="muted" style={{ fontWeight: 500, fontSize: 11 }}>· {tracks.length}</span></span>
-        <button className="btn" style={{ padding: '4px 10px', fontSize: 11, borderRadius: 999 }} onClick={onClear} title="Clear history">Clear</button>
+        <span className="history-title">Recently played <span className="history-count">· {tracks.length}</span></span>
+        <button className="history-clear" onClick={onClear} title="Clear history">Clear</button>
       </div>
       <div className="history-scroll" role="list">
         {tracks.map(t => {
@@ -33,24 +33,26 @@ export function PlayHistory({ tracks, playingId, isPaused, onPlay, onClear, onRe
               title={`${t.title} — ${t.artist}`}
             >
               <button
-                className="history-thumb"
+                className="history-main"
                 onClick={() => onPlay(t)}
                 aria-label={playing ? `Pause ${t.title}` : `Play ${t.title}`}
               >
-                <img
-                  src={coverUrl(t.filePath, coverBust?.[t.filePath])}
-                  alt=""
-                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                />
-                <span className="history-thumb-overlay">{playing ? '⏸' : '▶'}</span>
+                <span className="history-thumb" aria-hidden>
+                  <img
+                    src={coverUrl(t.filePath, coverBust?.[t.filePath])}
+                    alt=""
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="history-thumb-overlay">{playing ? '⏸' : '▶'}</span>
+                </span>
+                <span className="history-meta">
+                  <span className="history-track-title">{t.title || t.filePath.split('/').pop()}</span>
+                  <span className="history-track-artist">{t.artist || 'Unknown'} · {t.duration ? formatDuration(Math.floor(t.duration)) : '--:--'}</span>
+                </span>
               </button>
-              <div className="history-meta" onClick={() => onPlay(t)} role="button" tabIndex={0} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onPlay(t)}>
-                <span className="history-track-title">{t.title || t.filePath.split('/').pop()}</span>
-                <span className="history-track-artist">{t.artist || 'Unknown'} {t.duration ? `· ${formatDuration(Math.floor(t.duration))}` : ''}</span>
-              </div>
               <button
                 className="history-remove"
-                onClick={() => onRemove(t.id)}
+                onClick={e => { e.stopPropagation(); onRemove(t.id); }}
                 aria-label={`Remove ${t.title} from history`}
                 title="Remove"
               >
