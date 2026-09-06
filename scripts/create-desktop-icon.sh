@@ -11,14 +11,24 @@ GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 info() { echo -e "${GREEN}▶${NC} $*"; }
 warn() { echo -e "${YELLOW}⚠${NC} $*"; }
 
+WITH_COMMAND=0
+for arg in "$@"; do
+  case "$arg" in
+    --with-command|--command) WITH_COMMAND=1 ;;
+    --help|-h) echo "Usage: $0 [--with-command]  (default: .app only; --with-command also creates .command launcher)"; exit 0 ;;
+    *) echo -e "${RED}Unknown option: $arg${NC}"; exit 1 ;;
+  esac
+done
+
 if [[ ! -x "$BIN_PATH" ]]; then
   echo -e "${RED}✘ Binary not found: $BIN_PATH${NC}"
   echo "  Run first: ./install.sh  (or npm run build:bin)"
   exit 1
 fi
 
-# 1. Create .command launcher (simplest, always works)
+# 1. Create .command launcher (opt-in via --with-command; .app is primary)
 COMMAND_PATH="$OUT_DIR/${APP_NAME}.command"
+if [[ "$WITH_COMMAND" -eq 1 ]]; then
 cat > "$COMMAND_PATH" <<EOS
 #!/bin/bash
 # Double-click to start Music Library — auto-opens http://localhost:3055
@@ -44,6 +54,9 @@ PORT=\${PORT:-3055} "\$BIN"
 EOS
 chmod +x "$COMMAND_PATH"
 info "Created $COMMAND_PATH (double-click in Finder)"
+else
+  info "Skipping .command launcher (use --with-command to create it)"
+fi
 
 # 2. Create .app bundle via AppleScript applet (stay-open, like shoplist/Shoplist.app)
 #    This keeps the icon in Dock and enables Cmd+Q / right-click Quit → runs stop.sh
@@ -205,10 +218,14 @@ touch "$APP_BUNDLE" 2>/dev/null || true
 info "Created $APP_BUNDLE (double-click to launch) — stay-open, Quit from Dock/Cmd+Q"
 echo ""
 echo "Install options:"
-echo "  1. Run from out/: open \"$APP_BUNDLE\"  or  open \"$COMMAND_PATH\""
+if [[ "$WITH_COMMAND" -eq 1 ]]; then
+  echo "  1. Run from out/: open \"$APP_BUNDLE\"  or  open \"$COMMAND_PATH\""
+else
+  echo "  1. Run from out/: open \"$APP_BUNDLE\""
+fi
 echo "  2. Drag to Desktop: cp -r \"$APP_BUNDLE\" ~/Desktop/"
 echo "  3. Drag to Dock: drag \"$APP_BUNDLE\" to Dock (bottom bar)"
 echo "  4. Add to Applications: cp -r \"$APP_BUNDLE\" /Applications/  (may need sudo)"
 echo ""
-echo "To stop server: double-click \"Quit Music Library.command\" or: curl -X POST http://localhost:3055/api/shutdown  or  pkill -f \"out/music-library\""
+echo "To stop server: Quit from Dock/Cmd+Q, or: curl -X POST http://localhost:3055/api/shutdown  or  pkill -f \"out/music-library\"  (or double-click \"Quit Music Library.command\" if created)"
 echo "Logs: tail -f /tmp/music-library.log"

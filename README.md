@@ -73,7 +73,6 @@ Single-binary distribution: zip `out/music-library` + `out/dist/` + `data/` (emp
 | `build:bin` | `vite build` + Bun --compile → `out/music-library` (+ `out/dist`) |
 | `build:bin:all` | cross-compile macOS/Linux/Windows |
 | `start` | production server (`node --import tsx`) |
-| `start:prod` | `npm run build && npm start` |
 | `typecheck` / `lint` / `format` / `check` | `tsc --noEmit`, `eslint`, `prettier` |
 
 ## Project layout

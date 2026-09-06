@@ -19,7 +19,8 @@ Options:
   --clean     rm -rf dist out node_modules before build
   --all       cross-compile macOS/Linux/Windows (build:bin:all)
   --no-bun    skip Bun install (use existing bun)
-  --desktop   also create Desktop icon (out/Music Library.app + .command)
+  --desktop   also create Desktop icon (out/Music Library.app)
+  --with-command  also create .command launcher (requires --desktop)
   --help      show this help
 
 What it does:
@@ -38,13 +39,14 @@ After: run ./out/music-library  (or double-click)
 EOF
 }
 
-CLEAN=0; ALL=0; NO_BUN=0; DESKTOP=0
+CLEAN=0; ALL=0; NO_BUN=0; DESKTOP=0; WITH_COMMAND=0
 for arg in "$@"; do
   case "$arg" in
     --clean) CLEAN=1 ;;
     --all) ALL=1 ;;
     --no-bun) NO_BUN=1 ;;
     --desktop) DESKTOP=1 ;;
+    --with-command|--command) WITH_COMMAND=1 ;;
     --help|-h) usage; exit 0 ;;
     *) err "Unknown option: $arg"; usage; exit 1 ;;
   esac
@@ -173,15 +175,16 @@ fi
 if [[ "$DESKTOP" -eq 1 || "${CREATE_DESKTOP:-0}" == "1" ]]; then
   info "Creating desktop icon ..."
   if [[ -x "$SCRIPT_DIR/scripts/create-desktop-icon.sh" ]]; then
-    "$SCRIPT_DIR/scripts/create-desktop-icon.sh" || warn "Failed to create desktop icon"
+    ARGS=()
+    if [[ "$WITH_COMMAND" -eq 1 ]]; then ARGS+=(--with-command); fi
+    "$SCRIPT_DIR/scripts/create-desktop-icon.sh" "${ARGS[@]}" || warn "Failed to create desktop icon"
   fi
 fi
 
 echo ""
 echo -e "${CYAN}Done.${NC} Run it:"
 echo -e "  ${GREEN}./out/music-library${NC}           # → http://localhost:3055 (auto-opens browser)"
-echo -e "  ${GREEN}open \"out/Music Library.app\"${NC}  # double-click app icon (macOS)"
-echo -e "  ${GREEN}open \"out/Music Library.command\"${NC} # double-click command"
+echo -e "  ${GREEN}open \"out/Music Library.app\"${NC}  # double-click app icon (macOS, primary)"
 echo -e "  ${GREEN}NO_OPEN=1 PORT=3055 ./out/music-library${NC}  # without auto-open"
 echo ""
 if [[ -d "$SCRIPT_DIR/out/Music Library.app" ]]; then
