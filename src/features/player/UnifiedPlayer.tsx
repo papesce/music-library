@@ -26,6 +26,7 @@ type Props = {
   onVolumeChange: (v: number) => void;
   onMutedChange: (m: boolean) => void;
   onPlayRandom?: () => void;
+  onPreviewChange?: (draft: { path: string; text: string; source: string } | null) => void;
 };
 
 function LyricsView({
@@ -91,7 +92,7 @@ function VolumeControl({ volume, muted, onVolumeChange, onMutedChange, size = 'c
   );
 }
 
-export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, onSplit, coverBust, volume, muted, onVolumeChange, onMutedChange, onPlayRandom }: Props) {
+export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, onSplit, coverBust, volume, muted, onVolumeChange, onMutedChange, onPlayRandom, onPreviewChange }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
@@ -101,7 +102,13 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
   const [detectError, setDetectError] = useState('');
 
   useEffect(() => setArtFailed(false), [track?.filePath, coverBust]);
-  useEffect(() => { setPreview(null); setPreviewText(''); setDetectError(''); }, [track?.filePath]);
+  useEffect(() => { setPreview(null); setPreviewText(''); setDetectError(''); onPreviewChange?.(null); }, [track?.filePath]);
+
+  // notify parent of unsaved generated lyrics so Edit can carry them over
+  useEffect(() => {
+    if (!track || !previewText.trim()) { onPreviewChange?.(null); return; }
+    onPreviewChange?.({ path: track.filePath, text: previewText, source: preview?.source ?? '' });
+  }, [previewText, preview?.source, track?.filePath]);
 
   const handleDetect = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
     if (!track) return;
@@ -119,11 +126,12 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
     setDetecting(true);
     try {
       await api.saveLyrics(track.filePath, previewText);
-      setPreview(null); setPreviewText('');
+      setPreview(null); setPreviewText(''); onPreviewChange?.(null);
       await reload();
     } catch (e: any) { setDetectError(e.message); }
     finally { setDetecting(false); }
   };
+  const handleDiscard = () => { setPreview(null); setPreviewText(''); onPreviewChange?.(null); };
 
   if (!track) return null;
 
@@ -256,7 +264,7 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
                   <textarea value={previewText} onChange={e => setPreviewText(e.target.value)} rows={10} style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical' }} placeholder="[00:12.00]Lyric line" />
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button className="btn btn-primary" onClick={handleSave} disabled={detecting || !previewText.trim()} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Save to .lrc + USLT</button>
-                    <button className="btn" onClick={() => { setPreview(null); setPreviewText(''); }} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Discard</button>
+                    <button className="btn" onClick={handleDiscard} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Discard</button>
                     <button className="btn" onClick={() => handleDetect('lrclib')} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Try LRClib only</button>
                     <button className="btn" onClick={() => handleDetect('whisper')} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Whisper base</button>
                   </div>

@@ -14,6 +14,7 @@ export function FolderDrawer({
   scanning,
   onStateImported,
   setError,
+  setSuccess,
 }: {
   open: boolean;
   onClose: () => void;
@@ -27,6 +28,7 @@ export function FolderDrawer({
   scanning: boolean;
   onStateImported?: (tracks: import('../types/api.d').Track[], wishlist: import('../types/api.d').WishlistItem[]) => void;
   setError?: (m: string) => void;
+  setSuccess?: (m: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -153,7 +155,7 @@ export function FolderDrawer({
                     } catch {}
                   }
                   onStateImported?.(res.library, res.wishlistItems);
-                  setError?.(`Imported: ${res.tracks} tracks, ${res.wishlist} wishlist, ${res.splitDrafts} drafts`);
+                  (setSuccess ?? setError)?.(`Imported: ${res.tracks} tracks, ${res.wishlist} wishlist, ${res.splitDrafts} drafts`);
                 } catch (err: any) { setError?.(err.message); }
                 finally { setBusy(false); e.target.value=''; }
               }}

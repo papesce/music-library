@@ -37,8 +37,9 @@ export default function App() {
   const [coverBust, setCoverBust] = useState<Record<string, number>>({});
   const splitTrack = splitTrackPath ? (tracks.find(t => t.filePath === splitTrackPath) ?? null) : null;
   const setSplitTrack = (t: Track | null) => setSplitTrackPath(t?.filePath ?? null);
+  const [pendingLyrics, setPendingLyrics] = useState<{ path: string; text: string; source: string } | null>(null);
 
-  const { error, setError, dismiss } = useToast();
+  const { toast, error, setError, setSuccess, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
   const player = usePlayer(tracks, setError);
   const history = usePlayHistory(tracks);
@@ -200,7 +201,7 @@ export default function App() {
         </div>
       </header>
 
-      <Toast message={error} onDismiss={dismiss} />
+      <Toast toast={toast} onDismiss={dismiss} />
 
       {tab === 'library' && (
         <>
@@ -220,6 +221,7 @@ export default function App() {
             onPlayRandom={playRandom}
             onExported={refresh}
             setError={setError}
+            setSuccess={setSuccess}
             loudnessFilter={lib.loudnessFilter}
             setLoudnessFilter={lib.setLoudnessFilter}
             loudnessCount={lib.loudnessCount}
@@ -307,11 +309,12 @@ export default function App() {
         scanning={scanning}
         onStateImported={(libTracks, wl) => { setTracks(libTracks); foldersCtl.setFolders(libTracks.length ? foldersCtl.folders : []); wishlistCtl.setWishlist(wl); }}
         setError={setError}
+        setSuccess={setSuccess}
       />
 
       {confirmTrack && <DeleteTrackModal track={confirmTrack} deleting={deleting} onCancel={() => setConfirmTrack(null)} onConfirm={confirmDeleteTrack} />}
 
-      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); setCoverBust(prev => ({ ...prev, [t.filePath]: Date.now() })); if (oldFilePath && oldFilePath !== t.filePath) setCoverBust(prev => { const { [oldFilePath]: _, ...rest } = prev; return rest; }); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); }} setError={setError} playback={{ isActive: player.playingId === editTrack.id, isPaused: player.isPaused, onToggle: () => player.handlePlay(editTrack) }} />}
+      {editTrack && <EditTrackModal track={editTrack} onClose={() => setEditTrack(null)} onUpdated={(t, oldFilePath) => { setTracks(prev => prev.map(x => (x.filePath === (oldFilePath ?? t.filePath) ? t : x))); setCoverBust(prev => ({ ...prev, [t.filePath]: Date.now() })); if (oldFilePath && oldFilePath !== t.filePath) setCoverBust(prev => { const { [oldFilePath]: _, ...rest } = prev; return rest; }); if (oldFilePath && player.playingId === oldFilePath) player.setPlayingId(t.id); if (pendingLyrics?.path === editTrack.filePath) setPendingLyrics(null); }} setError={setError} playback={{ isActive: player.playingId === editTrack.id, isPaused: player.isPaused, onToggle: () => player.handlePlay(editTrack) }} pendingLyricsDraft={pendingLyrics?.path === editTrack.filePath ? { text: pendingLyrics.text, source: pendingLyrics.source } : null} />}
 
       <UnifiedPlayer
         track={player.playingTrack}
@@ -345,6 +348,7 @@ export default function App() {
         onVolumeChange={player.setVolume}
         onMutedChange={player.setMuted}
         onPlayRandom={playRandom}
+        onPreviewChange={setPendingLyrics}
       />
 
       {splitTrack && (

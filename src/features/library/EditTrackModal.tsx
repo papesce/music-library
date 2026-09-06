@@ -36,7 +36,7 @@ function Field({ label, value, onChange, placeholder, inputMode }: { label: stri
   );
 }
 
-export function EditTrackModal({ track, onClose, onUpdated, setError, playback }: { track: Track; onClose: () => void; onUpdated: (t: Track, oldFilePath?: string) => void; setError: (m: string) => void; playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void } }) {
+export function EditTrackModal({ track, onClose, onUpdated, setError, playback, pendingLyricsDraft }: { track: Track; onClose: () => void; onUpdated: (t: Track, oldFilePath?: string) => void; setError: (m: string) => void; playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void }; pendingLyricsDraft?: { text: string; source: string } | null }) {
   const getFilename = (p: string) => p.split('/').pop()?.split('\\').pop() ?? p;
   const getDir = (p: string) => {
     const f = getFilename(p);
@@ -99,7 +99,23 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
     setLyricsLoading(true);
     api.getLyrics(track.filePath).then(r => {
       if (r.lyrics) { setLyricsText(r.lyrics); setLyricsPreview(r.lyrics); }
-    }).catch(() => {}).finally(() => setLyricsLoading(false));
+      // carry over unsaved generated lyrics from player (user generated then opened Edit without saving)
+      if (pendingLyricsDraft?.text?.trim()) {
+        // if draft differs from saved, use draft as editable preview and flag source
+        if (pendingLyricsDraft.text.trim() !== (r.lyrics ?? '').trim()) {
+          setLyricsPreview(pendingLyricsDraft.text);
+          setLyricsSource(pendingLyricsDraft.source || 'generated (unsaved)');
+          setActiveTab('lyrics');
+        }
+      }
+    }).catch(() => {
+      // still carry over even if fetch failed / no saved lyrics
+      if (pendingLyricsDraft?.text?.trim()) {
+        setLyricsPreview(pendingLyricsDraft.text);
+        setLyricsSource(pendingLyricsDraft.source || 'generated (unsaved)');
+        setActiveTab('lyrics');
+      }
+    }).finally(() => setLyricsLoading(false));
   }, [track.filePath]);
 
   const sanitizeForFilename = (s: string) =>
@@ -335,8 +351,8 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
   const lyricsLines = lyricsText ? lyricsText.split('\n').length : 0;
   const isSynced = lyricsText ? /\[\d{1,3}:\d{2}/.test(lyricsText) : false;
 
-  // per-tab dirty
-  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || reviewed !== !!track.reviewed || isCover !== !!track.isCover || (loudness ?? null) !== (track.loudness ?? null);
+  // per-tab dirty (reviewed is now in persistent footer, not tab-specific)
+  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || isCover !== !!track.isCover || (loudness ?? null) !== (track.loudness ?? null);
   const fileDirty = filename.trim() !== getFilename(track.filePath);
   const lyricsDirty = lyricsPreview !== (lyricsText ?? '') && lyricsPreview.trim() !== '';
 
@@ -449,22 +465,31 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
               <div style={{ width: 120 }}><Field label="Year" value={year} onChange={setYear} placeholder="2024" inputMode="numeric" /></div>
             </div>
 
-            {/* Reviewed + Cover/Original + Loudness */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <label style={{ flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.10)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} style={{ accentColor: '#2ecc71', width: 16, height: 16 }} />
-                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: reviewed ? '#8ff5b8' : 'var(--text)' }}>{reviewed ? '✓ Reviewed' : 'Mark as reviewed'}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{reviewed ? 'Hidden when "Hide done" is active.' : "Won't need inspection again."}</span>
-                </span>
-              </label>
-              <label style={{ flex: 1, minWidth: 180, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1px solid ${isCover ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`, background: isCover ? 'rgba(124,92,255,0.12)' : 'rgba(255,255,255,0.04)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isCover} onChange={e => setIsCover(e.target.checked)} style={{ accentColor: '#7c5cff', width: 16, height: 16 }} />
-                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: isCover ? '#c4b5ff' : 'var(--text)' }}>{isCover ? 'Cover version' : 'Original'}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>{isCover ? 'Mark as cover (badge in list)' : 'Mark if this is a cover'}</span>
-                </span>
-              </label>
+            {/* Cover/Original — segmented control so both options are visible (fix discoverability: user looking for "cover" always sees it) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>Version</span>
+              <div role="group" aria-label="Version" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}>
+                {([{ v: false, label: 'Original' }, { v: true, label: 'Cover' }] as const).map(opt => {
+                  const active = isCover === opt.v;
+                  return (
+                    <button
+                      key={String(opt.v)}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setIsCover(opt.v)}
+                      title={opt.v ? 'Mark as cover — shows cover badge in list' : 'Mark as original recording'}
+                      style={{
+                        padding: '5px 12px', borderRadius: 999, border: `1px solid ${active ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`,
+                        background: active ? 'rgba(124,92,255,0.18)' : 'rgba(255,255,255,0.06)',
+                        color: active ? '#c4b5ff' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{isCover ? 'Shows cover badge' : 'Original recording'}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>Loudness</span>
@@ -534,6 +559,12 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
 
         {activeTab === 'lyrics' && (
           <div role="tabpanel" id="edit-panel-lyrics" aria-labelledby="edit-tab-lyrics" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pendingLyricsDraft?.text?.trim() && lyricsPreview.trim() === pendingLyricsDraft.text.trim() && lyricsPreview.trim() !== (lyricsText ?? '').trim() && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.32)', color: '#ffd66b', fontSize: 11, lineHeight: 1.4 }}>
+                <span style={{ fontSize: 13 }}>⚠</span>
+                <span style={{ flex: 1 }}>Unsaved lyrics from player carried over — generated via <b style={{ color: '#fff' }}>{pendingLyricsDraft.source || 'detect'}</b>. Hit <b style={{ color: '#fff' }}>Save</b> to keep them (or edit/discard here).</span>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>
                 Lyrics {lyricsSource ? `· ${lyricsSource}` : hasLyrics ? '· saved' : ''} {lyricsSaved ? '· ✓ saved' : ''}
@@ -642,10 +673,19 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback }
         )}
       </div>
 
-      {/* Sticky footer — single save for all tabs including lyrics */}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
-        <button className="btn" onClick={onClose} disabled={saving || lyricsDetecting}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={saving || lyricsDetecting}>{saving ? 'Saving…' : lyricsDirty ? 'Save •' : 'Save'}</button>
+      {/* Sticky footer — persistent review toggle + single save for all tabs */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 999, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.12)' : 'rgba(255,255,255,0.04)', cursor: 'pointer', flex: '1 1 auto', minWidth: 0 }}>
+          <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} disabled={saving || lyricsDetecting} style={{ accentColor: '#2ecc71', width: 16, height: 16, flexShrink: 0 }} />
+          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15, minWidth: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: reviewed ? '#8ff5b8' : 'var(--text)', whiteSpace: 'nowrap' }}>{reviewed ? '✓ Reviewed' : 'Mark as reviewed'}</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{reviewed ? 'Hidden when "Hide done" is active.' : "Won't need inspection again."}</span>
+          </span>
+        </label>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button className="btn" onClick={onClose} disabled={saving || lyricsDetecting}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || lyricsDetecting}>{saving ? 'Saving…' : reviewed !== !!track.reviewed || lyricsDirty ? 'Save •' : 'Save'}</button>
+        </div>
       </div>
     </Modal>
   );

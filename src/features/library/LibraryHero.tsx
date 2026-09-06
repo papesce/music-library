@@ -17,6 +17,7 @@ export function LibraryHero({
   onPlayRandom,
   onExported,
   setError,
+  setSuccess,
   loudnessFilter,
   setLoudnessFilter,
   loudnessCount,
@@ -36,6 +37,7 @@ export function LibraryHero({
   onPlayRandom?: () => void;
   onExported?: () => void;
   setError?: (msg: string) => void;
+  setSuccess?: (msg: string) => void;
   loudnessFilter?: string | null;
   setLoudnessFilter?: (v: string | null) => void;
   loudnessCount?: { normal: number; loud: number };
@@ -196,11 +198,10 @@ export function LibraryHero({
                 try {
                   const r = await api.exportReviewed({ destination: exportDest || undefined, mode: exportMode, playlistName: exportMode === 'm3u' ? (playlistName.trim() || 'Completed.m3u8') : undefined, overwrite: true });
                   setError?.('');
-                  // toast via setError with success? use alert via setError empty then show info
                   const msg = r.mode === 'm3u'
                     ? `Playlist created: ${r.playlist} · ${r.count} tracks`
                     : `${r.mode === 'move' ? 'Moved' : 'Copied'} ${r.exported}/${r.count} to ${r.destination}`;
-                  setError?.(msg);
+                  (setSuccess ?? setError)?.(msg);
                   // trigger refresh if move (paths changed)
                   if (r.mode === 'move') onExported?.();
                 } catch (e: any) { setError?.(e.message); }
