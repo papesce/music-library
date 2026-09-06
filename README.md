@@ -33,12 +33,34 @@ npm install
 npm run dev           # concurrently dev:server (tsx --watch) + dev:client (vite)
 # production
 npm run build
-npm start             # NODE_ENV=production node --loader tsx server/index.ts
+npm start             # NODE_ENV=production node --import tsx server/index.ts
 # or
 ./start.sh start      # build + start with whisper PATH
 ```
 
 Environment: `PORT` (default `3055`). No other env required. Lyrics: LRClib lookup works without setup; Whisper `base` (~140MB, downloaded on first transcribe) is auto-installed by `./start.sh` into `.whisper-venv` (gitignored) — Node server auto-prepends it to `PATH`.
+
+### Single executable (Option C — no Node/npm needed)
+
+Builds a standalone binary via Bun `--compile` (~60MB) that bundles the server + serves `dist/`:
+
+```bash
+# one-time: install bun (https://bun.sh) — already handled if you ran ./start.sh
+# build for current OS:
+npm run build:bin              # → out/music-library (+ out/dist)
+
+# cross-platform (macOS arm64, Linux x64, Windows x64):
+npm run build:bin:all          # → out/music-library-macos / -linux / .exe
+
+# run (no Node required on host):
+chmod +x out/music-library
+NO_OPEN=1 PORT=3055 ./out/music-library   # or double-click music-library(.exe)
+# opens http://localhost:3055 automatically (unless NO_OPEN=1)
+# frontend served from dist/ next to binary (out/dist) or ./dist fallback
+# data stored in ./data next to cwd — override with MUSIC_DATA_DIR=/path/to/data
+```
+
+Single-binary distribution: zip `out/music-library` + `out/dist/` + `data/` (empty) together. User unzips and runs `./music-library` — no `npm`, no `node`, no `npm run dev`. Requires `ffmpeg`/`ffprobe` on host for waveform/peaks/split (install via `brew install ffmpeg`); LRClib lyrics work without it. Whisper stays optional (LRClib first). Unsigned binary: macOS Gatekeeper will show “cannot be verified” — run `xattr -d com.apple.quarantine ./music-library` or Right-click → Open → Open once.
 
 ## Scripts
 
@@ -48,7 +70,10 @@ Environment: `PORT` (default `3055`). No other env required. Lyrics: LRClib look
 | `dev:server` | `tsx --watch server/index.ts` |
 | `dev:client` | `vite` |
 | `build` | `vite build` |
-| `start` | production server |
+| `build:bin` | `vite build` + Bun --compile → `out/music-library` (+ `out/dist`) |
+| `build:bin:all` | cross-compile macOS/Linux/Windows |
+| `start` | production server (`node --import tsx`) |
+| `start:prod` | `npm run build && npm start` |
 | `typecheck` / `lint` / `format` / `check` | `tsc --noEmit`, `eslint`, `prettier` |
 
 ## Project layout

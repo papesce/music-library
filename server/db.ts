@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
 
 export type Loudness = 'normal' | 'loud';
 export type Track = {
@@ -27,7 +27,25 @@ export type WishlistItem = {
   dateAdded: string;
 };
 
-const DATA_DIR = resolve(process.cwd(), 'data');
+function getDataDir(): string {
+  if (process.env.MUSIC_DATA_DIR) return resolve(process.env.MUSIC_DATA_DIR);
+  const cwd = process.cwd();
+  // When launched via .app double-click, cwd is "/" (read-only) — fallback to repo's data dir
+  if (cwd === '/' || cwd === '/tmp' || cwd === '/private/tmp') {
+    try {
+      const exeDir = dirname(process.execPath);
+      // out/music-library → repo/data (common case)
+      const repoData = resolve(join(exeDir, '..', 'data'));
+      if (existsSync(repoData) || existsSync(join(exeDir, '..', 'package.json'))) {
+        return repoData;
+      }
+      return resolve(join(exeDir, 'data'));
+    } catch {}
+    if (process.env.HOME) return join(process.env.HOME, '.music-library', 'data');
+  }
+  return resolve(cwd, 'data');
+}
+const DATA_DIR = getDataDir();
 const DB_PATH = join(DATA_DIR, 'music.db');
 
 let db: DatabaseSync | null = null;

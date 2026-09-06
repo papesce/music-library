@@ -1,11 +1,19 @@
 import { createServer } from 'http';
 import { join, resolve, dirname, basename, extname } from 'path';
 import { existsSync, promises as fs, createReadStream, statSync } from 'fs';
-// ensure local whisper venv is on PATH (created by ./start.sh --setup)
+// ensure local whisper venv is on PATH (created by ./start.sh --setup) — check multiple locations for .app launches where cwd may be "/"
 try {
-  const venvBin = join(process.cwd(), '.whisper-venv', 'bin');
-  if (existsSync(join(venvBin, 'whisper')) && !String(process.env.PATH || '').split(':').includes(venvBin)) {
-    process.env.PATH = `${venvBin}:${process.env.PATH || ''}`;
+  const candidates: string[] = [];
+  candidates.push(join(process.cwd(), '.whisper-venv', 'bin'));
+  try { candidates.push(join(dirname(process.execPath), '.whisper-venv', 'bin')); } catch {}
+  try { candidates.push(join(dirname(process.execPath), '..', '.whisper-venv', 'bin')); } catch {}
+  try { candidates.push(join(dirname(process.execPath), '..', '..', '.whisper-venv', 'bin')); } catch {}
+  if (process.env.HOME) candidates.push(join(process.env.HOME, 'projects', 'personal', 'music-library', '.whisper-venv', 'bin'));
+  for (const venvBin of candidates) {
+    if (existsSync(join(venvBin, 'whisper')) && !String(process.env.PATH || '').split(':').includes(venvBin)) {
+      process.env.PATH = `${venvBin}:${process.env.PATH || ''}`;
+      break;
+    }
   }
 } catch {}
 import { parseFile } from 'music-metadata';
@@ -68,6 +76,30 @@ type WishlistItem = {
 type Config = { folders?: string[]; lastFolder?: string };
 
 const PORT = Number(process.env.PORT || 3055);
+
+// Resolve dist dir for single-executable (Bun --compile) vs normal dev/prod
+function getDistDir(): string {
+  const candidates = [
+    // 1. Explicit env override
+    process.env.MUSIC_DIST_DIR ? resolve(process.env.MUSIC_DIST_DIR) : null,
+    // 2. Next to executable (for compiled binary: out/music-library next to dist/)
+    (() => {
+      try {
+        const exeDir = dirname(process.execPath);
+        const p = join(exeDir, 'dist');
+        if (existsSync(p)) return p;
+      } catch {}
+      return null;
+    })(),
+    // 3. CWD/dist (normal npm start)
+    join(process.cwd(), 'dist'),
+    // 4. Relative to this file (for tsx dev)
+    join(dirname(new URL(import.meta.url).pathname), '..', 'dist'),
+  ].filter(Boolean) as string[];
+  for (const c of candidates) if (existsSync(c)) return c;
+  return join(process.cwd(), 'dist');
+}
+const DIST_DIR = getDistDir();
 
 async function walkMp3(dir: string, out: string[] = []): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -1350,7 +1382,7 @@ const server = createServer(async (req, res) => {
       const base = basename(resolved, ext);
       // For custom titles: optional per-segment metadata array [{title,artist,album}]
       const metas: any[] = Array.isArray(body.segments) ? body.segments : [];
-      const skipSet = new Set<number>(Array.isArray(body.skipIndices) ? body.skipIndices.map(Number).filter(n => !isNaN(n)) : Array.isArray(body.skip_indices) ? body.skip_indices.map(Number).filter(n => !isNaN(n)) : []);
+      const skipSet = new Set<number>(Array.isArray(body.skipIndices) ? body.skipIndices.map(Number).filter((n: any) => !isNaN(n)) : Array.isArray(body.skip_indices) ? body.skip_indices.map(Number).filter((n: any) => !isNaN(n)) : []);
       const created: string[] = [];
       for (let i = 0; i < sorted.length - 1; i++) {
         if (skipSet.has(i)) continue;
@@ -1716,38 +1748,70 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Serve static frontend in production or when DIST_DIR exists (single-executable) — before API info fallback
+
+    {
+      const isProd = process.env.NODE_ENV === 'production' || existsSync(DIST_DIR);
+      if (isProd && !url.pathname.startsWith('/api')) {
+        // Normalize pathname, prevent directory traversal
+        let rel = decodeURIComponent(url.pathname);
+        if (rel === '/' || rel === '') rel = '/index.html';
+        // Remove leading slash for join
+        rel = rel.replace(/^\/+/, '');
+        // Block traversal
+        if (rel.includes('..')) return json(res, 400, { error: 'invalid path' });
+        const distFile = join(DIST_DIR, rel);
+        // Ensure inside DIST_DIR
+        if (!distFile.startsWith(DIST_DIR)) return json(res, 403, { error: 'forbidden' });
+        if (existsSync(distFile)) {
+          try {
+            const stat = statSync(distFile);
+            if (stat.isDirectory()) {
+              const idx = join(distFile, 'index.html');
+              if (existsSync(idx)) {
+                const data = await fs.readFile(idx);
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                return res.end(data);
+              }
+              return json(res, 404, { error: 'not found', path: url.pathname });
+            }
+            const data = await fs.readFile(distFile);
+            const ext = distFile.split('.').pop() || '';
+            const ct: Record<string, string> = {
+              html: 'text/html',
+              js: 'text/javascript',
+              css: 'text/css',
+              json: 'application/json',
+              png: 'image/png',
+              jpg: 'image/jpeg',
+              jpeg: 'image/jpeg',
+              svg: 'image/svg+xml',
+              ico: 'image/x-icon',
+              woff: 'font/woff',
+              woff2: 'font/woff2',
+              ttf: 'font/ttf',
+              map: 'application/json',
+            };
+            res.writeHead(200, { 'Content-Type': ct[ext] || 'application/octet-stream', 'Cache-Control': ext === 'html' ? 'no-cache' : 'public, max-age=31536000' });
+            return res.end(data);
+          } catch {}
+        }
+        // SPA fallback: serve index.html for non-file routes (react-router)
+        const fallback = join(DIST_DIR, 'index.html');
+        if (existsSync(fallback) && !rel.includes('.')) {
+          const data = await fs.readFile(fallback);
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          return res.end(data);
+        }
+      }
+    }
+    // API info fallback when no frontend (dev without build)
     if (url.pathname === '/' && req.method === 'GET') {
       return json(res, 200, {
         ok: true,
-        message: 'API server — open http://localhost:5164 for UI',
-        endpoints: [
-          '/api/config',
-          '/api/library',
-          '/api/library/duplicates',
-          '/api/scan',
-          '/api/wishlist',
-          '/api/pick-folder',
-        ],
+        message: 'API server — open http://localhost:5164 for UI (or build frontend: npm run build)',
+        endpoints: ['/api/config', '/api/library', '/api/library/duplicates', '/api/scan', '/api/wishlist', '/api/pick-folder'],
       });
-    }
-    if (process.env.NODE_ENV === 'production') {
-      const distFile = join(
-        process.cwd(),
-        'dist',
-        url.pathname === '/' ? 'index.html' : url.pathname
-      );
-      if (existsSync(distFile) && !url.pathname.startsWith('/api')) {
-        const data = await fs.readFile(distFile);
-        const ext = distFile.split('.').pop();
-        const ct: Record<string, string> = {
-          html: 'text/html',
-          js: 'text/javascript',
-          css: 'text/css',
-          json: 'application/json',
-        };
-        res.writeHead(200, { 'Content-Type': ct[ext || ''] || 'application/octet-stream' });
-        return res.end(data);
-      }
     }
     json(res, 404, { error: 'not found', path: url.pathname });
   } catch (e: any) {
@@ -1755,4 +1819,29 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`[server] listening on http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`[server] listening on http://localhost:${PORT}`);
+  if (existsSync(DIST_DIR)) console.log(`[server] serving frontend from ${DIST_DIR}`);
+  else console.log(`[server] API only — run "npm run build" to generate ${DIST_DIR} for UI`);
+  // Auto-open browser for single-executable (Bun --compile) unless NO_OPEN=1
+  const isCompiled = !!(process as any).isBun || process.execPath.includes('music-library');
+  if (isCompiled && process.env.NO_OPEN !== '1' && process.env.NODE_ENV !== 'test') {
+    const url = `http://localhost:${PORT}`;
+    const openCmd =
+      process.platform === 'darwin' ? ['open', url] :
+      process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] :
+      ['xdg-open', url];
+    import('child_process').then(({ spawn }) => {
+      try {
+        const child = spawn(openCmd[0]!, openCmd.slice(1), { stdio: 'ignore', detached: true });
+        child.unref();
+      } catch {}
+    }).catch(() => {});
+  }
+});
+server.on('error', (err: any) => {
+  if (err?.code === 'EADDRINUSE') {
+    console.error(`[server] port ${PORT} in use — try PORT=3056 ${process.execPath.includes('music-library') ? './music-library' : 'npm start'}`);
+    process.exit(1);
+  }
+});
