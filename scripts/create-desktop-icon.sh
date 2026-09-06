@@ -45,77 +45,52 @@ EOS
 chmod +x "$COMMAND_PATH"
 info "Created $COMMAND_PATH (double-click in Finder)"
 
-# 2. Create .app bundle (proper macOS app icon)
+# 2. Create .app bundle via AppleScript applet (stay-open, like shoplist/Shoplist.app)
+#    This keeps the icon in Dock and enables Cmd+Q / right-click Quit → runs stop.sh
 APP_BUNDLE="$OUT_DIR/${APP_NAME}.app"
 rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
-# Launcher inside app — keeps terminal hidden, opens browser via binary's auto-open
-cat > "$APP_BUNDLE/Contents/MacOS/${APP_NAME}" <<'EOS'
-#!/bin/bash
-# Resolve repo dir: app is at out/Music Library.app → repo is 1 level up from out
-APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-# When moved to Desktop, APP_DIR is ~/Desktop/Music Library.app/Contents — find repo via stored path
-REPO_PLIST="$APP_DIR/Resources/repo.path"
-if [[ -f "$REPO_PLIST" ]]; then
-  REPO_DIR="$(cat "$REPO_PLIST")"
-else
-  # Fallback: assume relative to app bundle (when copied with out/)
-  REPO_DIR="$(cd "$APP_DIR/../.." && pwd)"
-  if [[ ! -x "$REPO_DIR/out/music-library" ]]; then
-    REPO_DIR="$(cd "$APP_DIR/../../.." && pwd)"
-  fi
-fi
-BIN="$REPO_DIR/out/music-library"
-DIST_SRC="$REPO_DIR/dist"
-DIST_DST="$REPO_DIR/out/dist"
+cat > /tmp/music-library-applet.applescript <<APPLESCRIPT
+on run
+  -- launch server hidden; absolute path embedded at build time (re-run script after moving repo)
+  do shell script quoted form of POSIX path of "${REPO_DIR}/scripts/launch.sh" & " 2>&1 &"
+  delay 1
+  do shell script "sleep 1.5; open http://127.0.0.1:3055/ &> /dev/null &"
+end run
+on quit
+  -- stop server when app is quit (Cmd+Q or Quit from Dock)
+  try
+    do shell script quoted form of POSIX path of "${REPO_DIR}/scripts/stop.sh" & " &> /dev/null"
+  end try
+  continue quit
+end quit
+on open location f
+  run
+end open
+on idle
+  -- keep app alive so it stays in Dock for Quit; check server health
+  return 3600
+end idle
+APPLESCRIPT
 
-# Ensure dist exists next to binary
-if [[ ! -d "$DIST_DST" && -d "$DIST_SRC" ]]; then
-  cp -r "$DIST_SRC" "$DIST_DST" 2>/dev/null || true
-fi
+echo "→ Compiling AppleScript applet (stay-open) ..."
+osacompile -s -o "$APP_BUNDLE" /tmp/music-library-applet.applescript 2>&1
 
-# Clear quarantine on first launch
-if xattr -p com.apple.quarantine "$BIN" &>/dev/null; then
-  xattr -d com.apple.quarantine "$BIN" 2>/dev/null || true
-fi
+# osacompile creates its own Info.plist; merge our values (like shoplist)
+/usr/libexec/PlistBuddy -c "Set :CFBundleName ${APP_NAME}" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${APP_NAME}" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string ${APP_NAME}" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.music-library.app" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.music-library.app" "$APP_BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Delete :LSUIElement" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :LSUIElement bool false" "$APP_BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+# Ensure stay-open
+/usr/libexec/PlistBuddy -c "Delete :OSAAppletStayOpen" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :OSAAppletStayOpen bool true" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+# Show startup screen off (like shoplist)
+ /usr/libexec/PlistBuddy -c "Set :OSAAppletShowStartupScreen bool false" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :OSAAppletShowStartupScreen bool false" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 
-# Start binary detached — ensure correct cwd and data dir when launched from Finder (cwd is "/")
-cd "$REPO_DIR" 2>/dev/null || true
-export MUSIC_DATA_DIR="$REPO_DIR/data"
-# Ensure dist exists next to binary (already handled above)
-PORT="${PORT:-3055}" MUSIC_DATA_DIR="$MUSIC_DATA_DIR" nohup "$BIN" > /tmp/music-library.log 2>&1 &
-sleep 1
-# Fallback open if binary didn't (NO_OPEN set)
-if ! curl -sf "http://localhost:${PORT:-3055}/" &>/dev/null; then
-  sleep 1
-fi
-open "http://localhost:${PORT:-3055}" 2>/dev/null || true
-EOS
-chmod +x "$APP_BUNDLE/Contents/MacOS/${APP_NAME}"
-
-# Store repo path for when app is moved to Desktop
-echo "$REPO_DIR" > "$APP_BUNDLE/Contents/Resources/repo.path"
-
-# Minimal Info.plist
-cat > "$APP_BUNDLE/Contents/Info.plist" <<EOS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key><string>${APP_NAME}</string>
-  <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
-  <key>CFBundleIdentifier</key><string>com.music-library.app</string>
-  <key>CFBundleVersion</key><string>1.0</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>${APP_NAME}</string>
-  <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>LSMinimumSystemVersion</key><string>11.0</string>
-  <key>NSHighResolutionCapable</key><true/>
-  <key>LSUIElement</key><false/>
-</dict>
-</plist>
-EOS
+chmod +x "$APP_BUNDLE/Contents/MacOS/applet" 2>/dev/null || true
 
 # Icon: use custom icon.png if present, else generate music-note icns via built-in tools
 ICON_ICNS="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
@@ -194,10 +169,40 @@ if [[ ! -f "$ICON_ICNS" ]]; then
   plutil -remove CFBundleIconFile "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 fi
 
-# Remove quarantine from app bundle itself
-xattr -dr com.apple.quarantine "$APP_BUNDLE" 2>/dev/null || true
+# 3. Create Quit helper (stops server via /api/shutdown, fallback pkill)
+QUIT_COMMAND="$OUT_DIR/Quit Music Library.command"
+cat > "$QUIT_COMMAND" <<'EOS'
+#!/bin/bash
+PORT="${PORT:-3055}"
+# try graceful shutdown via API first (works even if launched via .app nohup)
+if curl -sf -X POST "http://localhost:$PORT/api/shutdown" >/dev/null 2>&1; then
+  echo "Quit requested — server shutting down on port $PORT"
+  sleep 1
+  exit 0
+fi
+# fallback: kill by binary path
+if pkill -f "out/music-library" 2>/dev/null; then
+  echo "Server stopped (pkill)"
+  exit 0
+fi
+# last resort: any process on port
+lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
+if curl -sf "http://localhost:$PORT/" >/dev/null 2>&1; then
+  echo "No server found on port $PORT"
+  exit 1
+else
+  echo "Server stopped"
+fi
+EOS
+chmod +x "$QUIT_COMMAND"
+xattr -dr com.apple.quarantine "$QUIT_COMMAND" 2>/dev/null || true
+info "Created $QUIT_COMMAND (double-click to quit)"
 
-info "Created $APP_BUNDLE (double-click to launch)"
+# Clear quarantine, touch (like shoplist)
+xattr -cr "$APP_BUNDLE" 2>/dev/null || true
+touch "$APP_BUNDLE" 2>/dev/null || true
+
+info "Created $APP_BUNDLE (double-click to launch) — stay-open, Quit from Dock/Cmd+Q"
 echo ""
 echo "Install options:"
 echo "  1. Run from out/: open \"$APP_BUNDLE\"  or  open \"$COMMAND_PATH\""
@@ -205,5 +210,5 @@ echo "  2. Drag to Desktop: cp -r \"$APP_BUNDLE\" ~/Desktop/"
 echo "  3. Drag to Dock: drag \"$APP_BUNDLE\" to Dock (bottom bar)"
 echo "  4. Add to Applications: cp -r \"$APP_BUNDLE\" /Applications/  (may need sudo)"
 echo ""
-echo "To stop server: pkill -f \"out/music-library\"  or kill via Activity Monitor (search music-library)"
+echo "To stop server: double-click \"Quit Music Library.command\" or: curl -X POST http://localhost:3055/api/shutdown  or  pkill -f \"out/music-library\""
 echo "Logs: tail -f /tmp/music-library.log"

@@ -1327,6 +1327,21 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    if ((url.pathname === '/api/shutdown' || url.pathname === '/api/quit') && req.method === 'POST') {
+      // only allow from localhost (applet quit button + helper script) — same as shoplist /api/quit
+      const remote = (req.socket as any)?.remoteAddress as string | undefined;
+      const isLocal = !remote || remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+      if (!isLocal) return json(res, 403, { error: 'quit only allowed from localhost' });
+      json(res, 200, { ok: true, shuttingDown: true });
+      // graceful shutdown after response flushed (shoplist uses 300ms; use 150ms)
+      setTimeout(() => {
+        try { server.close(() => process.exit(0)); } catch { process.exit(0); }
+        // force exit if close hangs
+        setTimeout(() => process.exit(0), 1500).unref();
+      }, 150);
+      return;
+    }
+
     if (url.pathname === '/api/pick-folder' && req.method === 'GET') {
       const picked = await pickFolderNative();
       if (!picked)
