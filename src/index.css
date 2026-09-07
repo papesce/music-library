@@ -1252,9 +1252,23 @@ body {
 }
 .unified-lyrics-body {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.unified-lyrics-body .lyrics-synced,
+.unified-lyrics-body .lyrics-plain {
+  flex: 1;
+  max-height: none !important;
+  height: 0;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
-  min-height: 200px;
+}
+.unified-lyrics-body .lyrics-synced {
+  padding: 8px 12px;
 }
 @media (max-width: 720px) {
   .unified-expanded {
