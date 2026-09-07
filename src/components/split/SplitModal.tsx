@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Track } from '../../types/api';
 import { Waveform, type WaveformHandle } from './Waveform';
 import { SegmentList } from './SegmentList';
-import { DetectControls } from './DetectControls';
 import { SplitSegmentEditor, type SegmentMeta } from './SplitSegmentEditor';
 import { api } from '../../api';
 import { formatMs } from '../../lib/format';
@@ -347,19 +346,12 @@ export function SplitModal({
             onReadyChange={setWaveReady}
             onExitFocus={handleExitFocus}
             onCursorChange={setAbsCursorMs}
-          />
-        </div>
-
-        <div style={{ flexShrink: 0, marginBottom: 12 }}>
-          <DetectControls
             minSilenceMs={minSilenceMs}
             setMinSilenceMs={setMinSilenceMs}
             threshDb={threshDb}
             setThreshDb={setThreshDb}
             detecting={detecting}
             onDetect={handleDetect}
-            segmentCount={splitPoints.length - 1}
-            waveReady={waveReady}
           />
         </div>
 

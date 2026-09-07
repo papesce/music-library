@@ -21,6 +21,13 @@ interface Props {
   onSeekPause?: () => void;
   onExitFocus?: () => void;
   onCursorChange?: (ms: number | null) => void;
+  // silence detect (moved from DetectControls into waveform toolbar)
+  minSilenceMs?: number;
+  setMinSilenceMs?: (v: number) => void;
+  threshDb?: number;
+  setThreshDb?: (v: number) => void;
+  detecting?: boolean;
+  onDetect?: () => void;
 }
 export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
   {
@@ -37,6 +44,12 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     onSeekPause,
     onExitFocus,
     onCursorChange,
+    minSilenceMs,
+    setMinSilenceMs,
+    threshDb,
+    setThreshDb,
+    detecting,
+    onDetect,
   }: Props,
   ref
 ) {
@@ -774,6 +787,17 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
         >
           {zoom > 1 ? 'scroll →' : 'Ctrl+scroll to zoom'}
         </span>
+        {onDetect && (
+          <WaveformDetectSlot
+            minSilenceMs={minSilenceMs ?? 700}
+            setMinSilenceMs={setMinSilenceMs ?? (() => {})}
+            threshDb={threshDb ?? -50}
+            setThreshDb={setThreshDb ?? (() => {})}
+            detecting={!!detecting}
+            onDetect={onDetect}
+            disabled={!ready}
+          />
+        )}
         <button
           onClick={() => setAutoScroll((v: boolean) => !v)}
           className="btn"
@@ -785,3 +809,105 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     </div>
   );
 });
+
+function WaveformDetectSlot({
+  minSilenceMs,
+  setMinSilenceMs,
+  threshDb,
+  setThreshDb,
+  detecting,
+  onDetect,
+  disabled,
+}: {
+  minSilenceMs: number;
+  setMinSilenceMs: (v: number) => void;
+  threshDb: number;
+  setThreshDb: (v: number) => void;
+  detecting: boolean;
+  onDetect: () => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+      <button
+        className="btn"
+        onClick={() => setOpen(v => !v)}
+        title="Tune silence detection (min ms / threshold dB)"
+        aria-expanded={open}
+        style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      >
+        ⚙︎ {minSilenceMs}ms · {threshDb}dB
+      </button>
+      <button
+        className="btn btn-primary"
+        onClick={onDetect}
+        disabled={disabled || detecting}
+        style={{ padding: '4px 10px', fontSize: 11, opacity: disabled ? 0.6 : 1 }}
+      >
+        {detecting ? 'Detecting…' : 'Auto-detect'}
+      </button>
+      {open && (
+        <div
+          className="glass"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            right: 0,
+            padding: 10,
+            borderRadius: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            minWidth: 220,
+            zIndex: 5,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Min silence
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="number"
+                  value={minSilenceMs}
+                  onChange={e => setMinSilenceMs(Number(e.target.value) || 0)}
+                  style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 12 }}
+                />
+                <span style={{ fontSize: 11, textTransform: 'none', fontWeight: 400 }}>ms</span>
+              </span>
+            </label>
+            <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Thresh
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="number"
+                  value={threshDb}
+                  onChange={e => setThreshDb(Number(e.target.value) || 0)}
+                  style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 12 }}
+                />
+                <span style={{ fontSize: 11, textTransform: 'none', fontWeight: 400 }}>dB</span>
+              </span>
+            </label>
+          </div>
+          <span className="muted" style={{ fontSize: 10, lineHeight: 1.4 }}>Drag red markers, click waveform to place cursor, S to split</span>
+        </div>
+      )}
+    </div>
+  );
+}
