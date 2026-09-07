@@ -107,6 +107,13 @@ function initSchema(database: DatabaseSync) {
       )`
     );
   } catch {}
+  // migrate: add segments column for per-track metadata + lyrics draft
+  try {
+    const cols = database.prepare(`PRAGMA table_info(split_drafts)`).all() as any[];
+    if (!cols.some(c => c.name === 'segments')) {
+      database.exec(`ALTER TABLE split_drafts ADD COLUMN segments TEXT`);
+    }
+  } catch {}
 }
 
 function migrateFromJsonIfNeeded(database: DatabaseSync) {
@@ -520,10 +527,20 @@ export function getTrackByPath(filePath: string): Track | null {
 }
 
 // --- Split drafts (persist work-in-progress split decisions across restarts) ---
+export type SegmentDraft = {
+  title?: string;
+  artist?: string;
+  album?: string;
+  genre?: string;
+  year?: string;
+  lyrics?: string;
+  lyricsSource?: string;
+};
 export type SplitDraft = {
   filePath: string;
   splitPoints: number[];
   segmentTitles: string[];
+  segments?: SegmentDraft[];
   updatedAt: string;
 };
 
@@ -533,10 +550,18 @@ export function getSplitDraft(filePath: string): SplitDraft | null {
   const row = d.prepare('SELECT * FROM split_drafts WHERE filePath = ?').get(resolved) as any;
   if (!row) return null;
   try {
+    let segments: SegmentDraft[] | undefined;
+    if (row.segments) {
+      try {
+        const parsed = JSON.parse(row.segments);
+        if (Array.isArray(parsed)) segments = parsed;
+      } catch {}
+    }
     return {
       filePath: row.filePath,
       splitPoints: JSON.parse(row.splitPoints),
       segmentTitles: JSON.parse(row.segmentTitles),
+      segments,
       updatedAt: row.updatedAt,
     };
   } catch {
@@ -547,17 +572,18 @@ export function getSplitDraft(filePath: string): SplitDraft | null {
 export function setSplitDraft(
   filePath: string,
   splitPoints: number[],
-  segmentTitles: string[]
+  segmentTitles: string[],
+  segments?: SegmentDraft[]
 ): SplitDraft {
   const d = getDb();
   const resolved = resolve(filePath);
   const now = new Date().toISOString();
   d.prepare(
-    `INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, updatedAt)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(filePath) DO UPDATE SET splitPoints=excluded.splitPoints, segmentTitles=excluded.segmentTitles, updatedAt=excluded.updatedAt`
-  ).run(resolved, JSON.stringify(splitPoints), JSON.stringify(segmentTitles), now);
-  return { filePath: resolved, splitPoints, segmentTitles, updatedAt: now };
+    `INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, segments, updatedAt)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(filePath) DO UPDATE SET splitPoints=excluded.splitPoints, segmentTitles=excluded.segmentTitles, segments=excluded.segments, updatedAt=excluded.updatedAt`
+  ).run(resolved, JSON.stringify(splitPoints), JSON.stringify(segmentTitles), segments ? JSON.stringify(segments) : null, now);
+  return { filePath: resolved, splitPoints, segmentTitles, segments, updatedAt: now };
 }
 
 export function deleteSplitDraft(filePath: string): boolean {
@@ -618,12 +644,22 @@ export function renameTrackPath(oldPath: string, newPath: string): Track | null 
 export function getAllSplitDrafts(): SplitDraft[] {
   const d = getDb();
   const rows = d.prepare('SELECT * FROM split_drafts ORDER BY filePath').all() as any[];
-  return rows.map(r => ({
-    filePath: r.filePath,
-    splitPoints: JSON.parse(r.splitPoints),
-    segmentTitles: JSON.parse(r.segmentTitles),
-    updatedAt: r.updatedAt,
-  }));
+  return rows.map(r => {
+    let segments: SegmentDraft[] | undefined;
+    if (r.segments) {
+      try {
+        const p = JSON.parse(r.segments);
+        if (Array.isArray(p)) segments = p;
+      } catch {}
+    }
+    return {
+      filePath: r.filePath,
+      splitPoints: JSON.parse(r.splitPoints),
+      segmentTitles: JSON.parse(r.segmentTitles),
+      segments,
+      updatedAt: r.updatedAt,
+    };
+  });
 }
 
 export function setAllSplitDrafts(drafts: SplitDraft[]) {
@@ -632,13 +668,14 @@ export function setAllSplitDrafts(drafts: SplitDraft[]) {
   try {
     d.prepare('DELETE FROM split_drafts').run();
     const stmt = d.prepare(
-      'INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, updatedAt) VALUES (?, ?, ?, ?)'
+      'INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, segments, updatedAt) VALUES (?, ?, ?, ?, ?)'
     );
     for (const dr of drafts)
       stmt.run(
         resolve(dr.filePath),
         JSON.stringify(dr.splitPoints),
         JSON.stringify(dr.segmentTitles),
+        dr.segments ? JSON.stringify(dr.segments) : null,
         dr.updatedAt
       );
     d.exec('COMMIT');

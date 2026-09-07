@@ -55,12 +55,16 @@ export function SplitSegmentEditor({
   meta,
   onChange,
   sourceFilePath,
+  startMs,
+  endMs,
   onLyricsChange,
 }: {
   index: number;
   meta: SegmentMeta;
   onChange: (next: SegmentMeta) => void;
   sourceFilePath: string;
+  startMs?: number;
+  endMs?: number;
   onLyricsChange?: (lyrics: string, source: string) => void;
 }) {
   const [lyricsDetecting, setLyricsDetecting] = useState(false);
@@ -138,12 +142,14 @@ export function SplitSegmentEditor({
     setLyricsError('');
     try {
       const model = source === 'whisper' || source === 'auto' ? whisperModel : 'base';
+      const isSlice = Number.isFinite(startMs) && Number.isFinite(endMs);
       const r = await api.detectLyrics(sourceFilePath, {
         source,
         model,
         artist: meta.artist.trim(),
         title: meta.title.trim(),
         album: meta.album.trim(),
+        ...(isSlice ? { start_ms: startMs, end_ms: endMs } : {}),
       });
       const text = r.lrc || r.syncedLyrics || r.plainLyrics || '';
       onChange({ ...meta, lyrics: text, lyricsSource: r.source });
@@ -206,7 +212,7 @@ export function SplitSegmentEditor({
           <button className="btn" onClick={handleLyricsGoogle} disabled={!selection} style={{ padding: '4px 8px', fontSize: 11 }}>{lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}</button>
         </div>
         {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
-        <span className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Lyrics are stored per-segment draft and written on export as <code>.lrc</code> next to the sliced file + USLT. Detect currently uses source file + your Artist/Title hints (slice-aware whisper to follow).</span>
+        <span className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Lyrics are stored per-segment draft and written on export as <code>.lrc</code> next to the sliced file + USLT. Whisper is slice-aware {Number.isFinite(startMs) ? `(${Math.round((startMs as number)/1000)}s→${Math.round((endMs as number)/1000)}s)` : ''}.</span>
       </div>
     </div>
   );

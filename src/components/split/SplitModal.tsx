@@ -51,6 +51,21 @@ export function SplitModal({
         if (pts.length >= 2) {
           setSplitPoints(pts);
           setSegmentTitles(draft.segmentTitles ?? pts.slice(0, -1).map(() => ''));
+          if (Array.isArray(draft.segments) && draft.segments.length) {
+            const metas: SegmentMeta[] = pts.slice(0, -1).map((_, i) => {
+              const s: any = draft.segments![i] ?? {};
+              return {
+                title: String(s.title ?? draft.segmentTitles?.[i] ?? ''),
+                artist: String(s.artist ?? track.artist ?? 'Unknown'),
+                album: String(s.album ?? track.album ?? 'Unknown'),
+                genre: String(s.genre ?? track.genre ?? 'Unknown'),
+                year: String(s.year ?? (track.year ? String(track.year) : '')),
+                lyrics: String(s.lyrics ?? ''),
+                lyricsSource: String(s.lyricsSource ?? ''),
+              };
+            });
+            setSegmentMetas(metas);
+          }
           setDraftRestored(true);
         }
       } catch {
@@ -76,14 +91,14 @@ export function SplitModal({
     const t = setTimeout(async () => {
       setDraftSaving(true);
       try {
-        await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles);
+        await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles, segmentMetas);
       } catch {
       } finally {
         setDraftSaving(false);
       }
     }, 600);
     return () => clearTimeout(t);
-  }, [splitPoints, segmentTitles, draftLoaded, track.filePath]);
+  }, [splitPoints, segmentTitles, segmentMetas, draftLoaded, track.filePath]);
 
   const handleDetect = useCallback(async () => {
     setDetecting(true);
@@ -206,6 +221,7 @@ export function SplitModal({
       await api.deleteSplitDraft(track.filePath);
     } catch {}
     setSegmentTitles([]);
+    setSegmentMetas([]);
     setSplitPoints(durationMs ? [0, durationMs] : [0, 60000]);
     setDraftRestored(false);
     setFocusedIndex(null);
@@ -383,6 +399,8 @@ export function SplitModal({
                 index={focusedIndex}
                 meta={segmentMetas[focusedIndex]!}
                 sourceFilePath={track.filePath}
+                startMs={splitPoints[focusedIndex] ?? 0}
+                endMs={splitPoints[focusedIndex + 1] ?? durationMs}
                 onChange={next => {
                   setSegmentMetas(prev => {
                     const copy = [...prev];

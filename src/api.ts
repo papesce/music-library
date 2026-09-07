@@ -91,20 +91,27 @@ export const api = {
         filePath: string;
         splitPoints: number[];
         segmentTitles: string[];
+        segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[];
         updatedAt: string;
       } | null;
     }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`),
-  saveSplitDraft: (filePath: string, splitPoints: number[], segmentTitles: string[]) =>
+  saveSplitDraft: (
+    filePath: string,
+    splitPoints: number[],
+    segmentTitles: string[],
+    segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[]
+  ) =>
     req<{
       draft: {
         filePath: string;
         splitPoints: number[];
         segmentTitles: string[];
+        segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[];
         updatedAt: string;
       };
     }>('/api/split/draft', {
       method: 'PUT',
-      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles }),
+      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles, segments }),
     }),
   deleteSplitDraft: (filePath: string) =>
     req<{ ok: boolean }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`, {
@@ -132,6 +139,8 @@ export const api = {
       artist?: string;
       title?: string;
       album?: string;
+      start_ms?: number;
+      end_ms?: number;
     }
   ) =>
     req<{

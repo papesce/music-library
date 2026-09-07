@@ -1889,7 +1889,36 @@ const server = createServer(async (req, res) => {
       );
       if (sorted.length < 2) return json(res, 400, { error: 'invalid split points' });
       const titles = sorted.slice(0, -1).map((_, i) => String(segmentTitles[i] ?? ''));
-      const draft = setSplitDraft(resolved, sorted, titles);
+      // full per-segment metadata (backward compat with segmentTitles)
+      let segments: any[] | undefined;
+      if (Array.isArray(body.segments) && body.segments.length && typeof body.segments[0] === 'object') {
+        segments = sorted.slice(0, -1).map((_, i) => {
+          const s = body.segments[i] ?? {};
+          return {
+            title: String(s.title ?? titles[i] ?? ''),
+            artist: s.artist ? String(s.artist) : undefined,
+            album: s.album ? String(s.album) : undefined,
+            genre: s.genre ? String(s.genre) : undefined,
+            year: s.year ? String(s.year) : undefined,
+            lyrics: s.lyrics ? String(s.lyrics) : undefined,
+            lyricsSource: s.lyricsSource ? String(s.lyricsSource) : undefined,
+          };
+        });
+      } else if (Array.isArray(body.segmentMetas)) {
+        segments = sorted.slice(0, -1).map((_, i) => {
+          const s = body.segmentMetas[i] ?? {};
+          return {
+            title: String(s.title ?? titles[i] ?? ''),
+            artist: s.artist ? String(s.artist) : undefined,
+            album: s.album ? String(s.album) : undefined,
+            genre: s.genre ? String(s.genre) : undefined,
+            year: s.year ? String(s.year) : undefined,
+            lyrics: s.lyrics ? String(s.lyrics) : undefined,
+            lyricsSource: s.lyricsSource ? String(s.lyricsSource) : undefined,
+          };
+        });
+      }
+      const draft = setSplitDraft(resolved, sorted, titles, segments);
       return json(res, 200, { draft });
     }
     if (url.pathname === '/api/split/draft' && req.method === 'DELETE') {
@@ -1970,9 +1999,26 @@ const server = createServer(async (req, res) => {
         if (source === 'lrclib')
           return json(res, 404, { error: 'No lyrics on LRClib — try source: whisper or auto' });
       }
-      // fallback to whisper
+      // fallback to whisper (slice-aware if start_ms/end_ms provided)
+      let whisperPath = resolved;
+      let tmpSlice: string | null = null;
+      const sMs = Number(body.start_ms ?? body.startMs);
+      const eMs = Number(body.end_ms ?? body.endMs);
+      const needSlice = Number.isFinite(sMs) && Number.isFinite(eMs) && eMs > sMs && eMs - sMs >= 500 && source !== 'lrclib';
+      if (needSlice) {
+        try {
+          tmpSlice = join('/tmp', `ml-slice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}.mp3`);
+          await sliceSegment(resolved, sMs, eMs, tmpSlice);
+          whisperPath = tmpSlice;
+        } catch (e: any) {
+          if (tmpSlice) try { await fs.unlink(tmpSlice); } catch {}
+          tmpSlice = null;
+          whisperPath = resolved;
+        }
+      }
       try {
-        const w = await transcribeWithWhisper(resolved, model, language);
+        const w = await transcribeWithWhisper(whisperPath, model, language);
+        if (tmpSlice) try { await fs.unlink(tmpSlice); } catch {}
         return json(res, 200, {
           source: 'whisper',
           model,
@@ -1982,6 +2028,7 @@ const server = createServer(async (req, res) => {
           synced: w.synced,
         });
       } catch (e: any) {
+        if (tmpSlice) try { await fs.unlink(tmpSlice); } catch {}
         if ((e as any).code === 'WHISPER_NOT_FOUND')
           return json(res, 503, {
             error: e.message,
