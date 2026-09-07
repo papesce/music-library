@@ -19,6 +19,7 @@ interface Props {
   onReadyChange?: (ready: boolean) => void;
   onTogglePlay?: () => void;
   onSeekPause?: () => void;
+  onExitFocus?: () => void;
 }
 export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
   {
@@ -33,6 +34,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     onReadyChange,
     onTogglePlay,
     onSeekPause,
+    onExitFocus,
   }: Props,
   ref
 ) {
@@ -527,59 +529,163 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <button
-          onClick={() => {
-            const ws = wsRef.current;
-            if (!ws) return;
-            const cur = ws.getCurrentTime();
-            const next = Math.max(0, cur - 5);
-            ws.seekTo(next / ((isolatedDuration || 1) / 1000));
-            try {
-              ws.pause();
-            } catch {}
-            setCursorMs(Math.round(next * 1000));
-            onSeekPause?.();
-          }}
-          disabled={!ready}
-          className="btn"
-          style={{ padding: '6px 10px', fontSize: 12 }}
-        >
-          ◀ 5s
-        </button>
-        <button
-          onClick={() => {
-            if (onTogglePlay) onTogglePlay();
-            else
+        {(() => {
+          const trackCount = Math.max(0, splitPoints.length - 1);
+          const multi = trackCount > 1;
+          if (multi) {
+            const getGlobalCursor = (): number => {
+              if (cursorMs === null) return splitPoints[0] ?? 0;
+              if (isFocused) return focusStart + cursorMs;
+              return cursorMs;
+            };
+            const getCurrentIdx = (): number => {
+              const cur = getGlobalCursor();
+              let idx = splitPoints.findIndex(
+                (_, i) => i < splitPoints.length - 1 && cur >= splitPoints[i]! && cur < splitPoints[i + 1]!
+              );
+              if (idx === -1) {
+                const last = splitPoints[splitPoints.length - 1] ?? durationMs;
+                if (cur >= last) idx = trackCount - 1;
+                else idx = 0;
+              }
+              return Math.max(0, Math.min(trackCount - 1, idx));
+            };
+            const curIdx = getCurrentIdx();
+            const atFirst = curIdx === 0;
+            const atLast = curIdx === trackCount - 1;
+            // if isolated, Prev/Next would require exiting focus - disable to keep UX simple
+            const navDisabled = isFocused;
+            const seekToIdx = (idx: number) => {
+              if (!ready) return;
+              if (isFocused) {
+                onExitFocus?.();
+                return;
+              }
+              const ws = wsRef.current;
+              if (!ws) return;
+              const target = splitPoints[idx] ?? 0;
+              const dur = durationMs || isolatedDuration || 1;
               try {
-                wsRef.current?.playPause();
+                ws.seekTo(target / dur);
+                ws.pause();
               } catch {}
-          }}
-          disabled={!ready}
-          className="btn btn-primary"
-          style={{ padding: '6px 14px', fontSize: 12 }}
-        >
-          {playing ? '⏸ Pause' : '▶ Play'}
-        </button>
-        <button
-          onClick={() => {
-            const ws = wsRef.current;
-            if (!ws) return;
-            const dur = (isolatedDuration || 1) / 1000;
-            const cur = ws.getCurrentTime();
-            const next = Math.min(dur, cur + 5);
-            ws.seekTo(Math.min(1, next / dur));
-            try {
-              ws.pause();
-            } catch {}
-            setCursorMs(Math.round(next * 1000));
-            onSeekPause?.();
-          }}
-          disabled={!ready}
-          className="btn"
-          style={{ padding: '6px 10px', fontSize: 12 }}
-        >
-          5s ▶
-        </button>
+              setCursorMs(target);
+              onSeekPause?.();
+            };
+            const handlePrev = () => {
+              if (navDisabled) {
+                onExitFocus?.();
+                return;
+              }
+              const cur = getGlobalCursor();
+              const segStart = splitPoints[curIdx] ?? 0;
+              // if >700ms inside segment, go to its start, else previous segment
+              const targetIdx = cur - segStart > 700 ? curIdx : Math.max(0, curIdx - 1);
+              seekToIdx(targetIdx);
+            };
+            const handleNext = () => {
+              if (navDisabled) {
+                onExitFocus?.();
+                return;
+              }
+              const targetIdx = Math.min(trackCount - 1, curIdx + 1);
+              seekToIdx(targetIdx);
+            };
+            return (
+              <>
+                <button
+                  onClick={handlePrev}
+                  disabled={!ready || (isFocused ? false : atFirst && getGlobalCursor() - (splitPoints[curIdx] ?? 0) <= 700)}
+                  className="btn"
+                  title={isFocused ? 'Exit focus to navigate' : 'Previous segment'}
+                  style={{ padding: '6px 10px', fontSize: 12 }}
+                >
+                  ◀ Prev
+                </button>
+                <button
+                  onClick={() => {
+                    if (onTogglePlay) onTogglePlay();
+                    else
+                      try {
+                        wsRef.current?.playPause();
+                      } catch {}
+                  }}
+                  disabled={!ready}
+                  className="btn btn-primary"
+                  style={{ padding: '6px 14px', fontSize: 12 }}
+                >
+                  {playing ? '⏸ Pause' : '▶ Play'}
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={!ready || (isFocused ? false : atLast)}
+                  className="btn"
+                  title={isFocused ? 'Exit focus to navigate' : 'Next segment'}
+                  style={{ padding: '6px 10px', fontSize: 12 }}
+                >
+                  Next ▶
+                </button>
+              </>
+            );
+          }
+          return (
+            <>
+              <button
+                onClick={() => {
+                  const ws = wsRef.current;
+                  if (!ws) return;
+                  const cur = ws.getCurrentTime();
+                  const next = Math.max(0, cur - 5);
+                  ws.seekTo(next / ((isolatedDuration || 1) / 1000));
+                  try {
+                    ws.pause();
+                  } catch {}
+                  setCursorMs(Math.round(next * 1000));
+                  onSeekPause?.();
+                }}
+                disabled={!ready}
+                className="btn"
+                style={{ padding: '6px 10px', fontSize: 12 }}
+              >
+                ◀ 5s
+              </button>
+              <button
+                onClick={() => {
+                  if (onTogglePlay) onTogglePlay();
+                  else
+                    try {
+                      wsRef.current?.playPause();
+                    } catch {}
+                }}
+                disabled={!ready}
+                className="btn btn-primary"
+                style={{ padding: '6px 14px', fontSize: 12 }}
+              >
+                {playing ? '⏸ Pause' : '▶ Play'}
+              </button>
+              <button
+                onClick={() => {
+                  const ws = wsRef.current;
+                  if (!ws) return;
+                  const dur = (isolatedDuration || 1) / 1000;
+                  const cur = ws.getCurrentTime();
+                  const next = Math.min(dur, cur + 5);
+                  ws.seekTo(Math.min(1, next / dur));
+                  try {
+                    ws.pause();
+                  } catch {}
+                  setCursorMs(Math.round(next * 1000));
+                  onSeekPause?.();
+                }}
+                disabled={!ready}
+                className="btn"
+                style={{ padding: '6px 10px', fontSize: 12 }}
+              >
+                5s ▶
+              </button>
+            </>
+          );
+        })()}
         {ready && onAddSplit && (
           <button
             disabled={!canSplit}

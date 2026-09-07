@@ -271,6 +271,7 @@ export function SplitModal({
             ref={waveformRef}
             focusedIndex={focusedIndex}
             onReadyChange={setWaveReady}
+            onExitFocus={handleExitFocus}
           />
         </div>
 
