@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Track } from '../../types/api.d';
 import { coverUrl } from '../../lib/path';
 import { formatDuration } from '../../lib/format';
