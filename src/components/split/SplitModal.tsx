@@ -450,8 +450,8 @@ export function SplitModal({
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={onClose} disabled={exporting}>
-              Cancel
+            <button className="btn" onClick={onClose} disabled={exporting} title="Close — draft is auto-saved">
+              Close
             </button>
             <button
               className="btn btn-primary"
