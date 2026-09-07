@@ -279,7 +279,7 @@ export function SplitModal({
 
   return (
     <>
-      <div className="drawer-backdrop" onClick={onClose} style={{ zIndex: 70 }} />
+      <div className="drawer-backdrop" style={{ zIndex: 70 }} />
       <div
         className="glass modal"
         style={{

@@ -13,7 +13,7 @@ export function Modal({
 }) {
   return (
     <>
-      <div className="drawer-backdrop" onClick={onClose} style={{ zIndex: zIndex - 1 }} />
+      <div className="drawer-backdrop" style={{ zIndex: zIndex - 1 }} />
       <div className="glass modal" style={{ zIndex, width }}>
         {children}
       </div>
