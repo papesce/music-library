@@ -98,6 +98,28 @@ on quit
   end try
   continue quit
 end quit
+on reopen
+  -- Dock click when stay-open app already running: reopen browser tab
+  -- If server healthy just open, else relaunch (handles crash)
+  try
+    do shell script "if curl -sf http://127.0.0.1:3055/api/config >/dev/null 2>&1; then open \"http://localhost:3055/\"; exit 0; else exit 1; fi"
+  on error
+    -- server not responding — relaunch via same logic as on run
+    set appPath2 to POSIX path of (path to me)
+    set embeddedLauncher2 to appPath2 & "Contents/Resources/launch-embedded.sh"
+    set repoLauncher2 to "${REPO_DIR}/scripts/launch.sh"
+    try
+      tell application "System Events" to set existsEmbedded2 to exists file embeddedLauncher2
+    on error
+      set existsEmbedded2 to false
+    end try
+    if existsEmbedded2 then
+      do shell script quoted form of embeddedLauncher2 & " 2>&1 &"
+    else
+      do shell script quoted form of repoLauncher2 & " 2>&1 &"
+    end if
+  end try
+end reopen
 on open location f
   run
 end open location

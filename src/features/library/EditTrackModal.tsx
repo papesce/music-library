@@ -122,6 +122,7 @@ export function EditTrackModal({
   const [lyricsSaved, setLyricsSaved] = useState(false);
   const [whisperModel, setWhisperModel] = useState<WhisperModel>('base');
   const [lyricsCopied, setLyricsCopied] = useState(false);
+  const [lyricsMode, setLyricsMode] = useState<'edit' | 'preview'>('edit');
   const lyricsTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [lyricsSelection, setLyricsSelection] = useState('');
 
@@ -1099,34 +1100,86 @@ export function EditTrackModal({
                     : 'no lyrics yet'}
               </span>
             </div>
-            <textarea
-              ref={lyricsTextareaRef}
-              value={lyricsPreview}
-              onChange={e => {
-                setLyricsPreview(e.target.value);
-                setLyricsSaved(false);
-                setTimeout(updateLyricsSelection, 0);
-              }}
-              onSelect={updateLyricsSelection}
-              onKeyUp={updateLyricsSelection}
-              onMouseUp={updateLyricsSelection}
-              placeholder="[00:12.00]Lyric line — or plain lyrics&#10;Select 3–4 lines and use Google lyrics to identify the track."
-              rows={10}
+            {/* Edit / Preview switch — avoids stacking editor and preview */}
+            <div
+              role="tablist"
+              aria-label="Lyrics mode"
               style={{
-                width: '100%',
-                fontFamily: 'ui-monospace, monospace',
-                fontSize: 12,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: '1px solid var(--border)',
+                display: 'flex',
+                gap: 4,
+                padding: 3,
+                borderRadius: 999,
                 background: 'rgba(255,255,255,0.06)',
-                color: 'var(--text)',
-                resize: 'vertical',
-                outline: 'none',
-                minHeight: 160,
+                border: '1px solid var(--border-soft)',
+                width: 'fit-content',
               }}
-            />
-            {lyricsDetecting && (
+            >
+              {(['edit', 'preview'] as const).map(m => {
+                const active = lyricsMode === m;
+                return (
+                  <button
+                    key={m}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setLyricsMode(m)}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: 999,
+                      border: 'none',
+                      background: active ? 'rgba(255,255,255,0.95)' : 'transparent',
+                      color: active ? '#0a0a14' : 'var(--muted)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {m === 'edit' ? 'Edit' : 'Preview'}
+                  </button>
+                );
+              })}
+            </div>
+            {lyricsMode === 'edit' ? (
+              <textarea
+                ref={lyricsTextareaRef}
+                value={lyricsPreview}
+                onChange={e => {
+                  setLyricsPreview(e.target.value);
+                  setLyricsSaved(false);
+                  setTimeout(updateLyricsSelection, 0);
+                }}
+                onSelect={updateLyricsSelection}
+                onKeyUp={updateLyricsSelection}
+                onMouseUp={updateLyricsSelection}
+                placeholder="[00:12.00]Lyric line — or plain lyrics&#10;Select 3–4 lines and use Google lyrics to identify the track."
+                rows={10}
+                style={{
+                  width: '100%',
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: 12,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'rgba(255,255,255,0.06)',
+                  color: 'var(--text)',
+                  resize: 'vertical',
+                  outline: 'none',
+                  minHeight: 160,
+                }}
+              />
+            ) : lyricsPreview.trim() ? (
+              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-soft)', background: 'rgba(0,0,0,0.25)' }}>
+                <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Preview {playback?.isActive ? '· synced to playback' : '· static'}</span>
+                  {playback?.isActive && <span className="muted">{(playback.currentTime ?? 0).toFixed(1)}s</span>}
+                </div>
+                <LyricsPreview lrc={lyricsPreview} currentTimeSec={playback?.isActive ? (playback.currentTime ?? 0) : 0} maxHeight={260} />
+              </div>
+            ) : (
+              <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--border-soft)', borderRadius: 10, background: 'rgba(0,0,0,0.15)' }}>
+                No lyrics to preview — switch to Edit to add text or Detect.
+              </div>
+            )}
+            {lyricsMode === 'edit' && lyricsDetecting && (
               <div
                 style={{
                   display: 'flex',
@@ -1147,128 +1200,123 @@ export function EditTrackModal({
                 </span>
               </div>
             )}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button
-                className="btn"
-                onClick={() => detectLyrics('auto')}
-                disabled={lyricsDetecting || saving}
-                aria-busy={lyricsDetecting}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  borderRadius: 999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                {lyricsDetecting ? (
-                  <>
-                    <span className="btn-spinner" aria-hidden />
-                    <span>Detecting…</span>
-                  </>
-                ) : (
-                  '✨ Detect (auto)'
-                )}
-              </button>
-              <button
-                className="btn"
-                onClick={() => detectLyrics('lrclib')}
-                disabled={lyricsDetecting || saving}
-                style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
-              >
-                LRClib
-              </button>
-              <button
-                className="btn"
-                onClick={() => detectLyrics('whisper')}
-                disabled={lyricsDetecting || saving}
-                style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
-              >
-                Whisper
-              </button>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11,
-                  color: 'var(--muted)',
-                }}
-              >
-                model
-                <select
-                  value={whisperModel}
-                  onChange={e => setWhisperModel(e.target.value as WhisperModel)}
+            {lyricsMode === 'edit' && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  className="btn"
+                  onClick={() => detectLyrics('auto')}
                   disabled={lyricsDetecting || saving}
+                  aria-busy={lyricsDetecting}
                   style={{
-                    padding: '5px 8px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    background: 'rgba(255,255,255,0.06)',
-                    color: 'var(--text)',
-                    fontSize: 11,
-                    outline: 'none',
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    borderRadius: 999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
-                  {WHISPER_MODELS.map(m => (
-                    <option key={m} value={m}>
-                      {m}
-                      {m === 'base' ? ' (default)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <span style={{ flex: 1 }} />
-              {lyricsDirty ? (
-                <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>
-                  • will be saved with Save
-                </span>
-              ) : (
-                <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>
-                  No changes
-                </span>
-              )}
-            </div>
+                  {lyricsDetecting ? (
+                    <>
+                      <span className="btn-spinner" aria-hidden />
+                      <span>Detecting…</span>
+                    </>
+                  ) : (
+                    '✨ Detect (auto)'
+                  )}
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => detectLyrics('lrclib')}
+                  disabled={lyricsDetecting || saving}
+                  style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
+                >
+                  LRClib
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => detectLyrics('whisper')}
+                  disabled={lyricsDetecting || saving}
+                  style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
+                >
+                  Whisper
+                </button>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11,
+                    color: 'var(--muted)',
+                  }}
+                >
+                  model
+                  <select
+                    value={whisperModel}
+                    onChange={e => setWhisperModel(e.target.value as WhisperModel)}
+                    disabled={lyricsDetecting || saving}
+                    style={{
+                      padding: '5px 8px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'var(--text)',
+                      fontSize: 11,
+                      outline: 'none',
+                    }}
+                  >
+                    {WHISPER_MODELS.map(m => (
+                      <option key={m} value={m}>
+                        {m}
+                        {m === 'base' ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span style={{ flex: 1 }} />
+                {lyricsDirty ? (
+                  <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>
+                    • will be saved with Save
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>
+                    No changes
+                  </span>
+                )}
+              </div>
+            )}
             {/* Identify song from lyrics — uses current selection, stripped of timestamps/metadata */}
-            <div
-              style={{
-                display: 'flex',
-                gap: 6,
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                padding: '8px 10px',
-                borderRadius: 10,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid var(--border-soft)',
-              }}
-            >
-              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, minWidth: 120 }}>
-                {lyricsSelection
-                  ? 'Selection ready — search Google to identify track.'
-                  : 'Select lyrics above to enable search.'}
-              </span>
-              <button
-                className="btn"
-                onClick={handleLyricsGoogle}
-                disabled={!lyricsSelection || lyricsDetecting || saving}
-                title={
-                  !lyricsSelection
-                    ? 'Select 3–4 lines in the lyrics above first'
-                    : 'Copy selection (no timestamps) and open Google to identify the track'
-                }
-                style={{ padding: '5px 12px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
+            {lyricsMode === 'edit' && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--border-soft)',
+                }}
               >
+                <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, minWidth: 120 }}>
+                  {lyricsSelection
+                    ? 'Selection ready — search Google to identify track.'
+                    : 'Select lyrics above to enable search.'}
+                </span>
+                <button
+                  className="btn"
+                  onClick={handleLyricsGoogle}
+                  disabled={!lyricsSelection || lyricsDetecting || saving}
+                  title={
+                    !lyricsSelection
+                      ? 'Select 3–4 lines in the lyrics above first'
+                      : 'Copy selection (no timestamps) and open Google to identify the track'
+                  }
+                  style={{ padding: '5px 12px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
+                >
                 {lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}
               </button>
-            </div>
-            {lyricsPreview.trim() && (
-              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-soft)', background: 'rgba(0,0,0,0.25)' }}>
-                <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Preview {playback?.isActive ? '· synced to playback' : '· static'}</span>
-                  {playback?.isActive && <span className="muted">{(playback.currentTime ?? 0).toFixed(1)}s</span>}
-                </div>
-                <LyricsPreview lrc={lyricsPreview} currentTimeSec={playback?.isActive ? (playback.currentTime ?? 0) : 0} maxHeight={200} />
               </div>
             )}
             {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}

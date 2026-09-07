@@ -79,6 +79,7 @@ export function SplitSegmentEditor({
   const [copied, setCopied] = useState(false);
   const [whisperModel, setWhisperModel] = useState<WhisperModel>('base');
   const [selection, setSelection] = useState('');
+  const [lyricsMode, setLyricsMode] = useState<'edit' | 'preview'>('edit');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const googleQuery = buildGoogleQuery({
@@ -238,36 +239,63 @@ export function SplitSegmentEditor({
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>Lyrics {meta.lyricsSource ? `· ${meta.lyricsSource}` : ''}</span>
             <span className="muted" style={{ fontSize: 11 }}>{meta.lyrics ? `${lyricsLines} lines` : 'no lyrics'}</span>
           </div>
-          <textarea
-            ref={textareaRef}
-            value={meta.lyrics}
-            onChange={e => onChange({ ...meta, lyrics: e.target.value })}
-            onSelect={updateSelection}
-            onKeyUp={updateSelection}
-            onMouseUp={updateSelection}
-            placeholder="[00:12.00]Lyric line — edit before export, will be written as .lrc + USLT"
-            rows={8}
-            style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', minHeight: 120 }}
-          />
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>{lyricsDetecting ? 'Detecting…' : '✨ Detect (auto)'}</button>
-            <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>LRClib</button>
-            <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>Whisper</button>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>model
-              <select value={whisperModel} onChange={e => setWhisperModel(e.target.value as WhisperModel)} disabled={lyricsDetecting} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 11 }}>
-                {WHISPER_MODELS.map(m => <option key={m} value={m}>{m}{m === 'base' ? ' (default)' : ''}</option>)}
-              </select>
-            </label>
-            <span style={{ flex: 1 }} />
-            <button className="btn" onClick={handleLyricsGoogle} disabled={!selection} style={{ padding: '4px 8px', fontSize: 11 }}>{lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}</button>
+          <div
+            role="tablist"
+            aria-label="Lyrics mode"
+            style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)', width: 'fit-content' }}
+          >
+            {(['edit', 'preview'] as const).map(m => {
+              const active = lyricsMode === m;
+              return (
+                <button
+                  key={m}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setLyricsMode(m)}
+                  style={{ padding: '4px 12px', borderRadius: 999, border: 'none', background: active ? 'rgba(255,255,255,0.95)' : 'transparent', color: active ? '#0a0a14' : 'var(--muted)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {m === 'edit' ? 'Edit' : 'Preview'}
+                </button>
+              );
+            })}
           </div>
-          {meta.lyrics.trim() && (
+          {lyricsMode === 'edit' ? (
+            <textarea
+              ref={textareaRef}
+              value={meta.lyrics}
+              onChange={e => onChange({ ...meta, lyrics: e.target.value })}
+              onSelect={updateSelection}
+              onKeyUp={updateSelection}
+              onMouseUp={updateSelection}
+              placeholder="[00:12.00]Lyric line — edit before export, will be written as .lrc + USLT"
+              rows={8}
+              style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', minHeight: 120 }}
+            />
+          ) : meta.lyrics.trim() ? (
             <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-soft)', background: 'rgba(0,0,0,0.25)' }}>
               <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between' }}>
                 <span>Preview · synced to waveform</span>
                 <span className="muted">{(currentTimeSec ?? 0).toFixed(1)}s</span>
               </div>
-              <LyricsPreview lrc={meta.lyrics} currentTimeSec={currentTimeSec ?? 0} maxHeight={160} />
+              <LyricsPreview lrc={meta.lyrics} currentTimeSec={currentTimeSec ?? 0} maxHeight={260} />
+            </div>
+          ) : (
+            <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--border-soft)', borderRadius: 10, background: 'rgba(0,0,0,0.15)' }}>
+              No lyrics to preview — switch to Edit to add text or Detect.
+            </div>
+          )}
+          {lyricsMode === 'edit' && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>{lyricsDetecting ? 'Detecting…' : '✨ Detect (auto)'}</button>
+              <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>LRClib</button>
+              <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>Whisper</button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>model
+                <select value={whisperModel} onChange={e => setWhisperModel(e.target.value as WhisperModel)} disabled={lyricsDetecting} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 11 }}>
+                  {WHISPER_MODELS.map(m => <option key={m} value={m}>{m}{m === 'base' ? ' (default)' : ''}</option>)}
+                </select>
+              </label>
+              <span style={{ flex: 1 }} />
+              <button className="btn" onClick={handleLyricsGoogle} disabled={!selection} style={{ padding: '4px 8px', fontSize: 11 }}>{lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}</button>
             </div>
           )}
           {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
