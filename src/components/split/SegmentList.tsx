@@ -195,7 +195,14 @@ export function SegmentList({
         return (
           <div
             key={i}
-            className="glass-soft"
+            className={`glass-soft segment-row${isSkipped ? ' segment-row--skipped' : ''}`}
+            onClick={e => {
+              if (isFocused) return;
+              const target = e.target as HTMLElement;
+              if (target.closest('input, button, label')) return;
+              onFocus?.(i);
+            }}
+            title={!isFocused ? 'Click to focus and edit' : undefined}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -204,9 +211,10 @@ export function SegmentList({
               borderRadius: 12,
               opacity: isSkipped ? 0.55 : 1,
               border: isSkipped ? '1px dashed rgba(255,193,7,0.5)' : undefined,
+              cursor: !isFocused ? 'pointer' : undefined,
             }}
           >
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
               <span
                 style={{
                   fontSize: 12,
@@ -216,13 +224,14 @@ export function SegmentList({
                   background: i % 2 === 0 ? 'rgba(124,92,255,0.2)' : 'rgba(0,212,255,0.15)',
                   borderRadius: 6,
                   padding: '4px 0',
+                  flexShrink: 0,
                 }}
               >
                 {i + 1}
               </span>
               <span
                 className="muted"
-                style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace' }}
+                style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', flexShrink: 0 }}
               >
                 {formatMs(start)} – {formatMs(end)} ({formatMs(end - start)})
               </span>
@@ -236,8 +245,10 @@ export function SegmentList({
                     return n;
                   })
                 }
+                onClick={e => e.stopPropagation()}
                 style={{
                   flex: 1,
+                  minWidth: 0,
                   padding: '7px 10px',
                   borderRadius: 8,
                   border: '1px solid var(--border)',
@@ -246,60 +257,70 @@ export function SegmentList({
                   fontSize: 12,
                 }}
               />
-              <button
-                className="btn"
-                onClick={() => waveformRef.current?.playFrom(start, end)}
-                title="Play segment"
-                style={{ padding: '6px 10px', fontSize: 12 }}
-              >
-                ▶
-              </button>
-              {!isFocused && (
+              <div className={`segment-row-actions${isSkipped || isFocused ? ' segment-row-actions--visible' : ''}`}>
                 <button
                   className="btn"
-                  onClick={() => onFocus?.(i)}
-                  title="Focus this track (zoom, edit solo)"
+                  onClick={e => {
+                    e.stopPropagation();
+                    waveformRef.current?.playFrom(start, end);
+                  }}
+                  title="Play segment"
                   style={{ padding: '6px 10px', fontSize: 12 }}
                 >
-                  ◎ Focus
+                  ▶
                 </button>
-              )}
-              <button
-                className="btn"
-                onClick={() => onRemove(i)}
-                disabled={splitPoints.length <= 2}
-                title="Remove split after this"
-                style={{ padding: '6px 10px', fontSize: 12 }}
-              >
-                ✕
-              </button>
-              <label
-                title={isSkipped ? 'Will be exported again' : 'Skip export — already in library'}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 11,
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  color: isSkipped ? '#ffca28' : 'var(--muted)',
-                  border: isSkipped
-                    ? '1px solid rgba(255,193,7,0.5)'
-                    : '1px solid var(--border-soft)',
-                  background: isSkipped ? 'rgba(255,193,7,0.12)' : 'rgba(255,255,255,0.04)',
-                  borderRadius: 999,
-                  padding: '4px 8px',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSkipped}
-                  onChange={() => onToggleSkip?.(i)}
-                  style={{ accentColor: '#ffca28' }}
-                />
-                {isSkipped ? 'Skipped' : 'Skip'}
-              </label>
+                {!isFocused && (
+                  <button
+                    className="btn"
+                    onClick={e => {
+                      e.stopPropagation();
+                      onFocus?.(i);
+                    }}
+                    title="Focus this track (zoom, edit solo)"
+                    style={{ padding: '6px 10px', fontSize: 12 }}
+                  >
+                    ◎ Focus
+                  </button>
+                )}
+                <button
+                  className="btn"
+                  onClick={e => {
+                    e.stopPropagation();
+                    onRemove(i);
+                  }}
+                  disabled={splitPoints.length <= 2}
+                  title="Remove split after this"
+                  style={{ padding: '6px 10px', fontSize: 12 }}
+                >
+                  ✕
+                </button>
+                <label
+                  title={isSkipped ? 'Will be exported again' : 'Skip export — already in library'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    color: isSkipped ? '#ffca28' : 'var(--muted)',
+                    border: isSkipped ? '1px solid rgba(255,193,7,0.5)' : '1px solid var(--border-soft)',
+                    background: isSkipped ? 'rgba(255,193,7,0.12)' : 'rgba(255,255,255,0.04)',
+                    borderRadius: 999,
+                    padding: '4px 8px',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSkipped}
+                    onChange={() => onToggleSkip?.(i)}
+                    style={{ accentColor: '#ffca28' }}
+                  />
+                  {isSkipped ? 'Skipped' : 'Skip'}
+                </label>
+              </div>
             </div>
             {dupes.length > 0 && (
               <div

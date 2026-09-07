@@ -787,6 +787,38 @@ body {
   gap: 6px;
 }
 
+/* split segment list — hover-reveal actions */
+.segment-row {
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.segment-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.segment-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.segment-row:hover .segment-row-actions,
+.segment-row:focus-within .segment-row-actions,
+.segment-row-actions--visible {
+  opacity: 1;
+}
+.segment-row--skipped .segment-row-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .segment-row-actions {
+    opacity: 1;
+  }
+}
+
 /* form pill */
 .form-pill {
   display: flex;
