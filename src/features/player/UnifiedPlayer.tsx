@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import type { Track } from '../../types/api.d';
 import { coverUrl } from '../../lib/path';
 import { formatDuration } from '../../lib/format';
 import { useLyrics } from './useLyrics';
 import { ArtworkLightbox } from '../../components/ui/ArtworkLightbox';
 import { PlayerActionsMenu } from './PlayerActionsMenu';
+import { LyricsPreview } from '../../components/LyricsPreview';
 import { api } from '../../api';
 
 type Props = {
@@ -39,45 +40,9 @@ function LyricsView({
   synced: { ms: number; text: string }[] | null;
   currentTime: number;
 }) {
-  const activeIdx = (() => {
-    if (!synced) return -1;
-    const ms = currentTime * 1000;
-    let idx = -1;
-    for (let i = 0; i < synced.length; i++)
-      if (ms >= synced[i].ms) idx = i;
-      else break;
-    return idx;
-  })();
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (activeIdx < 0) return;
-    const el = listRef.current?.querySelector(`[data-idx="${activeIdx}"]`);
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [activeIdx]);
-
-  if (!lyrics)
-    return (
-      <div className="muted" style={{ padding: 24, textAlign: 'center' }}>
-        No lyrics — add USLT tag or .lrc file
-      </div>
-    );
-
-  if (synced && synced.length) {
-    return (
-      <div ref={listRef} className="lyrics-synced">
-        {synced.map((s, i) => (
-          <div
-            key={i}
-            data-idx={i}
-            className={`lyric-line ${i === activeIdx ? 'active' : ''} ${i < activeIdx ? 'past' : ''}`}
-          >
-            {s.text || '♪'}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return <div className="lyrics-plain">{lyrics}</div>;
+  // keep hook-based synced but render via shared component (lrc string form)
+  const lrc = synced?.length ? synced.map(s => `[${String(Math.floor(s.ms/60000)).padStart(2,'0')}:${String(Math.floor((s.ms%60000)/1000)).padStart(2,'0')}.${String(Math.floor((s.ms%1000)/10)).padStart(2,'0')}]${s.text}`).join('\n') : lyrics;
+  return <LyricsPreview lrc={lrc} currentTimeSec={currentTime} />;
 }
 
 function VolumeControl({

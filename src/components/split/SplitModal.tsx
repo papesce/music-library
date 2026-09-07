@@ -36,6 +36,7 @@ export function SplitModal({
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
+  const [absCursorMs, setAbsCursorMs] = useState<number | null>(null);
 
   // restore persisted draft on open (survives server restart); fallback to [0, duration]
   useEffect(() => {
@@ -345,6 +346,7 @@ export function SplitModal({
             focusedIndex={focusedIndex}
             onReadyChange={setWaveReady}
             onExitFocus={handleExitFocus}
+            onCursorChange={setAbsCursorMs}
           />
         </div>
 
@@ -401,6 +403,12 @@ export function SplitModal({
                 sourceFilePath={track.filePath}
                 startMs={splitPoints[focusedIndex] ?? 0}
                 endMs={splitPoints[focusedIndex + 1] ?? durationMs}
+                currentTimeSec={(() => {
+                  const s = splitPoints[focusedIndex] ?? 0;
+                  const e = splitPoints[focusedIndex + 1] ?? durationMs;
+                  if (absCursorMs == null) return 0;
+                  return Math.max(0, Math.min(e - s, absCursorMs - s)) / 1000;
+                })()}
                 onChange={next => {
                   setSegmentMetas(prev => {
                     const copy = [...prev];

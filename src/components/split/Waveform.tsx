@@ -20,6 +20,7 @@ interface Props {
   onTogglePlay?: () => void;
   onSeekPause?: () => void;
   onExitFocus?: () => void;
+  onCursorChange?: (ms: number | null) => void;
 }
 export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
   {
@@ -35,6 +36,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     onTogglePlay,
     onSeekPause,
     onExitFocus,
+    onCursorChange,
   }: Props,
   ref
 ) {
@@ -111,6 +113,12 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     onStateChange: onWaveStateChange,
     onReadyChange,
   });
+
+  useEffect(() => {
+    if (!onCursorChange) return;
+    const abs = cursorMs === null ? null : isFocused ? focusStart + cursorMs : cursorMs;
+    onCursorChange(abs);
+  }, [cursorMs, isFocused, focusStart, onCursorChange]);
 
   // Expose a translated handle: callers (SegmentList) pass global ms, but isolated waveform uses 0..isolatedDuration
   useImperativeHandle(

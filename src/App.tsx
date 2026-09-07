@@ -402,6 +402,7 @@ export default function App() {
             isActive: player.playingId === editTrack.id,
             isPaused: player.isPaused,
             onToggle: () => player.handlePlay(editTrack),
+            currentTime: player.currentTime,
           }}
           pendingLyricsDraft={
             pendingLyrics?.path === editTrack.filePath

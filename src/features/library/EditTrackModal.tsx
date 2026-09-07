@@ -5,6 +5,7 @@ import { api } from '../../api';
 import { coverUrl } from '../../lib/path';
 import { buildGoogleQuery, openGoogle } from '../../lib/googleQuery';
 import { copyThenOpenChosic } from '../../lib/chosic';
+import { LyricsPreview } from '../../components/LyricsPreview';
 
 type TrackPatch = Partial<Pick<Track, 'title' | 'artist' | 'album' | 'genre'>> & {
   year?: number | null;
@@ -82,7 +83,7 @@ export function EditTrackModal({
   onClose: () => void;
   onUpdated: (t: Track, oldFilePath?: string) => void;
   setError: (m: string) => void;
-  playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void };
+  playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void; currentTime?: number };
   pendingLyricsDraft?: { text: string; source: string } | null;
 }) {
   const getFilename = (p: string) => p.split('/').pop()?.split('\\').pop() ?? p;
@@ -1261,6 +1262,15 @@ export function EditTrackModal({
                 {lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}
               </button>
             </div>
+            {lyricsPreview.trim() && (
+              <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-soft)', background: 'rgba(0,0,0,0.25)' }}>
+                <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Preview {playback?.isActive ? '· synced to playback' : '· static'}</span>
+                  {playback?.isActive && <span className="muted">{(playback.currentTime ?? 0).toFixed(1)}s</span>}
+                </div>
+                <LyricsPreview lrc={lyricsPreview} currentTimeSec={playback?.isActive ? (playback.currentTime ?? 0) : 0} maxHeight={200} />
+              </div>
+            )}
             {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
             <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>
               Auto tries LRClib (synced) → fallback Whisper {whisperModel} (local, first run

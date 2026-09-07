@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { api } from '../../api';
 import { buildGoogleQuery, openGoogle } from '../../lib/googleQuery';
 import { copyThenOpenChosic } from '../../lib/chosic';
+import { LyricsPreview } from '../LyricsPreview';
 
 export type SegmentMeta = {
   title: string;
@@ -67,6 +68,7 @@ export function SplitSegmentEditor({
   sourceFilePath: string;
   startMs?: number;
   endMs?: number;
+  currentTimeSec?: number;
   onLyricsChange?: (lyrics: string, source: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('details');
@@ -258,6 +260,15 @@ export function SplitSegmentEditor({
             <span style={{ flex: 1 }} />
             <button className="btn" onClick={handleLyricsGoogle} disabled={!selection} style={{ padding: '4px 8px', fontSize: 11 }}>{lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}</button>
           </div>
+          {meta.lyrics.trim() && (
+            <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-soft)', background: 'rgba(0,0,0,0.25)' }}>
+              <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border-soft)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Preview · synced to waveform</span>
+                <span className="muted">{(currentTimeSec ?? 0).toFixed(1)}s</span>
+              </div>
+              <LyricsPreview lrc={meta.lyrics} currentTimeSec={currentTimeSec ?? 0} maxHeight={160} />
+            </div>
+          )}
           {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
           <span className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Lyrics are stored per-segment draft and written on export as <code>.lrc</code> next to the sliced file + USLT. Whisper is slice-aware {Number.isFinite(startMs) ? `(${Math.round((startMs as number)/1000)}s→${Math.round((endMs as number)/1000)}s)` : ''}.</span>
         </div>
