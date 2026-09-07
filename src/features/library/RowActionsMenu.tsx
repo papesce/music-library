@@ -95,7 +95,7 @@ export function RowActionsMenu({
             style={{ position: 'fixed', top: coords.top, left: coords.left, right: 'auto' }}
           >
             <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(onSplit)}>
-              <span aria-hidden>✂</span> Split
+              <span aria-hidden>✂</span> Split editor
             </button>
             <button
               role="menuitem"

@@ -100,7 +100,7 @@ export function PlayerActionsMenu({ track, onSplit }: Props) {
           >
             {onSplit && (
               <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(onSplit)}>
-                <span aria-hidden>✂</span> Split track…
+                <span aria-hidden>✂</span> Split editor…
               </button>
             )}
             <button
