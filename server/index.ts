@@ -1188,11 +1188,23 @@ const server = createServer(async (req, res) => {
               'Content-Length': chunkSize,
               'Content-Type': 'audio/mpeg',
             });
-            return createReadStream(resolved, { start, end }).pipe(res);
+            const stream = createReadStream(resolved, { start, end });
+            stream.on('error', (e: any) => {
+              console.error(`[stream] ${resolved}: ${e.message}`);
+              if (!res.headersSent) json(res, 500, { error: e.message });
+              else try { res.end(); } catch {}
+            });
+            return stream.pipe(res);
           }
         }
         res.writeHead(200, { 'Content-Length': stat.size, 'Content-Type': 'audio/mpeg' });
-        return createReadStream(resolved).pipe(res);
+        const stream = createReadStream(resolved);
+        stream.on('error', (e: any) => {
+          console.error(`[stream] ${resolved}: ${e.message}`);
+          if (!res.headersSent) json(res, 500, { error: e.message });
+          else try { res.end(); } catch {}
+        });
+        return stream.pipe(res);
       } catch (e: any) {
         return json(res, 500, { error: e.message });
       }
