@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatMs } from '../../lib/format';
 import type { WaveformHandle } from '../../hooks/useWaveSurfer';
 import type { Track } from '../../types/api';
+import { CircularPlayButton } from '../ui/CircularPlayButton';
 
 type Props = {
   splitPoints: number[];
@@ -17,6 +18,10 @@ type Props = {
   skipped?: Set<number>;
   onToggleSkip?: (idx: number) => void;
   sourceTrack?: Track | null;
+  playingIndex?: number | null;
+  activeIndex?: number | null;
+  isPlaying?: boolean;
+  cursorMs?: number | null;
 };
 
 export function SegmentList({
@@ -33,6 +38,10 @@ export function SegmentList({
   skipped = new Set<number>(),
   onToggleSkip,
   sourceTrack = null,
+  playingIndex = null,
+  activeIndex = null,
+  isPlaying = false,
+  cursorMs = null,
 }: Props) {
   const isFocused = focusedIndex !== null;
   const trackCount = splitPoints.length - 1;
@@ -80,6 +89,23 @@ export function SegmentList({
 
   const [dismissed, setDismissed] = useState<Map<number, string>>(() => new Map());
   const isDismissed = (i: number, title: string) => dismissed.get(i) === normalize(title);
+  const [openMenu, setOpenMenu] = useState<number | null>(null);
+  useEffect(() => {
+    if (openMenu === null) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.segment-row-menu')) setOpenMenu(null);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenu(null);
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [openMenu]);
   const hasAnyDupes =
     !isFocused &&
     indices.some(i => {
@@ -189,13 +215,15 @@ export function SegmentList({
         const start = splitPoints[i]!;
         const end = splitPoints[i + 1]!;
         const isSkipped = skipped.has(i);
+        const isActive = playingIndex === i && isPlaying;
+        const isCursor = activeIndex === i;
         const title = segmentTitles[i] ?? '';
         const rawDupes = findDupes(title);
         const dupes = isDismissed(i, title) ? [] : rawDupes;
         return (
           <div
             key={i}
-            className={`glass-soft segment-row${isSkipped ? ' segment-row--skipped' : ''}`}
+            className={`glass-soft segment-row${isSkipped ? ' segment-row--skipped' : ''}${isCursor ? ' segment-row--playing' : ''}${isActive ? ' is-active' : ''}`}
             onClick={e => {
               if (isFocused) return;
               const target = e.target as HTMLElement;
@@ -215,6 +243,78 @@ export function SegmentList({
             }}
           >
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+              <label
+                title={isSkipped ? 'Skipped — will not be exported' : 'Export this segment'}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 22,
+                  height: 22,
+                  flexShrink: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!isSkipped}
+                  onChange={() => onToggleSkip?.(i)}
+                  title={isSkipped ? 'Enable export' : 'Skip export'}
+                  style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }}
+                />
+              </label>
+              {(() => {
+                const dur = Math.max(1, end - start);
+                const pct =
+                  cursorMs == null
+                    ? 0
+                    : cursorMs < start
+                      ? 0
+                      : cursorMs >= end
+                        ? 0
+                        : (cursorMs - start) / dur;
+                const state: 'playing' | 'idle' = isActive ? 'playing' : 'idle';
+                const shouldShowProgress = pct > 0 && cursorMs != null && cursorMs >= start && cursorMs < end;
+                return (
+                  <CircularPlayButton
+                    state={state}
+                    progress={shouldShowProgress ? pct : isActive ? pct : 0}
+                    size={30}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (isActive) {
+                        waveformRef.current?.pause();
+                        return;
+                      }
+                      if (
+                        cursorMs != null &&
+                        cursorMs >= start &&
+                        cursorMs < end - 200 &&
+                        !isPlaying
+                      ) {
+                        waveformRef.current?.playFrom(cursorMs, end);
+                      } else {
+                        waveformRef.current?.playFrom(start, end);
+                      }
+                    }}
+                    title={
+                      isActive
+                        ? 'Pause'
+                        : cursorMs != null && cursorMs >= start && cursorMs < end - 200 && !isPlaying
+                          ? 'Resume segment'
+                          : 'Play segment'
+                    }
+                    ariaLabel={
+                      isActive
+                        ? 'Pause segment'
+                        : cursorMs != null && cursorMs >= start && cursorMs < end - 200 && !isPlaying
+                          ? 'Resume segment'
+                          : 'Play segment'
+                    }
+                  />
+                );
+              })()}
               <span
                 style={{
                   fontSize: 12,
@@ -257,69 +357,53 @@ export function SegmentList({
                   fontSize: 12,
                 }}
               />
-              <div className={`segment-row-actions${isSkipped || isFocused ? ' segment-row-actions--visible' : ''}`}>
+              <div className="segment-row-menu" style={{ position: 'relative', flexShrink: 0 }}>
                 <button
-                  className="btn"
+                  className="segment-row-menu-trigger"
+                  aria-label="Segment actions"
+                  aria-expanded={openMenu === i}
+                  aria-haspopup="menu"
                   onClick={e => {
                     e.stopPropagation();
-                    waveformRef.current?.playFrom(start, end);
+                    setOpenMenu(openMenu === i ? null : i);
                   }}
-                  title="Play segment"
-                  style={{ padding: '6px 10px', fontSize: 12 }}
+                  title="More actions"
                 >
-                  ▶
+                  ⋮
                 </button>
-                {!isFocused && (
-                  <button
-                    className="btn"
-                    onClick={e => {
-                      e.stopPropagation();
-                      onFocus?.(i);
-                    }}
-                    title="Focus this track (zoom, edit solo)"
-                    style={{ padding: '6px 10px', fontSize: 12 }}
+                {openMenu === i && (
+                  <div
+                    className="glass segment-row-menu-dropdown"
+                    role="menu"
+                    onClick={e => e.stopPropagation()}
+                    onMouseLeave={() => setOpenMenu(null)}
                   >
-                    ◎ Focus
-                  </button>
+                    <button
+                      role="menuitem"
+                      className="row-menu-item danger"
+                      onClick={() => {
+                        setOpenMenu(null);
+                        onRemove(i);
+                      }}
+                      disabled={splitPoints.length <= 2}
+                      title={splitPoints.length <= 2 ? 'At least one segment required' : 'Remove split after this'}
+                    >
+                      ✕ Remove split
+                    </button>
+                    {!isFocused && (
+                      <button
+                        role="menuitem"
+                        className="row-menu-item"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          onFocus?.(i);
+                        }}
+                      >
+                        ◎ Focus track
+                      </button>
+                    )}
+                  </div>
                 )}
-                <button
-                  className="btn"
-                  onClick={e => {
-                    e.stopPropagation();
-                    onRemove(i);
-                  }}
-                  disabled={splitPoints.length <= 2}
-                  title="Remove split after this"
-                  style={{ padding: '6px 10px', fontSize: 12 }}
-                >
-                  ✕
-                </button>
-                <label
-                  title={isSkipped ? 'Will be exported again' : 'Skip export — already in library'}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: 11,
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    color: isSkipped ? '#ffca28' : 'var(--muted)',
-                    border: isSkipped ? '1px solid rgba(255,193,7,0.5)' : '1px solid var(--border-soft)',
-                    background: isSkipped ? 'rgba(255,193,7,0.12)' : 'rgba(255,255,255,0.04)',
-                    borderRadius: 999,
-                    padding: '4px 8px',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSkipped}
-                    onChange={() => onToggleSkip?.(i)}
-                    style={{ accentColor: '#ffca28' }}
-                  />
-                  {isSkipped ? 'Skipped' : 'Skip'}
-                </label>
               </div>
             </div>
             {dupes.length > 0 && (

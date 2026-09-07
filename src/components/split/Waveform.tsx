@@ -196,6 +196,15 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
 
   const [viewportMs, setViewportMs] = useState<{ left: number; right: number } | null>(null);
   const [hoverMs, setHoverMs] = useState<number | null>(null);
+  // refs for auto-disable check inside scroll handler (avoid stale closure)
+  const autoScrollRef = useRef(autoScroll);
+  useEffect(() => {
+    autoScrollRef.current = autoScroll;
+  }, [autoScroll]);
+  const cursorMsRefForFollow = useRef(cursorMs);
+  useEffect(() => {
+    cursorMsRefForFollow.current = cursorMs;
+  }, [cursorMs]);
   // minimap is now focused-aware: when isolated, viewport is the visible window
   // *inside* the isolated track (0..isolatedDuration), not the locked global segment.
   // At 1× we show full-width viewport so minimap isn't empty.
@@ -222,7 +231,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
         const v = ws.getScroll?.();
         if (Number.isFinite(v)) return v as number;
       } catch {}
-      // shadowRoot fallback - WaveSurfer's renderer uses <div class="scroll"> inside shadow
+      // shadowRoot fallback - query fresh each time (shadow attaches async)
       try {
         const sr = (el as unknown as { shadowRoot?: ShadowRoot }).shadowRoot;
         const sc = sr?.querySelector('.scroll') as HTMLElement | null;
@@ -231,10 +240,49 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       return 0;
     };
 
+    let disableTimer: number | null = null;
+    const scheduleDisableIfOutside = (left: number, right: number) => {
+      if (!autoScrollRef.current) return;
+      const cur = cursorMsRefForFollow.current;
+      if (cur === null) return;
+      const outside = cur < left || cur > right;
+      if (!outside) {
+        if (disableTimer !== null) {
+          clearTimeout(disableTimer);
+          disableTimer = null;
+        }
+        return;
+      }
+      if (disableTimer !== null) return; // already scheduled
+      disableTimer = window.setTimeout(() => {
+        disableTimer = null;
+        // re-check still outside (autoScroll may have caught up via playback)
+        const c = cursorMsRefForFollow.current;
+        if (c === null || !autoScrollRef.current) return;
+        // need current viewport - use latest computed left/right via closure would be stale,
+        // so check via fresh getScrollLeft
+        try {
+          const z = (ws as unknown as { options?: { minPxPerSec?: number } }) ? zoom || 1 : 1;
+          if (z <= 1) return;
+          const sl = getScrollLeft();
+          const w = el.clientWidth || 1;
+          const l = Math.max(0, Math.round((sl / z) * 1000));
+          const r = Math.min(activeTotal, Math.round(((sl + w) / z) * 1000));
+          if (c < l || c > r) setAutoScroll(false);
+        } catch {
+          setAutoScroll(false);
+        }
+      }, 150);
+    };
+
     const update = (scrollLeftOverride?: number) => {
       const z = zoom || 1;
       if (z <= 1) {
         setViewportMs({ left: 0, right: activeTotal });
+        if (disableTimer !== null) {
+          clearTimeout(disableTimer);
+          disableTimer = null;
+        }
         return;
       }
       const scrollLeft = getScrollLeft(scrollLeftOverride);
@@ -242,6 +290,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       const left = Math.max(0, Math.round((scrollLeft / z) * 1000));
       const right = Math.min(activeTotal, Math.round(((scrollLeft + w) / z) * 1000));
       setViewportMs({ left, right });
+      scheduleDisableIfOutside(left, right);
     };
 
     update();
@@ -254,20 +303,30 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     } catch {}
 
     // also listen directly to the shadow .scroll element for drag/scroll that doesn't emit
+    // shadow attaches async, so retry query + attach via interval/MutationObserver
     let shadowScrollEl: HTMLElement | null = null;
-    try {
-      const sr = (el as unknown as { shadowRoot?: ShadowRoot }).shadowRoot;
-      shadowScrollEl = (sr?.querySelector('.scroll') as HTMLElement | null) ?? null;
-    } catch {}
+    const attachShadowScroll = () => {
+      try {
+        const sr = (el as unknown as { shadowRoot?: ShadowRoot }).shadowRoot;
+        const sc = sr?.querySelector('.scroll') as HTMLElement | null;
+        if (sc && sc !== shadowScrollEl) {
+          if (shadowScrollEl) shadowScrollEl.removeEventListener('scroll', onShadowScroll);
+          shadowScrollEl = sc;
+          shadowScrollEl.addEventListener('scroll', onShadowScroll, { passive: true });
+        }
+      } catch {}
+    };
     const onShadowScroll = () => update(shadowScrollEl?.scrollLeft);
-    if (shadowScrollEl)
-      shadowScrollEl.addEventListener('scroll', onShadowScroll, { passive: true });
+    attachShadowScroll();
+    const shadowAttachInterval = window.setInterval(attachShadowScroll, 500);
 
     // fallback light-DOM listeners (older WaveSurfer or before shadow attaches)
     const onElScroll = () => update();
     el.addEventListener('scroll', onElScroll, { passive: true });
     window.addEventListener('resize', onElScroll);
     const id = requestAnimationFrame(() => update());
+    // polling fallback ensures manual scroll is detected even if events missed
+    const pollId = window.setInterval(() => update(), 200);
 
     return () => {
       try {
@@ -277,6 +336,9 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       el.removeEventListener('scroll', onElScroll);
       window.removeEventListener('resize', onElScroll);
       cancelAnimationFrame(id);
+      clearInterval(shadowAttachInterval);
+      clearInterval(pollId);
+      if (disableTimer !== null) clearTimeout(disableTimer);
     };
   }, [ready, zoom, durationMs, isolatedDuration, isFocused]);
 
@@ -555,9 +617,20 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
           const multi = trackCount > 1;
           if (multi) {
             const getGlobalCursor = (): number => {
-              if (cursorMs === null) return splitPoints[0] ?? 0;
-              if (isFocused) return focusStart + cursorMs;
-              return cursorMs;
+              if (isFocused) {
+                if (cursorMs !== null) return focusStart + cursorMs;
+                try {
+                  return focusStart + Math.round((wsRef.current?.getCurrentTime() ?? 0) * 1000);
+                } catch {
+                  return focusStart;
+                }
+              }
+              if (cursorMs !== null) return cursorMs;
+              try {
+                return Math.round((wsRef.current?.getCurrentTime() ?? 0) * 1000);
+              } catch {
+                return splitPoints[0] ?? 0;
+              }
             };
             const getCurrentIdx = (): number => {
               const cur = getGlobalCursor();
@@ -585,9 +658,16 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
               const ws = wsRef.current;
               if (!ws) return;
               const target = splitPoints[idx] ?? 0;
-              const dur = durationMs || isolatedDuration || 1;
+              // use actual WaveSurfer duration (decoded buffer) for fraction, fallback to prop duration
+              const wsDurSec = (() => {
+                try {
+                  const d = ws.getDuration();
+                  if (Number.isFinite(d) && d > 0) return d;
+                } catch {}
+                return (durationMs || isolatedDuration || 1) / 1000;
+              })();
               try {
-                ws.seekTo(target / dur);
+                ws.seekTo(Math.min(1, Math.max(0, target / 1000 / wsDurSec)));
                 ws.pause();
               } catch {}
               setCursorMs(target);
@@ -618,10 +698,11 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                   onClick={handlePrev}
                   disabled={!ready || (isFocused ? false : atFirst && getGlobalCursor() - (splitPoints[curIdx] ?? 0) <= 700)}
                   className="btn"
+                  aria-label={isFocused ? 'Exit focus to navigate' : 'Previous segment'}
                   title={isFocused ? 'Exit focus to navigate' : 'Previous segment'}
                   style={{ padding: '6px 10px', fontSize: 12 }}
                 >
-                  ◀ Prev
+                  ◀
                 </button>
                 <button
                   onClick={() => {
@@ -633,18 +714,21 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                   }}
                   disabled={!ready}
                   className="btn btn-primary"
+                  aria-label={playing ? 'Pause' : 'Play'}
+                  title={playing ? 'Pause' : 'Play'}
                   style={{ padding: '6px 14px', fontSize: 12 }}
                 >
-                  {playing ? '⏸ Pause' : '▶ Play'}
+                  {playing ? '⏸' : '▶'}
                 </button>
                 <button
                   onClick={handleNext}
                   disabled={!ready || (isFocused ? false : atLast)}
                   className="btn"
+                  aria-label={isFocused ? 'Exit focus to navigate' : 'Next segment'}
                   title={isFocused ? 'Exit focus to navigate' : 'Next segment'}
                   style={{ padding: '6px 10px', fontSize: 12 }}
                 >
-                  Next ▶
+                  ▶
                 </button>
               </>
             );
@@ -666,9 +750,11 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                 }}
                 disabled={!ready}
                 className="btn"
+                aria-label="Back 5 seconds"
+                title="Back 5s"
                 style={{ padding: '6px 10px', fontSize: 12 }}
               >
-                ◀ 5s
+                ◀
               </button>
               <button
                 onClick={() => {
@@ -680,9 +766,11 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                 }}
                 disabled={!ready}
                 className="btn btn-primary"
+                aria-label={playing ? 'Pause' : 'Play'}
+                title={playing ? 'Pause' : 'Play'}
                 style={{ padding: '6px 14px', fontSize: 12 }}
               >
-                {playing ? '⏸ Pause' : '▶ Play'}
+                {playing ? '⏸' : '▶'}
               </button>
               <button
                 onClick={() => {
@@ -700,9 +788,11 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                 }}
                 disabled={!ready}
                 className="btn"
+                aria-label="Forward 5 seconds"
+                title="Forward 5s"
                 style={{ padding: '6px 10px', fontSize: 12 }}
               >
-                5s ▶
+                ▶
               </button>
             </>
           );
@@ -845,40 +935,37 @@ function WaveformDetectSlot({
     };
   }, [open]);
   return (
-    <div ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-      <button
-        className="btn"
-        onClick={() => setOpen(v => !v)}
-        title="Tune silence detection (min ms / threshold dB)"
-        aria-expanded={open}
-        style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-      >
-        ⚙︎ {minSilenceMs}ms · {threshDb}dB
-      </button>
+    <div ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', marginLeft: 8 }}>
       <button
         className="btn btn-primary"
-        onClick={onDetect}
-        disabled={disabled || detecting}
-        style={{ padding: '4px 10px', fontSize: 11, opacity: disabled ? 0.6 : 1 }}
+        onClick={() => setOpen(v => !v)}
+        disabled={disabled && !open}
+        title="Auto-select via silence detection"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        style={{ padding: '4px 10px', fontSize: 11, opacity: disabled && !open ? 0.6 : 1 }}
       >
-        {detecting ? 'Detecting…' : 'Auto-detect'}
+        {detecting ? 'Detecting…' : '✨ Auto-select'}
       </button>
       {open && (
         <div
           className="glass"
+          role="dialog"
+          aria-label="Auto-select settings"
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 8px)',
             right: 0,
-            padding: 10,
+            padding: 12,
             borderRadius: 12,
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
-            minWidth: 220,
+            gap: 10,
+            minWidth: 240,
             zIndex: 5,
           }}
         >
+          <div style={{ fontSize: 12, fontWeight: 700 }}>Auto-select</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Min silence
@@ -905,7 +992,23 @@ function WaveformDetectSlot({
               </span>
             </label>
           </div>
-          <span className="muted" style={{ fontSize: 10, lineHeight: 1.4 }}>Drag red markers, click waveform to place cursor, S to split</span>
+          <span className="muted" style={{ fontSize: 10, lineHeight: 1.4 }}>Detects silences to create splits. Drag red markers to fine-tune.</span>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn" onClick={() => setOpen(false)} style={{ padding: '6px 12px', fontSize: 11 }}>
+              Close
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setOpen(false);
+                onDetect();
+              }}
+              disabled={disabled || detecting}
+              style={{ padding: '6px 12px', fontSize: 11 }}
+            >
+              {detecting ? 'Detecting…' : 'Run auto-select'}
+            </button>
+          </div>
         </div>
       )}
     </div>

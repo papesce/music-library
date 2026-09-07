@@ -36,6 +36,7 @@ export function SplitModal({
   const [draftRestored, setDraftRestored] = useState(false);
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
   const [absCursorMs, setAbsCursorMs] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // restore persisted draft on open (survives server restart); fallback to [0, duration]
   useEffect(() => {
@@ -204,6 +205,7 @@ export function SplitModal({
     },
     [focusedIndex, splitPoints]
   );
+  const handleWaveStateChange = useCallback((p: boolean) => setIsPlaying(p), []);
 
   const handleRemove = (idx: number) => {
     // idx is segment index to delete? we delete boundary after idx
@@ -346,6 +348,7 @@ export function SplitModal({
             onReadyChange={setWaveReady}
             onExitFocus={handleExitFocus}
             onCursorChange={setAbsCursorMs}
+            onWaveStateChange={handleWaveStateChange}
             minSilenceMs={minSilenceMs}
             setMinSilenceMs={setMinSilenceMs}
             threshDb={threshDb}
@@ -365,28 +368,50 @@ export function SplitModal({
             scrollbarGutter: 'stable',
           }}
         >
-          <SegmentList
-            splitPoints={splitPoints}
-            segmentTitles={segmentTitles}
-            setSegmentTitles={setSegmentTitles}
-            waveformRef={waveformRef}
-            onRemove={handleRemove}
-            focusedIndex={focusedIndex}
-            onFocus={handleEnterFocus}
-            onExitFocus={handleExitFocus}
-            onStepFocus={handleStepFocus}
-            libraryTracks={libraryTracks ?? []}
-            skipped={skipped}
-            onToggleSkip={idx =>
-              setSkipped(prev => {
-                const next = new Set(prev);
-                if (next.has(idx)) next.delete(idx);
-                else next.add(idx);
-                return next;
-              })
-            }
-            sourceTrack={track}
-          />
+          {(() => {
+            const activeIndex = (() => {
+              if (absCursorMs == null || !waveReady) return null;
+              const cur = absCursorMs;
+              let idx = splitPoints.findIndex(
+                (_, i) => i < splitPoints.length - 1 && cur >= splitPoints[i]! && cur < splitPoints[i + 1]!
+              );
+              if (idx === -1) {
+                const last = splitPoints[splitPoints.length - 1] ?? 0;
+                if (cur >= last) idx = splitPoints.length - 2;
+                else if (cur < (splitPoints[0] ?? 0)) idx = 0;
+              }
+              return idx >= 0 ? idx : null;
+            })();
+            const playingIndex = isPlaying ? activeIndex : null;
+            return (
+              <SegmentList
+                splitPoints={splitPoints}
+                segmentTitles={segmentTitles}
+                setSegmentTitles={setSegmentTitles}
+                waveformRef={waveformRef}
+                onRemove={handleRemove}
+                focusedIndex={focusedIndex}
+                onFocus={handleEnterFocus}
+                onExitFocus={handleExitFocus}
+                onStepFocus={handleStepFocus}
+                libraryTracks={libraryTracks ?? []}
+                skipped={skipped}
+                onToggleSkip={idx =>
+                  setSkipped(prev => {
+                    const next = new Set(prev);
+                    if (next.has(idx)) next.delete(idx);
+                    else next.add(idx);
+                    return next;
+                  })
+                }
+                sourceTrack={track}
+                playingIndex={playingIndex}
+                activeIndex={activeIndex}
+                isPlaying={isPlaying}
+                cursorMs={absCursorMs}
+              />
+            );
+          })()}
           {focusedIndex !== null && segmentMetas[focusedIndex] && (
             <div style={{ marginTop: 12 }}>
               <SplitSegmentEditor

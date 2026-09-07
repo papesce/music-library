@@ -526,6 +526,82 @@ body {
   color: var(--text);
   border: 1px solid var(--border);
 }
+
+/* global circular play button with exterior progress ring — typical rounded style */
+.c-play-btn {
+  position: relative;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  overflow: visible;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.15s,
+    color 0.15s;
+}
+.c-play-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border);
+  transform: scale(1.05);
+}
+.c-play-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.c-play-btn.is-playing {
+  background: linear-gradient(135deg, var(--accent), #5b3bff);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(124, 92, 255, 0.4);
+}
+.c-play-btn.is-playing:hover {
+  filter: brightness(1.08);
+}
+.c-play-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.c-play-ring {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+.c-play-ring-track,
+.c-play-ring-progress {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.c-play-ring-track {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+.c-play-ring-progress {
+  stroke: var(--accent);
+  transition:
+    stroke-dashoffset 0.2s linear,
+    opacity 0.2s;
+}
+.c-play-btn.is-playing .c-play-ring-progress {
+  stroke: #a78bfa;
+}
+.c-play-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
 .cell-ellipsis {
   max-width: 200px;
   overflow: hidden;
@@ -791,30 +867,106 @@ body {
 .segment-row {
   transition:
     background 0.15s,
-    border-color 0.15s;
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .segment-row:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.14);
 }
-.segment-row-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  opacity: 0;
-  transition: opacity 0.15s;
+.segment-row--playing {
+  background: rgba(124, 92, 255, 0.14) !important;
+  border-color: rgba(124, 92, 255, 0.38) !important;
+  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.18);
+}
+.segment-row--playing:hover {
+  background: rgba(124, 92, 255, 0.18) !important;
+}
+.segment-play-btn {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.15s,
+    color 0.15s;
+}
+.segment-play-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--border);
+  transform: scale(1.05);
+}
+.segment-play-btn.is-playing {
+  background: linear-gradient(135deg, var(--accent), #5b3bff);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(124, 92, 255, 0.4);
+}
+.segment-play-btn.is-playing:hover {
+  filter: brightness(1.08);
+}
+.segment-row--playing .segment-row-actions {
+  max-width: 280px;
+  opacity: 1;
+  pointer-events: auto;
+}
+/* hover menu for segment rows — Focus via row click, Remove via ⋮ */
+.segment-row-menu {
   flex-shrink: 0;
 }
-.segment-row:hover .segment-row-actions,
-.segment-row:focus-within .segment-row-actions,
-.segment-row-actions--visible {
+.segment-row-menu-trigger {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    border-color 0.15s;
+}
+.segment-row:hover .segment-row-menu-trigger,
+.segment-row:focus-within .segment-row-menu-trigger,
+.segment-row-menu-trigger[aria-expanded='true'] {
   opacity: 1;
 }
-.segment-row--skipped .segment-row-actions {
-  opacity: 1;
+.segment-row-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--border);
+}
+.segment-row-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 20;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 @media (hover: none) {
-  .segment-row-actions {
+  .segment-row-menu-trigger {
     opacity: 1;
   }
 }
