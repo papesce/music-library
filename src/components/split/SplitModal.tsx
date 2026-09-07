@@ -323,9 +323,15 @@ export function SplitModal({
               {track.filePath} · {track.duration ? formatMs(track.duration * 1000) : '—'}
             </p>
           </div>
-          <button className="btn" onClick={onClose} style={{ padding: '6px 10px' }}>
-            ✕
-          </button>
+          {focusedIndex !== null ? (
+            <button className="btn" onClick={handleExitFocus} style={{ padding: '6px 10px' }} title="Back to all tracks (Esc)">
+              ← Back to all
+            </button>
+          ) : (
+            <button className="btn" onClick={onClose} style={{ padding: '6px 10px' }}>
+              ✕
+            </button>
+          )}
         </div>
 
         {error && (
@@ -483,9 +489,15 @@ export function SplitModal({
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={onClose} disabled={exporting} title="Close — draft is auto-saved">
-              Close
-            </button>
+            {focusedIndex !== null ? (
+              <button className="btn" onClick={handleExitFocus} disabled={exporting} title="Back to all tracks (Esc)">
+                ← Back to all
+              </button>
+            ) : (
+              <button className="btn" onClick={onClose} disabled={exporting} title="Close — draft is auto-saved">
+                Close
+              </button>
+            )}
             <button
               className="btn btn-primary"
               onClick={handleExport}

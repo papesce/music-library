@@ -130,33 +130,13 @@ export function SegmentList({
               focused
             </span>
           </span>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button
-              className="btn"
-              onClick={() => onStepFocus?.(-1)}
-              disabled={focusedIndex === 0}
-              title="Previous track"
-              style={{ padding: '6px 10px', fontSize: 12 }}
-            >
-              ◀ Prev
-            </button>
-            <button
-              className="btn"
-              onClick={() => onStepFocus?.(1)}
-              disabled={focusedIndex === trackCount - 1}
-              title="Next track"
-              style={{ padding: '6px 10px', fontSize: 12 }}
-            >
-              Next ▶
-            </button>
-            <button
-              className="btn"
-              onClick={onExitFocus}
-              style={{ padding: '6px 10px', fontSize: 12 }}
-            >
-              ← Back to all
-            </button>
-          </div>
+          <button
+            className="btn"
+            onClick={onExitFocus}
+            style={{ padding: '6px 10px', fontSize: 12 }}
+          >
+            ← Back to all
+          </button>
         </div>
       )}
       {!isFocused && trackCount > 0 && (
