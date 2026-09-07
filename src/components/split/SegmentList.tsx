@@ -130,13 +130,6 @@ export function SegmentList({
               focused
             </span>
           </span>
-          <button
-            className="btn"
-            onClick={onExitFocus}
-            style={{ padding: '6px 10px', fontSize: 12 }}
-          >
-            ← Back to all
-          </button>
         </div>
       )}
       {!isFocused && trackCount > 0 && (
