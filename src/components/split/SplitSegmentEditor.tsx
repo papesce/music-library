@@ -50,6 +50,8 @@ function Field({
   );
 }
 
+type Tab = 'details' | 'lyrics';
+
 export function SplitSegmentEditor({
   index,
   meta,
@@ -67,6 +69,7 @@ export function SplitSegmentEditor({
   endMs?: number;
   onLyricsChange?: (lyrics: string, source: string) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<Tab>('details');
   const [lyricsDetecting, setLyricsDetecting] = useState(false);
   const [lyricsError, setLyricsError] = useState('');
   const [lyricsCopied, setLyricsCopied] = useState(false);
@@ -161,6 +164,9 @@ export function SplitSegmentEditor({
     }
   };
 
+  const detailsDirty = [meta.title, meta.artist, meta.album, meta.genre, meta.year].some(v => v.trim() !== '');
+  const lyricsLines = meta.lyrics ? meta.lyrics.split('\n').length : 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -168,52 +174,94 @@ export function SplitSegmentEditor({
         <span className="muted" style={{ fontSize: 11 }}>Draft — applied on export</span>
       </div>
 
-      <Field label="Title" value={meta.title} onChange={v => onChange({ ...meta, title: v })} placeholder={`Title for part ${index + 1}`} />
-      <Field label="Artist" value={meta.artist} onChange={v => onChange({ ...meta, artist: v })} placeholder="Artist" />
-      <Field label="Album" value={meta.album} onChange={v => onChange({ ...meta, album: v })} placeholder="Album" />
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1 }}><Field label="Genre" value={meta.genre} onChange={v => onChange({ ...meta, genre: v })} placeholder="Genre" /></div>
-        <div style={{ width: 110 }}><Field label="Year" value={meta.year} onChange={v => onChange({ ...meta, year: v })} placeholder="2024" /></div>
+      {/* Tab bar — mirrors EditTrackModal */}
+      <div role="tablist" aria-label="Segment sections" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)' }}>
+        {(['details', 'lyrics'] as Tab[]).map(t => {
+          const isActive = activeTab === t;
+          const badge = t === 'details' ? (detailsDirty ? '•' : undefined) : t === 'lyrics' ? (meta.lyrics ? String(lyricsLines) : undefined) : undefined;
+          return (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTab(t)}
+              style={{
+                flex: 1,
+                padding: '6px 10px',
+                borderRadius: 999,
+                border: 'none',
+                background: isActive ? 'rgba(255,255,255,0.95)' : 'transparent',
+                color: isActive ? '#0a0a14' : 'var(--muted)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              {t === 'details' ? 'Details' : 'Lyrics'}
+              {badge && badge !== '•' && (
+                <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 999, background: 'rgba(0,0,0,0.08)' }}>{badge}</span>
+              )}
+              {badge === '•' && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: '#2ecc71' }} />}
+            </button>
+          );
+        })}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-        <span className="muted" style={{ fontSize: 11, flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQueryForSearch}>{googleQueryForSearch}</span>
-        <button className="btn" onClick={copyGoogle} style={{ padding: '4px 8px', fontSize: 11 }}>{copied ? '✓ Copied' : 'Copy'}</button>
-        <button className="btn" onClick={() => openGoogle(googleQueryForSearch)} style={{ padding: '4px 8px', fontSize: 11 }}>Google ↗</button>
-        <button className="btn" onClick={() => void copyThenOpenChosic(meta.title, meta.artist)} style={{ padding: '4px 8px', fontSize: 11 }}>Chosic ↗</button>
-      </div>
+      {activeTab === 'details' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Field label="Title" value={meta.title} onChange={v => onChange({ ...meta, title: v })} placeholder={`Title for part ${index + 1}`} />
+          <Field label="Artist" value={meta.artist} onChange={v => onChange({ ...meta, artist: v })} placeholder="Artist" />
+          <Field label="Album" value={meta.album} onChange={v => onChange({ ...meta, album: v })} placeholder="Album" />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}><Field label="Genre" value={meta.genre} onChange={v => onChange({ ...meta, genre: v })} placeholder="Genre" /></div>
+            <div style={{ width: 110 }}><Field label="Year" value={meta.year} onChange={v => onChange({ ...meta, year: v })} placeholder="2024" /></div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
+            <span className="muted" style={{ fontSize: 11, flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQueryForSearch}>{googleQueryForSearch}</span>
+            <button className="btn" onClick={copyGoogle} style={{ padding: '4px 8px', fontSize: 11 }}>{copied ? '✓ Copied' : 'Copy'}</button>
+            <button className="btn" onClick={() => openGoogle(googleQueryForSearch)} style={{ padding: '4px 8px', fontSize: 11 }}>Google ↗</button>
+            <button className="btn" onClick={() => void copyThenOpenChosic(meta.title, meta.artist)} style={{ padding: '4px 8px', fontSize: 11 }}>Chosic ↗</button>
+          </div>
+        </div>
+      )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>Lyrics {meta.lyricsSource ? `· ${meta.lyricsSource}` : ''}</span>
-          <span className="muted" style={{ fontSize: 11 }}>{meta.lyrics ? `${meta.lyrics.split('\n').length} lines` : 'no lyrics'}</span>
+      {activeTab === 'lyrics' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>Lyrics {meta.lyricsSource ? `· ${meta.lyricsSource}` : ''}</span>
+            <span className="muted" style={{ fontSize: 11 }}>{meta.lyrics ? `${lyricsLines} lines` : 'no lyrics'}</span>
+          </div>
+          <textarea
+            ref={textareaRef}
+            value={meta.lyrics}
+            onChange={e => onChange({ ...meta, lyrics: e.target.value })}
+            onSelect={updateSelection}
+            onKeyUp={updateSelection}
+            onMouseUp={updateSelection}
+            placeholder="[00:12.00]Lyric line — edit before export, will be written as .lrc + USLT"
+            rows={8}
+            style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', minHeight: 120 }}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>{lyricsDetecting ? 'Detecting…' : '✨ Detect (auto)'}</button>
+            <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>LRClib</button>
+            <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>Whisper</button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>model
+              <select value={whisperModel} onChange={e => setWhisperModel(e.target.value as WhisperModel)} disabled={lyricsDetecting} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 11 }}>
+                {WHISPER_MODELS.map(m => <option key={m} value={m}>{m}{m === 'base' ? ' (default)' : ''}</option>)}
+              </select>
+            </label>
+            <span style={{ flex: 1 }} />
+            <button className="btn" onClick={handleLyricsGoogle} disabled={!selection} style={{ padding: '4px 8px', fontSize: 11 }}>{lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}</button>
+          </div>
+          {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
+          <span className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Lyrics are stored per-segment draft and written on export as <code>.lrc</code> next to the sliced file + USLT. Whisper is slice-aware {Number.isFinite(startMs) ? `(${Math.round((startMs as number)/1000)}s→${Math.round((endMs as number)/1000)}s)` : ''}.</span>
         </div>
-        <textarea
-          ref={textareaRef}
-          value={meta.lyrics}
-          onChange={e => onChange({ ...meta, lyrics: e.target.value })}
-          onSelect={updateSelection}
-          onKeyUp={updateSelection}
-          onMouseUp={updateSelection}
-          placeholder="[00:12.00]Lyric line — edit before export, will be written as .lrc + USLT"
-          rows={8}
-          style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', minHeight: 120 }}
-        />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>{lyricsDetecting ? 'Detecting…' : '✨ Detect (auto)'}</button>
-          <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>LRClib</button>
-          <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999 }}>Whisper</button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--muted)' }}>model
-            <select value={whisperModel} onChange={e => setWhisperModel(e.target.value as WhisperModel)} disabled={lyricsDetecting} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 11 }}>
-              {WHISPER_MODELS.map(m => <option key={m} value={m}>{m}{m === 'base' ? ' (default)' : ''}</option>)}
-            </select>
-          </label>
-          <span style={{ flex: 1 }} />
-          <button className="btn" onClick={handleLyricsGoogle} disabled={!selection} style={{ padding: '4px 8px', fontSize: 11 }}>{lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}</button>
-        </div>
-        {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
-        <span className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Lyrics are stored per-segment draft and written on export as <code>.lrc</code> next to the sliced file + USLT. Whisper is slice-aware {Number.isFinite(startMs) ? `(${Math.round((startMs as number)/1000)}s→${Math.round((endMs as number)/1000)}s)` : ''}.</span>
-      </div>
+      )}
     </div>
   );
 }
