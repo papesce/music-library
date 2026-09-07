@@ -3,6 +3,7 @@ import type { Track } from '../../types/api';
 import { Waveform, type WaveformHandle } from './Waveform';
 import { SegmentList } from './SegmentList';
 import { DetectControls } from './DetectControls';
+import { SplitSegmentEditor, type SegmentMeta } from './SplitSegmentEditor';
 import { api } from '../../api';
 import { formatMs } from '../../lib/format';
 import { usePersistedState } from '../../lib/persist';
@@ -27,6 +28,7 @@ export function SplitModal({
   const [threshDb, setThreshDb] = usePersistedState<number>('split:threshDb', -50);
   const [error, setError] = useState('');
   const [segmentTitles, setSegmentTitles] = useState<string[]>([]);
+  const [segmentMetas, setSegmentMetas] = useState<SegmentMeta[]>([]);
   const waveformRef = useRef<WaveformHandle>(null);
   const [waveReady, setWaveReady] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
@@ -113,6 +115,35 @@ export function SplitModal({
     });
   }, [splitPoints.length]);
 
+  // keep per-segment full metadata in sync with title count + source track defaults
+  useEffect(() => {
+    const n = splitPoints.length - 1;
+    setSegmentMetas(prev => {
+      if (prev.length === n) {
+        // keep title in sync if user edited simple title field while not focused
+        return prev.map((m, i) => (m.title !== (segmentTitles[i] ?? '') ? { ...m, title: segmentTitles[i] ?? '' } : m));
+      }
+      const next: SegmentMeta[] = [];
+      for (let i = 0; i < n; i++) {
+        const existing = prev[i];
+        if (existing) {
+          next.push({ ...existing, title: segmentTitles[i] ?? existing.title });
+        } else {
+          next.push({
+            title: segmentTitles[i] ?? '',
+            artist: track.artist ?? 'Unknown',
+            album: track.album ?? 'Unknown',
+            genre: track.genre ?? 'Unknown',
+            year: track.year ? String(track.year) : '',
+            lyrics: '',
+            lyricsSource: '',
+          });
+        }
+      }
+      return next;
+    });
+  }, [splitPoints.length, segmentTitles, track.artist, track.album, track.genre, track.year]);
+
   // keep focus valid when track count shrinks
   useEffect(() => {
     if (focusedIndex !== null && focusedIndex >= splitPoints.length - 1) setFocusedIndex(null);
@@ -190,8 +221,34 @@ export function SplitModal({
     setExporting(true);
     setError('');
     try {
-      const segs = segmentTitles.map(t => (t.trim() ? { title: t.trim() } : {}));
-      const res = await api.applySplit(track.filePath, splitPoints, segs, skipArr);
+      const segs = segmentMetas.map(m => {
+        const o: Record<string, string> = {};
+        if (m.title.trim()) o.title = m.title.trim();
+        if (m.artist.trim()) o.artist = m.artist.trim();
+        if (m.album.trim()) o.album = m.album.trim();
+        if (m.genre.trim()) o.genre = m.genre.trim();
+        if (m.year.trim()) o.year = m.year.trim();
+        return o;
+      });
+      // fallback to titles if metas not yet populated
+      const finalSegs = segs.length ? segs : segmentTitles.map(t => (t.trim() ? { title: t.trim() } : {}));
+      const res = await api.applySplit(track.filePath, splitPoints, finalSegs, skipArr);
+      // after files created, write per-segment lyrics sidecars if any
+      const lyricsWrites: Promise<unknown>[] = [];
+      if (res.files?.length) {
+        // res.files is in export order skipping skipped indices; map back to original indices
+        let fileIdx = 0;
+        for (let i = 0; i < segmentMetas.length; i++) {
+          if (skipArr.includes(i)) continue;
+          const lrc = segmentMetas[i]?.lyrics?.trim();
+          const outPath = res.files[fileIdx];
+          fileIdx++;
+          if (lrc && outPath) {
+            lyricsWrites.push(api.saveLyrics(outPath, lrc).catch(() => {}));
+          }
+        }
+        if (lyricsWrites.length) await Promise.all(lyricsWrites);
+      }
       setError('');
       onExported();
       onClose();
@@ -320,6 +377,28 @@ export function SplitModal({
             }
             sourceTrack={track}
           />
+          {focusedIndex !== null && segmentMetas[focusedIndex] && (
+            <div style={{ marginTop: 12 }}>
+              <SplitSegmentEditor
+                index={focusedIndex}
+                meta={segmentMetas[focusedIndex]!}
+                sourceFilePath={track.filePath}
+                onChange={next => {
+                  setSegmentMetas(prev => {
+                    const copy = [...prev];
+                    copy[focusedIndex] = next;
+                    return copy;
+                  });
+                  // keep simple title list in sync
+                  setSegmentTitles(prev => {
+                    const copy = [...prev];
+                    copy[focusedIndex] = next.title;
+                    return copy;
+                  });
+                }}
+              />
+            </div>
+          )}
         </div>
 
         <div
