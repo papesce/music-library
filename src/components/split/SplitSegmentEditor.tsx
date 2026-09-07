@@ -60,6 +60,7 @@ export function SplitSegmentEditor({
   sourceFilePath,
   startMs,
   endMs,
+  currentTimeSec,
   onLyricsChange,
 }: {
   index: number;
