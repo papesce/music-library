@@ -64,16 +64,16 @@ Single-binary distribution: zip `out/music-library` + `out/dist/` + `data/` (emp
 
 ## Scripts
 
-| script | what |
-|---|---|
-| `dev` | concurrently `dev:server` + `dev:client` |
-| `dev:server` | `tsx --watch server/index.ts` |
-| `dev:client` | `vite` |
-| `build` | `vite build` |
-| `build:bin` | `vite build` + Bun --compile → `out/music-library` (+ `out/dist`) |
-| `build:bin:all` | cross-compile macOS/Linux/Windows |
-| `start` | production server (`node --import tsx`) |
-| `typecheck` / `lint` / `format` / `check` | `tsc --noEmit`, `eslint`, `prettier` |
+| script                                    | what                                                              |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| `dev`                                     | concurrently `dev:server` + `dev:client`                          |
+| `dev:server`                              | `tsx --watch server/index.ts`                                     |
+| `dev:client`                              | `vite`                                                            |
+| `build`                                   | `vite build`                                                      |
+| `build:bin`                               | `vite build` + Bun --compile → `out/music-library` (+ `out/dist`) |
+| `build:bin:all`                           | cross-compile macOS/Linux/Windows                                 |
+| `start`                                   | production server (`node --import tsx`)                           |
+| `typecheck` / `lint` / `format` / `check` | `tsc --noEmit`, `eslint`, `prettier`                              |
 
 ## Project layout
 

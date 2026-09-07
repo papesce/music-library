@@ -1200,8 +1200,14 @@ body {
   animation: unified-in 0.25s ease;
 }
 @keyframes unified-in {
-  from { transform: translateY(16px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 .unified-expanded-body {
   display: grid;
@@ -1369,8 +1375,12 @@ body {
   animation: lightbox-in 0.2s ease;
 }
 @keyframes lightbox-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .artwork-lightbox {
   position: relative;
@@ -1536,25 +1546,41 @@ body {
   animation: wave-pulse 0.9s ease-in-out infinite;
 }
 @keyframes wave-pulse {
-  0%, 100% { opacity: 0.35; transform: scaleY(0.6); }
-  50% { opacity: 1; transform: scaleY(1); }
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleY(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
 }
 .wave-loading-shimmer {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
   background-size: 200% 100%;
   animation: wave-shimmer 1.4s linear infinite;
   pointer-events: none;
 }
 @keyframes wave-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 .wave-loading-progress {
   height: 4px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
 .wave-loading-progress-fill {
@@ -1569,15 +1595,19 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
   animation: wave-shimmer 1s linear infinite;
   background-size: 200% 100%;
 }
 @keyframes wave-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .btn-spinner {
   width: 12px;
@@ -1626,7 +1656,7 @@ body {
 .history-count {
   font-weight: 600;
   font-size: 11px;
-  color: rgba(238,241,255,0.65);
+  color: rgba(238, 241, 255, 0.65);
 }
 .history-clear {
   background: none;
@@ -1637,11 +1667,13 @@ body {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 999px;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 .history-clear:hover {
   color: var(--text);
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
 .history-scroll {
   display: flex;
@@ -1653,7 +1685,9 @@ body {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
 }
-.history-scroll::-webkit-scrollbar { height: 4px; }
+.history-scroll::-webkit-scrollbar {
+  height: 4px;
+}
 .history-card {
   flex: 0 0 190px;
   display: flex;
@@ -1661,23 +1695,26 @@ body {
   gap: 6px;
   padding: 6px 6px 6px 6px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-soft);
   scroll-snap-align: start;
   position: relative;
-  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.15s;
 }
 .history-card:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.14);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 .history-card.active {
-  border-color: rgba(124,92,255,0.45);
-  background: rgba(124,92,255,0.14);
+  border-color: rgba(124, 92, 255, 0.45);
+  background: rgba(124, 92, 255, 0.14);
 }
 .history-card.playing {
-  border-color: rgba(124,92,255,0.6);
-  box-shadow: 0 0 0 1px rgba(124,92,255,0.25);
+  border-color: rgba(124, 92, 255, 0.6);
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.25);
 }
 .history-main {
   flex: 1;
@@ -1698,7 +1735,7 @@ body {
   flex: 0 0 36px;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.07);
   position: relative;
   display: grid;
   place-items: center;
@@ -1714,7 +1751,7 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0,0,0,0.45);
+  background: rgba(0, 0, 0, 0.45);
   color: #fff;
   font-size: 13px;
   opacity: 0;
@@ -1743,7 +1780,7 @@ body {
 .history-track-artist {
   font-size: 11px;
   line-height: 1.2;
-  color: rgba(238,241,255,0.68);
+  color: rgba(238, 241, 255, 0.68);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1761,20 +1798,31 @@ body {
   place-items: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 .history-card:hover .history-remove,
 .history-remove:focus-visible {
   opacity: 1;
 }
 .history-remove:hover {
-  background: rgba(255,77,92,0.14);
+  background: rgba(255, 77, 92, 0.14);
   color: #ffb3b8;
-  border-color: rgba(255,77,92,0.2);
+  border-color: rgba(255, 77, 92, 0.2);
 }
 @media (max-width: 640px) {
-  .history-card { flex-basis: 168px; }
-  .history-thumb { width: 32px; height: 32px; flex-basis: 32px; border-radius: 7px; }
+  .history-card {
+    flex-basis: 168px;
+  }
+  .history-thumb {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    border-radius: 7px;
+  }
 }
 
 /* scrollbar minimal */

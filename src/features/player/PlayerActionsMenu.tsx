@@ -90,7 +90,13 @@ export function PlayerActionsMenu({ track, onSplit }: Props) {
             ref={menuRef}
             role="menu"
             className="glass row-menu-dropdown"
-            style={{ position: 'fixed', top: coords.top, left: coords.left, right: 'auto', minWidth: 200 }}
+            style={{
+              position: 'fixed',
+              top: coords.top,
+              left: coords.left,
+              right: 'auto',
+              minWidth: 200,
+            }}
           >
             {onSplit && (
               <button role="menuitem" className="row-menu-item" onClick={() => closeAnd(onSplit)}>
@@ -108,7 +114,11 @@ export function PlayerActionsMenu({ track, onSplit }: Props) {
             <button
               role="menuitem"
               className="row-menu-item"
-              onClick={() => closeAnd(() => { void copyThenOpenChosic(track.title, track.artist); })}
+              onClick={() =>
+                closeAnd(() => {
+                  void copyThenOpenChosic(track.title, track.artist);
+                })
+              }
             >
               <span aria-hidden>♪</span> Find similar (Chosic)
             </button>

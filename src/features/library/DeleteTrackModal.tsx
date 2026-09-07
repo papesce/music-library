@@ -1,14 +1,34 @@
 import type { Track } from '../../types/api.d';
 import { Modal } from '../../components/ui/Modal';
 
-export function DeleteTrackModal({ track, deleting, onCancel, onConfirm }: { track: Track; deleting: boolean; onCancel: () => void; onConfirm: () => void }) {
+export function DeleteTrackModal({
+  track,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  track: Track;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   return (
     <Modal onClose={() => !deleting && onCancel()} width="min(480px, calc(100% - 32px))">
       <h3 style={{ marginBottom: 8 }}>Move to Trash?</h3>
       <p className="muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>
-        This will move the file to the system <b style={{ color: '#ffd08a' }}>Trash</b> and remove it from your library.
+        This will move the file to the system <b style={{ color: '#ffd08a' }}>Trash</b> and remove
+        it from your library.
       </p>
-      <div className="glass-soft" style={{ padding: '10px 12px', borderRadius: 12, marginBottom: 16, wordBreak: 'break-all', fontSize: 13 }}>
+      <div
+        className="glass-soft"
+        style={{
+          padding: '10px 12px',
+          borderRadius: 12,
+          marginBottom: 16,
+          wordBreak: 'break-all',
+          fontSize: 13,
+        }}
+      >
         <div style={{ fontWeight: 600 }}>
           {track.artist} — {track.title}
         </div>

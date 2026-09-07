@@ -34,13 +34,15 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     onTogglePlay,
     onSeekPause,
   }: Props,
-  ref,
+  ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isFocused = focusedIndex !== null && focusedIndex !== undefined;
   const focusStart = isFocused ? (splitPoints[focusedIndex as number] ?? 0) : 0;
-  const focusEnd = isFocused ? (splitPoints[(focusedIndex as number) + 1] ?? durationMs) : durationMs;
+  const focusEnd = isFocused
+    ? (splitPoints[(focusedIndex as number) + 1] ?? durationMs)
+    : durationMs;
   const isolatedDuration = isFocused ? Math.max(200, focusEnd - focusStart) : durationMs;
   const isolatedSplitPoints = isFocused
     ? splitPoints.filter(p => p >= focusStart && p <= focusEnd).map(p => p - focusStart)
@@ -109,34 +111,42 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
   });
 
   // Expose a translated handle: callers (SegmentList) pass global ms, but isolated waveform uses 0..isolatedDuration
-  useImperativeHandle(ref, () => ({
-    playFrom: (startMs: number, endMs?: number) => {
-      const h = innerWaveRef.current;
-      if (!h) return Promise.resolve(false);
-      if (isFocused) {
-        const s = Math.max(0, Math.min(isolatedDuration, startMs - focusStart));
-        const e = endMs !== undefined ? Math.max(0, Math.min(isolatedDuration, endMs - focusStart)) : undefined;
-        return h.playFrom(s, e);
-      }
-      return h.playFrom(startMs, endMs);
-    },
-    pause: () => innerWaveRef.current?.pause(),
-    stop: () => innerWaveRef.current?.stop(),
-    zoomTo: (s: number, e: number) => {
-      const h = innerWaveRef.current;
-      if (!h) return;
-      if (isFocused) h.zoomTo(Math.max(0, s - focusStart), Math.min(isolatedDuration, e - focusStart));
-      else h.zoomTo(s, e);
-    },
-    resetZoom: () => innerWaveRef.current?.resetZoom(),
-    getCursorMs: () => {
-      const c = innerWaveRef.current?.getCursorMs() ?? null;
-      if (c === null) return null;
-      return isFocused ? focusStart + c : c;
-    },
-    isReady: () => !!innerWaveRef.current?.isReady(),
-    isPlaying: () => !!innerWaveRef.current?.isPlaying(),
-  }), [isFocused, focusStart, isolatedDuration]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      playFrom: (startMs: number, endMs?: number) => {
+        const h = innerWaveRef.current;
+        if (!h) return Promise.resolve(false);
+        if (isFocused) {
+          const s = Math.max(0, Math.min(isolatedDuration, startMs - focusStart));
+          const e =
+            endMs !== undefined
+              ? Math.max(0, Math.min(isolatedDuration, endMs - focusStart))
+              : undefined;
+          return h.playFrom(s, e);
+        }
+        return h.playFrom(startMs, endMs);
+      },
+      pause: () => innerWaveRef.current?.pause(),
+      stop: () => innerWaveRef.current?.stop(),
+      zoomTo: (s: number, e: number) => {
+        const h = innerWaveRef.current;
+        if (!h) return;
+        if (isFocused)
+          h.zoomTo(Math.max(0, s - focusStart), Math.min(isolatedDuration, e - focusStart));
+        else h.zoomTo(s, e);
+      },
+      resetZoom: () => innerWaveRef.current?.resetZoom(),
+      getCursorMs: () => {
+        const c = innerWaveRef.current?.getCursorMs() ?? null;
+        if (c === null) return null;
+        return isFocused ? focusStart + c : c;
+      },
+      isReady: () => !!innerWaveRef.current?.isReady(),
+      isPlaying: () => !!innerWaveRef.current?.isPlaying(),
+    }),
+    [isFocused, focusStart, isolatedDuration]
+  );
 
   // in isolated mode the waveform itself is not "focused" — it's a single-segment view
   useWaveformRegions({
@@ -158,8 +168,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     splitPoints: isolatedSplitPoints,
   });
   useEffect(() => {
-    if (wsRef.current)
-      (wsRef.current as unknown as { _focused?: boolean })._focused = isFocused;
+    if (wsRef.current) (wsRef.current as unknown as { _focused?: boolean })._focused = isFocused;
   }, [isFocused, wsRef]);
 
   const [viewportMs, setViewportMs] = useState<{ left: number; right: number } | null>(null);
@@ -216,7 +225,9 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     // WaveSurfer emits 'scroll' with (startX,endX,scrollLeft,scrollRight) on every scroll
     let unsub: (() => void) | undefined;
     try {
-      unsub = ws.on?.('scroll', (_s: unknown, _e: unknown, scrollLeft: number) => update(scrollLeft as number));
+      unsub = (
+        ws as unknown as { on?: (ev: string, fn: (...a: unknown[]) => void) => () => void }
+      ).on?.('scroll', (...a: unknown[]) => update((a[2] as number | undefined) ?? 0));
     } catch {}
 
     // also listen directly to the shadow .scroll element for drag/scroll that doesn't emit
@@ -226,7 +237,8 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       shadowScrollEl = (sr?.querySelector('.scroll') as HTMLElement | null) ?? null;
     } catch {}
     const onShadowScroll = () => update(shadowScrollEl?.scrollLeft);
-    if (shadowScrollEl) shadowScrollEl.addEventListener('scroll', onShadowScroll, { passive: true });
+    if (shadowScrollEl)
+      shadowScrollEl.addEventListener('scroll', onShadowScroll, { passive: true });
 
     // fallback light-DOM listeners (older WaveSurfer or before shadow attaches)
     const onElScroll = () => update();
@@ -235,7 +247,9 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     const id = requestAnimationFrame(() => update());
 
     return () => {
-      try { unsub?.(); } catch {}
+      try {
+        unsub?.();
+      } catch {}
       if (shadowScrollEl) shadowScrollEl.removeEventListener('scroll', onShadowScroll);
       el.removeEventListener('scroll', onElScroll);
       window.removeEventListener('resize', onElScroll);
@@ -353,9 +367,12 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
         >
           <span style={{ fontWeight: 700, color: '#a78bfa' }}>Isolated</span>
           <span>
-            Track {(focusedIndex as number) + 1} · {fmt(focusStart)} → {fmt(focusEnd)} · {fmt(isolatedDuration)} only — other tracks hidden
+            Track {(focusedIndex as number) + 1} · {fmt(focusStart)} → {fmt(focusEnd)} ·{' '}
+            {fmt(isolatedDuration)} only — other tracks hidden
           </span>
-          <span className="muted" style={{ marginLeft: 'auto', fontSize: 10 }}>Esc to exit</span>
+          <span className="muted" style={{ marginLeft: 'auto', fontSize: 10 }}>
+            Esc to exit
+          </span>
         </div>
       )}
       <div style={{ position: 'relative', width: '100%' }}>
@@ -389,17 +406,29 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
             <div className="wave-loading-shimmer" />
             <div className="wave-loading-bars" aria-hidden="true">
               {Array.from({ length: 48 }).map((_, i) => {
-                const h = 18 + Math.abs(Math.sin((i * 0.9) + 1) * 52) + (i % 3) * 6;
+                const h = 18 + Math.abs(Math.sin(i * 0.9 + 1) * 52) + (i % 3) * 6;
                 return (
                   <div
                     key={i}
                     className="wave-loading-bar"
-                    style={{ height: h, animationDelay: `${(i % 8) * 0.08}s`, opacity: 0.9 - (i % 5) * 0.08 }}
+                    style={{
+                      height: h,
+                      animationDelay: `${(i % 8) * 0.08}s`,
+                      opacity: 0.9 - (i % 5) * 0.08,
+                    }}
                   />
                 );
               })}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: 1 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                position: 'relative',
+                zIndex: 1,
+              }}
+            >
               <span
                 aria-hidden="true"
                 style={{
@@ -413,19 +442,32 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#e4e4e7', fontFamily: 'ui-monospace, monospace' }}>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#e4e4e7',
+                  fontFamily: 'ui-monospace, monospace',
+                }}
+              >
                 Generating waveform… {loadingPct > 0 ? `${loadingPct}%` : ''}
               </span>
               <span className="muted" style={{ fontSize: 11, marginLeft: 'auto' }}>
-                {isFocused ? `${fmt(isolatedDuration)} isolated` : durationMs ? `${Math.round(durationMs / 1000)}s` : ''}
+                {isFocused
+                  ? `${fmt(isolatedDuration)} isolated`
+                  : durationMs
+                    ? `${Math.round(durationMs / 1000)}s`
+                    : ''}
               </span>
             </div>
             <div className="wave-loading-progress" aria-hidden="true">
-              <div className="wave-loading-progress-fill" style={{ width: `${Math.max(6, loadingPct)}%` }} />
+              <div
+                className="wave-loading-progress-fill"
+                style={{ width: `${Math.max(6, loadingPct)}%` }}
+              />
             </div>
           </div>
         )}
-
       </div>
       {ready ? (
         <WaveformMinimap
@@ -559,10 +601,22 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
         )}
         {ready && (
           <span className="muted" style={{ fontSize: 12, marginLeft: 6 }}>
-            {isFocused ? `${isolatedSplitPoints.length - 1} in focus · ${splitPoints.length - 1} total` : `${splitPoints.length - 1} segments`}
+            {isFocused
+              ? `${isolatedSplitPoints.length - 1} in focus · ${splitPoints.length - 1} total`
+              : `${splitPoints.length - 1} segments`}
           </span>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, border: '1px solid var(--border)', borderRadius: 8, padding: 2 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            marginLeft: 6,
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 2,
+          }}
+        >
           <button
             onClick={() => applyZoom(Math.max(1, Math.round((zoom || 1) * 0.6)))}
             disabled={!ready || zoom <= 1}
@@ -600,7 +654,10 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
             Reset
           </button>
         </div>
-        <span className="muted" style={{ fontSize: 11, marginLeft: 4, display: ready ? undefined : 'none' }}>
+        <span
+          className="muted"
+          style={{ fontSize: 11, marginLeft: 4, display: ready ? undefined : 'none' }}
+        >
           {zoom > 1 ? 'scroll →' : 'Ctrl+scroll to zoom'}
         </span>
         <button

@@ -5,12 +5,26 @@ import { existsSync, promises as fs, createReadStream, statSync } from 'fs';
 try {
   const candidates: string[] = [];
   candidates.push(join(process.cwd(), '.whisper-venv', 'bin'));
-  try { candidates.push(join(dirname(process.execPath), '.whisper-venv', 'bin')); } catch {}
-  try { candidates.push(join(dirname(process.execPath), '..', '.whisper-venv', 'bin')); } catch {}
-  try { candidates.push(join(dirname(process.execPath), '..', '..', '.whisper-venv', 'bin')); } catch {}
-  if (process.env.HOME) candidates.push(join(process.env.HOME, 'projects', 'personal', 'music-library', '.whisper-venv', 'bin'));
+  try {
+    candidates.push(join(dirname(process.execPath), '.whisper-venv', 'bin'));
+  } catch {}
+  try {
+    candidates.push(join(dirname(process.execPath), '..', '.whisper-venv', 'bin'));
+  } catch {}
+  try {
+    candidates.push(join(dirname(process.execPath), '..', '..', '.whisper-venv', 'bin'));
+  } catch {}
+  if (process.env.HOME)
+    candidates.push(
+      join(process.env.HOME, 'projects', 'personal', 'music-library', '.whisper-venv', 'bin')
+    );
   for (const venvBin of candidates) {
-    if (existsSync(join(venvBin, 'whisper')) && !String(process.env.PATH || '').split(':').includes(venvBin)) {
+    if (
+      existsSync(join(venvBin, 'whisper')) &&
+      !String(process.env.PATH || '')
+        .split(':')
+        .includes(venvBin)
+    ) {
       process.env.PATH = `${venvBin}:${process.env.PATH || ''}`;
       break;
     }
@@ -424,7 +438,9 @@ function parseLrcToSynced(lrc: string): { ms: number; text: string }[] | null {
   for (const line of lines) {
     const m = line.match(/\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\](.*)/);
     if (m) {
-      const min = Number(m[1]), sec = Number(m[2]), msPart = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0;
+      const min = Number(m[1]),
+        sec = Number(m[2]),
+        msPart = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0;
       const ms = (min * 60 + sec) * 1000 + msPart;
       const text = (m[4] ?? '').trim();
       if (text) out.push({ ms, text });
@@ -433,18 +449,39 @@ function parseLrcToSynced(lrc: string): { ms: number; text: string }[] | null {
   return out.length ? out.sort((a, b) => a.ms - b.ms) : null;
 }
 function lrcFromSegments(segments: { start: number; text: string }[]): string {
-  return segments.map(s => `${formatLrcTime(Math.round(s.start * 1000))}${s.text.trim()}`).join('\n');
+  return segments
+    .map(s => `${formatLrcTime(Math.round(s.start * 1000))}${s.text.trim()}`)
+    .join('\n');
 }
-async function fetchLrclib(artist: string, title: string, album?: string, durationSec?: number): Promise<{ plainLyrics: string; syncedLyrics: string; trackName: string; artistName: string; albumName: string; instrumental: boolean; duration: number } | null> {
-  artist = artist.trim(); title = title.trim();
-  if (!artist || !title || artist.toLowerCase() === 'unknown' || title.toLowerCase() === 'unknown') return null;
+async function fetchLrclib(
+  artist: string,
+  title: string,
+  album?: string,
+  durationSec?: number
+): Promise<{
+  plainLyrics: string;
+  syncedLyrics: string;
+  trackName: string;
+  artistName: string;
+  albumName: string;
+  instrumental: boolean;
+  duration: number;
+} | null> {
+  artist = artist.trim();
+  title = title.trim();
+  if (!artist || !title || artist.toLowerCase() === 'unknown' || title.toLowerCase() === 'unknown')
+    return null;
   const LRCLIB = 'https://lrclib.net';
   const HEADERS = { 'User-Agent': 'music-library/1.0' };
   const params = new URLSearchParams({ artist_name: artist, track_name: title });
-  if (album && album.trim() && album.toLowerCase() !== 'unknown') params.set('album_name', album.trim());
+  if (album && album.trim() && album.toLowerCase() !== 'unknown')
+    params.set('album_name', album.trim());
   if (durationSec && durationSec > 0) params.set('duration', String(Math.round(durationSec)));
   try {
-    const r = await fetch(`${LRCLIB}/api/get?${params}`, { headers: HEADERS, signal: AbortSignal.timeout(12000) });
+    const r = await fetch(`${LRCLIB}/api/get?${params}`, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(12000),
+    });
     if (r.ok) {
       const d: any = await r.json();
       if (d?.plainLyrics || d?.syncedLyrics) return normalizeLrclib(d);
@@ -452,9 +489,13 @@ async function fetchLrclib(artist: string, title: string, album?: string, durati
   } catch {}
   try {
     const qParts = [artist, title];
-    if (album && album.trim().length >= 2 && album.toLowerCase() !== 'unknown') qParts.push(album.trim());
+    if (album && album.trim().length >= 2 && album.toLowerCase() !== 'unknown')
+      qParts.push(album.trim());
     const q = qParts.join(' ');
-    const r2 = await fetch(`${LRCLIB}/api/search?q=${encodeURIComponent(q)}`, { headers: HEADERS, signal: AbortSignal.timeout(12000) });
+    const r2 = await fetch(`${LRCLIB}/api/search?q=${encodeURIComponent(q)}`, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(12000),
+    });
     if (r2.ok) {
       const arr: any = await r2.json();
       if (Array.isArray(arr) && arr.length) {
@@ -466,14 +507,25 @@ async function fetchLrclib(artist: string, title: string, album?: string, durati
   return null;
 }
 function pickBestLrclib(cands: any[], artist: string, title: string, album?: string): any {
-  const al = artist.toLowerCase(), tl = title.toLowerCase(), albumL = (album || '').trim().toLowerCase();
+  const al = artist.toLowerCase(),
+    tl = title.toLowerCase(),
+    albumL = (album || '').trim().toLowerCase();
   const score = (c: any) => {
     let s = 0;
-    const ca = (c.artistName || '').toLowerCase(), ct = (c.trackName || '').toLowerCase();
-    if (ca === al) s += 10; else if (ca.includes(al) || al.includes(ca)) s += 5;
-    if (ct === tl) s += 10; else if (ct.includes(tl) || tl.includes(ct)) s += 5;
-    if (albumL) { const cal = (c.albumName || '').toLowerCase(); if (cal === albumL) s += 8; else if (cal.includes(albumL) || albumL.includes(cal)) s += 4; }
-    if (c.plainLyrics) s += 3; if (c.syncedLyrics) s += 5; if (!c.instrumental) s += 1;
+    const ca = (c.artistName || '').toLowerCase(),
+      ct = (c.trackName || '').toLowerCase();
+    if (ca === al) s += 10;
+    else if (ca.includes(al) || al.includes(ca)) s += 5;
+    if (ct === tl) s += 10;
+    else if (ct.includes(tl) || tl.includes(ct)) s += 5;
+    if (albumL) {
+      const cal = (c.albumName || '').toLowerCase();
+      if (cal === albumL) s += 8;
+      else if (cal.includes(albumL) || albumL.includes(cal)) s += 4;
+    }
+    if (c.plainLyrics) s += 3;
+    if (c.syncedLyrics) s += 5;
+    if (!c.instrumental) s += 1;
     return s;
   };
   return [...cands].sort((a, b) => score(b) - score(a))[0];
@@ -481,13 +533,47 @@ function pickBestLrclib(cands: any[], artist: string, title: string, album?: str
 function normalizeLrclib(d: any) {
   let plain = (d.plainLyrics || '').trim();
   const synced = (d.syncedLyrics || '').trim();
-  if (!plain && synced) plain = synced.replace(/\[\d{1,3}:\d{2}(?:\.\d{1,3})?\]/g, '').split('\n').map((l: string) => l.trim()).join('\n').trim().replace(/\n{3,}/g, '\n\n');
-  return { trackName: d.trackName || '', artistName: d.artistName || '', albumName: d.albumName || '', duration: d.duration || 0, instrumental: !!d.instrumental, plainLyrics: plain, syncedLyrics: synced };
+  if (!plain && synced)
+    plain = synced
+      .replace(/\[\d{1,3}:\d{2}(?:\.\d{1,3})?\]/g, '')
+      .split('\n')
+      .map((l: string) => l.trim())
+      .join('\n')
+      .trim()
+      .replace(/\n{3,}/g, '\n\n');
+  return {
+    trackName: d.trackName || '',
+    artistName: d.artistName || '',
+    albumName: d.albumName || '',
+    duration: d.duration || 0,
+    instrumental: !!d.instrumental,
+    plainLyrics: plain,
+    syncedLyrics: synced,
+  };
 }
-async function transcribeWithWhisper(filePath: string, model = 'base', language?: string): Promise<{ lrc: string; plain: string; synced: { ms: number; text: string }[] | null; rawSegments: { start: number; text: string }[] }> {
+async function transcribeWithWhisper(
+  filePath: string,
+  model = 'base',
+  language?: string
+): Promise<{
+  lrc: string;
+  plain: string;
+  synced: { ms: number; text: string }[] | null;
+  rawSegments: { start: number; text: string }[];
+}> {
   const tmpDir = join(dirname(filePath), '.whisper-tmp');
   // use `whisper` CLI (openai-whisper). Check availability first
-  const args = [filePath, '--model', model, '--output_format', 'json', '--fp16', 'False', '--verbose', 'False'];
+  const args = [
+    filePath,
+    '--model',
+    model,
+    '--output_format',
+    'json',
+    '--fp16',
+    'False',
+    '--verbose',
+    'False',
+  ];
   if (language && language.trim()) args.push('--language', language.trim());
   // whisper writes <basename>.json next to input by default; use --output_dir to control
   const outDir = join('/tmp', `ml-whisper-${Date.now().toString(36)}`);
@@ -498,7 +584,13 @@ async function transcribeWithWhisper(filePath: string, model = 'base', language?
   } catch (e: any) {
     // whisper returns 0 on success; if binary missing, surface 503
     const msg = e?.message || String(e);
-    if (msg.includes('ENOENT') || msg.includes('not found')) throw Object.assign(new Error('whisper CLI not found — run ./start.sh --setup (auto-creates .whisper-venv) or pip install openai-whisper'), { code: 'WHISPER_NOT_FOUND' });
+    if (msg.includes('ENOENT') || msg.includes('not found'))
+      throw Object.assign(
+        new Error(
+          'whisper CLI not found — run ./start.sh --setup (auto-creates .whisper-venv) or pip install openai-whisper'
+        ),
+        { code: 'WHISPER_NOT_FOUND' }
+      );
     // if stderr contains error but json was still written, continue
     if (!existsSync(outDir)) throw e;
   }
@@ -517,12 +609,17 @@ async function transcribeWithWhisper(filePath: string, model = 'base', language?
     }
     if (!segs.length && plain) {
       // fallback split on sentence punctuation
-      const parts = plain.split(/(?<=[.!?])\s+/).map((p: string) => p.trim()).filter(Boolean);
+      const parts = plain
+        .split(/(?<=[.!?])\s+/)
+        .map((p: string) => p.trim())
+        .filter(Boolean);
       // distribute evenly if no timestamps
       segs = parts.map((p: string, i: number) => ({ start: i * 3, text: p }));
     }
   } finally {
-    try { await fs.rm(outDir, { recursive: true, force: true }); } catch {}
+    try {
+      await fs.rm(outDir, { recursive: true, force: true });
+    } catch {}
   }
   if (!segs.length) throw new Error('Whisper produced no segments');
   const lrc = lrcFromSegments(segs);
@@ -666,7 +763,9 @@ const server = createServer(async (req, res) => {
       // if file doesn't exist, just remove from DB
       if (!existsSync(resolved)) {
         deleteTrackByPath(resolved);
-        try { deleteSplitDraft(resolved); } catch {}
+        try {
+          deleteSplitDraft(resolved);
+        } catch {}
         return json(res, 200, {
           ok: true,
           deleted: false,
@@ -680,7 +779,9 @@ const server = createServer(async (req, res) => {
         return json(res, 500, { error: `failed to move file to Trash: ${e.message}` });
       }
       deleteTrackByPath(resolved);
-      try { deleteSplitDraft(resolved); } catch {}
+      try {
+        deleteSplitDraft(resolved);
+      } catch {}
       return json(res, 200, { ok: true, trashed: true, deleted: true });
     }
 
@@ -803,7 +904,7 @@ const server = createServer(async (req, res) => {
         body.filename ?? body.fileName ?? body.newFilename ?? body.newFileName;
       if (!filePath) return json(res, 400, { error: 'path required' });
       if (!newFilename || !String(newFilename).trim())
-        return json(res, 400, { error: 'filename required (e.g. \"Artist - Title.mp3\")' });
+        return json(res, 400, { error: 'filename required (e.g. "Artist - Title.mp3")' });
       let filename = String(newFilename).trim();
       // basename only — no directory separators
       if (filename.includes('/') || filename.includes('\\'))
@@ -813,9 +914,11 @@ const server = createServer(async (req, res) => {
       if (filename.length > 255) return json(res, 400, { error: 'filename too long (max 255)' });
       // disallow empty base
       const baseNoExt = filename.slice(0, -4).trim();
-      if (!baseNoExt) return json(res, 400, { error: 'filename without extension cannot be empty' });
+      if (!baseNoExt)
+        return json(res, 400, { error: 'filename without extension cannot be empty' });
       // disallow problematic characters (null byte etc)
-      if (filename.includes('\0')) return json(res, 400, { error: 'filename contains invalid characters' });
+      if (filename.includes('\0'))
+        return json(res, 400, { error: 'filename contains invalid characters' });
 
       const resolved = resolve(filePath);
       const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
@@ -828,7 +931,8 @@ const server = createServer(async (req, res) => {
             break;
           }
         }
-        if (!allowed) return json(res, 403, { error: 'file not in library/folders — rename denied' });
+        if (!allowed)
+          return json(res, 403, { error: 'file not in library/folders — rename denied' });
       }
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
 
@@ -839,7 +943,9 @@ const server = createServer(async (req, res) => {
       if (dirname(newResolved) !== dirname(resolved))
         return json(res, 400, { error: 'filename must not change directory' });
       if (existsSync(newResolved))
-        return json(res, 409, { error: `a file named \"${filename}\" already exists in this folder` });
+        return json(res, 409, {
+          error: `a file named "${filename}" already exists in this folder`,
+        });
 
       try {
         await fs.rename(resolved, newResolved);
@@ -849,12 +955,17 @@ const server = createServer(async (req, res) => {
       // also rename sidecar .lrc if exists (keep lyrics with file)
       try {
         const oldLrc = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
-        const newLrc = join(dirname(newResolved), basename(newResolved, extname(newResolved)) + '.lrc');
+        const newLrc = join(
+          dirname(newResolved),
+          basename(newResolved, extname(newResolved)) + '.lrc'
+        );
         if (existsSync(oldLrc) && !existsSync(newLrc)) await fs.rename(oldLrc, newLrc);
       } catch {}
 
       const updated = renameTrackPath(resolved, newResolved);
-      try { renameSplitDraft(resolved, newResolved); } catch {}
+      try {
+        renameSplitDraft(resolved, newResolved);
+      } catch {}
       if (!updated) {
         // fallback: re-scan that file minimally
         return json(res, 200, { ok: true, filePath: newResolved, oldFilePath: resolved });
@@ -864,11 +975,13 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === '/api/tracks/reviewed' && req.method === 'PUT') {
       const body = await getBody(req);
-      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      const filePath: string | undefined =
+        body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
       if (!filePath) return json(res, 400, { error: 'path required' });
       const reviewedRaw = body.reviewed ?? body.completed ?? body.checked;
       if (reviewedRaw === undefined) return json(res, 400, { error: 'reviewed boolean required' });
-      const reviewed = reviewedRaw === true || reviewedRaw === 'true' || reviewedRaw === 1 || reviewedRaw === '1';
+      const reviewed =
+        reviewedRaw === true || reviewedRaw === 'true' || reviewedRaw === 1 || reviewedRaw === '1';
       const resolved = resolve(filePath);
       const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
       if (!existing) return json(res, 404, { error: 'track not found' });
@@ -877,13 +990,22 @@ const server = createServer(async (req, res) => {
       return json(res, 200, updated);
     }
 
-    if ((url.pathname === '/api/tracks/is-cover' || url.pathname === '/api/tracks/cover-mark') && req.method === 'PUT') {
+    if (
+      (url.pathname === '/api/tracks/is-cover' || url.pathname === '/api/tracks/cover-mark') &&
+      req.method === 'PUT'
+    ) {
       const body = await getBody(req);
-      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      const filePath: string | undefined =
+        body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
       if (!filePath) return json(res, 400, { error: 'path required' });
       const raw = body.isCover ?? body.is_original ?? body.original;
       if (raw === undefined) return json(res, 400, { error: 'isCover boolean required' });
-      const isCover = raw === true || raw === 'true' || raw === 1 || raw === '1' || String(raw).toLowerCase() === 'cover';
+      const isCover =
+        raw === true ||
+        raw === 'true' ||
+        raw === 1 ||
+        raw === '1' ||
+        String(raw).toLowerCase() === 'cover';
       const resolved = resolve(filePath);
       const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
       if (!existing) return json(res, 404, { error: 'track not found' });
@@ -894,7 +1016,8 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === '/api/tracks/loudness' && req.method === 'PUT') {
       const body = await getBody(req);
-      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      const filePath: string | undefined =
+        body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
       if (!filePath) return json(res, 400, { error: 'path required' });
       const raw = body.loudness;
       // allow null to clear; legacy 'quiet' coerced to 'normal'
@@ -902,7 +1025,8 @@ const server = createServer(async (req, res) => {
       if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
         let v = String(raw).trim().toLowerCase();
         if (v === 'quiet') v = 'normal';
-        if (!['normal','loud'].includes(v)) return json(res, 400, { error: 'loudness must be normal|loud or null' });
+        if (!['normal', 'loud'].includes(v))
+          return json(res, 400, { error: 'loudness must be normal|loud or null' });
         loudness = v as Loudness;
       }
       const resolved = resolve(filePath);
@@ -915,22 +1039,52 @@ const server = createServer(async (req, res) => {
 
     // ——— App state export/import (non-derived: reviewed/isCover/loudness, wishlist, folders, split drafts) ———
     if (url.pathname === '/api/state/export' && req.method === 'GET') {
-      const tracks = getTracks().map(t => ({ filePath: t.filePath, reviewed: !!t.reviewed, reviewedAt: t.reviewedAt ?? null, isCover: !!t.isCover, loudness: t.loudness ?? null }));
+      const tracks = getTracks().map(t => ({
+        filePath: t.filePath,
+        reviewed: !!t.reviewed,
+        reviewedAt: t.reviewedAt ?? null,
+        isCover: !!t.isCover,
+        loudness: t.loudness ?? null,
+      }));
       const wishlist = getWishlist();
       const folders = getFolders();
       const splitDrafts = getAllSplitDrafts();
-      return json(res, 200, { version: 1, exportedAt: new Date().toISOString(), folders, tracks, wishlist, splitDrafts });
+      return json(res, 200, {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        folders,
+        tracks,
+        wishlist,
+        splitDrafts,
+      });
     }
     if (url.pathname === '/api/state/import' && req.method === 'POST') {
       const body = await getBody(req);
       const mode = body.mode === 'replace' ? 'replace' : 'merge';
       const folders: string[] | undefined = Array.isArray(body.folders) ? body.folders : undefined;
-      const tracks: { filePath: string; reviewed?: boolean; reviewedAt?: string | null; isCover?: boolean; loudness?: string | null }[] | undefined = Array.isArray(body.tracks) ? body.tracks : undefined;
-      const wishlist: { id: string; name: string; artist?: string; priority?: string; dateAdded?: string }[] | undefined = Array.isArray(body.wishlist) ? body.wishlist : undefined;
-      const splitDrafts: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt?: string }[] | undefined = Array.isArray(body.splitDrafts) ? body.splitDrafts : undefined;
-      let updatedTracks = 0, updatedWishlist = 0;
+      const tracks:
+        | {
+            filePath: string;
+            reviewed?: boolean;
+            reviewedAt?: string | null;
+            isCover?: boolean;
+            loudness?: string | null;
+          }[]
+        | undefined = Array.isArray(body.tracks) ? body.tracks : undefined;
+      const wishlist:
+        | { id: string; name: string; artist?: string; priority?: string; dateAdded?: string }[]
+        | undefined = Array.isArray(body.wishlist) ? body.wishlist : undefined;
+      const splitDrafts:
+        | { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt?: string }[]
+        | undefined = Array.isArray(body.splitDrafts) ? body.splitDrafts : undefined;
+      let updatedTracks = 0,
+        updatedWishlist = 0;
       if (folders) {
-        try { dbSetFolders(folders); } catch (e: any) { return json(res, 400, { error: `folders: ${e.message}` }); }
+        try {
+          dbSetFolders(folders);
+        } catch (e: any) {
+          return json(res, 400, { error: `folders: ${e.message}` });
+        }
       }
       if (tracks) {
         for (const t of tracks) {
@@ -938,12 +1092,19 @@ const server = createServer(async (req, res) => {
           const existing = getTrackByPath(t.filePath);
           if (!existing) continue;
           let patch: any = {};
-          if (typeof t.reviewed === 'boolean') { patch.reviewed = t.reviewed; patch.reviewedAt = t.reviewedAt ?? (t.reviewed ? new Date().toISOString() : null); }
+          if (typeof t.reviewed === 'boolean') {
+            patch.reviewed = t.reviewed;
+            patch.reviewedAt = t.reviewedAt ?? (t.reviewed ? new Date().toISOString() : null);
+          }
           if (typeof t.isCover === 'boolean') patch.isCover = t.isCover;
-          if (t.loudness === null || ['normal','loud'].includes(String(t.loudness)) || String(t.loudness)==='quiet') {
+          if (
+            t.loudness === null ||
+            ['normal', 'loud'].includes(String(t.loudness)) ||
+            String(t.loudness) === 'quiet'
+          ) {
             let lv: string | null = t.loudness as any;
             if (lv === 'quiet') lv = 'normal';
-            if (lv === null || ['normal','loud'].includes(lv)) patch.loudness = lv as any;
+            if (lv === null || ['normal', 'loud'].includes(lv)) patch.loudness = lv as any;
           }
           if (Object.keys(patch).length) {
             // use granular setters to preserve reviewedAt semantics
@@ -960,23 +1121,55 @@ const server = createServer(async (req, res) => {
         for (const w of wishlist) {
           if (!w.name?.trim()) continue;
           if (existingIds.has(w.id)) {
-            updateWishlistItem(w.id, { name: w.name, artist: w.artist, priority: (w.priority as any) ?? 'Medium', dateAdded: w.dateAdded ?? new Date().toISOString() });
+            updateWishlistItem(w.id, {
+              name: w.name,
+              artist: w.artist,
+              priority: (w.priority as any) ?? 'Medium',
+              dateAdded: w.dateAdded ?? new Date().toISOString(),
+            });
           } else {
-            try { addWishlistItem({ id: w.id || Date.now().toString(36)+Math.random().toString(36).slice(2,6), name: w.name.trim(), artist: w.artist?.trim() || undefined, priority: (w.priority as any) ?? 'Medium', dateAdded: w.dateAdded ?? new Date().toISOString() }); } catch {}
+            try {
+              addWishlistItem({
+                id: w.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                name: w.name.trim(),
+                artist: w.artist?.trim() || undefined,
+                priority: (w.priority as any) ?? 'Medium',
+                dateAdded: w.dateAdded ?? new Date().toISOString(),
+              });
+            } catch {}
           }
           updatedWishlist++;
         }
       }
       if (splitDrafts !== undefined) {
-        if (mode === 'replace') setAllSplitDrafts(splitDrafts.map(d => ({ filePath: d.filePath, splitPoints: d.splitPoints ?? [], segmentTitles: d.segmentTitles ?? [], updatedAt: d.updatedAt ?? new Date().toISOString() })));
+        if (mode === 'replace')
+          setAllSplitDrafts(
+            splitDrafts.map(d => ({
+              filePath: d.filePath,
+              splitPoints: d.splitPoints ?? [],
+              segmentTitles: d.segmentTitles ?? [],
+              updatedAt: d.updatedAt ?? new Date().toISOString(),
+            }))
+          );
         else {
           for (const d of splitDrafts) {
             if (!d.filePath) continue;
-            try { setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? []); } catch {}
+            try {
+              setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? []);
+            } catch {}
           }
         }
       }
-      return json(res, 200, { ok: true, mode, folders: folders?.length ?? 0, tracks: updatedTracks, wishlist: updatedWishlist, splitDrafts: splitDrafts?.length ?? 0, library: getTracks(), wishlistItems: getWishlist() });
+      return json(res, 200, {
+        ok: true,
+        mode,
+        folders: folders?.length ?? 0,
+        tracks: updatedTracks,
+        wishlist: updatedWishlist,
+        splitDrafts: splitDrafts?.length ?? 0,
+        library: getTracks(),
+        wishlistItems: getWishlist(),
+      });
     }
 
     if (url.pathname === '/api/tracks/export-reviewed' && req.method === 'POST') {
@@ -984,11 +1177,13 @@ const server = createServer(async (req, res) => {
       const destinationRaw: string | undefined = body.destination ?? body.dest ?? body.folder;
       const modeRaw: string = String(body.mode ?? 'copy').toLowerCase();
       const mode = ['copy', 'move', 'm3u'].includes(modeRaw) ? modeRaw : 'copy';
-      const playlistName: string = String(body.playlistName ?? 'Completed.m3u8').trim() || 'Completed.m3u8';
+      const playlistName: string =
+        String(body.playlistName ?? 'Completed.m3u8').trim() || 'Completed.m3u8';
       const overwrite = body.overwrite === true || body.overwrite === 'true';
 
       const reviewedTracks = getTracks().filter(t => !!t.reviewed);
-      if (reviewedTracks.length === 0) return json(res, 400, { error: 'no tracks marked as done/reviewed' });
+      if (reviewedTracks.length === 0)
+        return json(res, 400, { error: 'no tracks marked as done/reviewed' });
 
       // destination required for copy/move/m3u — default to <cwd>/data/playlist
       const destInput = destinationRaw?.trim() || join(process.cwd(), 'data', 'playlist');
@@ -1000,11 +1195,19 @@ const server = createServer(async (req, res) => {
       }
 
       if (mode === 'm3u') {
-        const safeName = playlistName.includes('/') || playlistName.includes('\\') ? 'Completed.m3u8' : playlistName;
-        const finalName = safeName.toLowerCase().endsWith('.m3u') || safeName.toLowerCase().endsWith('.m3u8') ? safeName : `${safeName}.m3u8`;
+        const safeName =
+          playlistName.includes('/') || playlistName.includes('\\')
+            ? 'Completed.m3u8'
+            : playlistName;
+        const finalName =
+          safeName.toLowerCase().endsWith('.m3u') || safeName.toLowerCase().endsWith('.m3u8')
+            ? safeName
+            : `${safeName}.m3u8`;
         const m3uPath = join(destResolved, finalName);
         if (existsSync(m3uPath) && !overwrite) {
-          return json(res, 409, { error: `playlist already exists: ${finalName} (use overwrite:true)` });
+          return json(res, 409, {
+            error: `playlist already exists: ${finalName} (use overwrite:true)`,
+          });
         }
         const lines: string[] = ['#EXTM3U'];
         for (const t of reviewedTracks) {
@@ -1014,7 +1217,13 @@ const server = createServer(async (req, res) => {
           lines.push(t.filePath);
         }
         await fs.writeFile(m3uPath, lines.join('\n') + '\n', 'utf-8');
-        return json(res, 200, { ok: true, mode, destination: destResolved, playlist: m3uPath, count: reviewedTracks.length });
+        return json(res, 200, {
+          ok: true,
+          mode,
+          destination: destResolved,
+          playlist: m3uPath,
+          count: reviewedTracks.length,
+        });
       }
 
       // copy / move
@@ -1050,12 +1259,14 @@ const server = createServer(async (req, res) => {
             // also copy sidecar .lrc if exists
             const srcLrc = join(dirname(src), basename(src, extname(src)) + '.lrc');
             const destLrc = join(dirname(dest), basename(dest, extname(dest)) + '.lrc');
-            if (existsSync(srcLrc) && !existsSync(destLrc)) await fs.copyFile(srcLrc, destLrc).catch(() => {});
+            if (existsSync(srcLrc) && !existsSync(destLrc))
+              await fs.copyFile(srcLrc, destLrc).catch(() => {});
           } else {
             await fs.rename(src, dest);
             const srcLrc = join(dirname(src), basename(src, extname(src)) + '.lrc');
             const destLrc = join(dirname(dest), basename(dest, extname(dest)) + '.lrc');
-            if (existsSync(srcLrc) && !existsSync(destLrc)) await fs.rename(srcLrc, destLrc).catch(() => {});
+            if (existsSync(srcLrc) && !existsSync(destLrc))
+              await fs.rename(srcLrc, destLrc).catch(() => {});
             // update DB path
             renameTrackPath(src, dest);
           }
@@ -1065,31 +1276,59 @@ const server = createServer(async (req, res) => {
           results.push({ file: t.filePath, dest, ok: false, error: e.message });
         }
       }
-      return json(res, 200, { ok: true, mode, destination: destResolved, count: reviewedTracks.length, exported: okCount, results });
+      return json(res, 200, {
+        ok: true,
+        mode,
+        destination: destResolved,
+        count: reviewedTracks.length,
+        exported: okCount,
+        results,
+      });
     }
 
     if (url.pathname === '/api/peaks' && req.method === 'GET') {
       const filePath = url.searchParams.get('path');
-      const samples = Math.min(2000, Math.max(200, Number(url.searchParams.get('samples') ?? '800')));
+      const samples = Math.min(
+        2000,
+        Math.max(200, Number(url.searchParams.get('samples') ?? '800'))
+      );
       if (!filePath) return json(res, 400, { error: 'path query required' });
       const resolved = resolve(filePath);
       const tracks = getTracks();
       const cfg = await getConfig();
-      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
       try {
         // decode to 8k mono s16le, then downsample to peaks
         const { spawn } = await import('child_process');
-        const args = ['-v', 'quiet', '-i', resolved, '-ac', '1', '-ar', '8000', '-f', 's16le', '-acodec', 'pcm_s16le', '-'];
+        const args = [
+          '-v',
+          'quiet',
+          '-i',
+          resolved,
+          '-ac',
+          '1',
+          '-ar',
+          '8000',
+          '-f',
+          's16le',
+          '-acodec',
+          'pcm_s16le',
+          '-',
+        ];
         const child = spawn('ffmpeg', args);
         const chunks: Buffer[] = [];
         child.stdout.on('data', (d: Buffer) => chunks.push(d));
         let stderr = '';
-        child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+        child.stderr.on('data', (d: Buffer) => {
+          stderr += d.toString();
+        });
         const buf: Buffer = await new Promise((resolveP, reject) => {
           child.on('error', reject);
           child.on('close', (code: number | null) => {
-            if (code !== 0 && code !== null) return reject(new Error(`ffmpeg peaks exit ${code}: ${stderr.slice(0, 800)}`));
+            if (code !== 0 && code !== null)
+              return reject(new Error(`ffmpeg peaks exit ${code}: ${stderr.slice(0, 800)}`));
             resolveP(Buffer.concat(chunks));
           });
         });
@@ -1138,7 +1377,8 @@ const server = createServer(async (req, res) => {
         const eMsRaw = url.searchParams.get('end_ms');
         const eMs = eMsRaw !== null ? Number(eMsRaw) : NaN;
         if (isNaN(sMs) || sMs < 0) return json(res, 400, { error: 'invalid start_ms' });
-        if (eMsRaw !== null && (isNaN(eMs) || eMs <= sMs)) return json(res, 400, { error: 'invalid end_ms' });
+        if (eMsRaw !== null && (isNaN(eMs) || eMs <= sMs))
+          return json(res, 400, { error: 'invalid end_ms' });
         const startSec = sMs / 1000;
         const durSec = !isNaN(eMs) ? (eMs - sMs) / 1000 : undefined;
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1147,25 +1387,48 @@ const server = createServer(async (req, res) => {
         // (copy+pre-seek is ~26ms off due to MP3 frame boundaries, very noticeable when zoomed)
         const args = ['-v', 'quiet', '-i', resolved, '-ss', String(startSec)];
         if (durSec !== undefined) args.push('-t', String(durSec));
-        args.push('-vn', '-c:a', 'libmp3lame', '-b:a', '320k', '-write_xing', '1', '-f', 'mp3', '-');
+        args.push(
+          '-vn',
+          '-c:a',
+          'libmp3lame',
+          '-b:a',
+          '320k',
+          '-write_xing',
+          '1',
+          '-f',
+          'mp3',
+          '-'
+        );
         try {
           const { spawn } = await import('child_process');
           const child = spawn('ffmpeg', args);
           res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' });
           child.stdout.pipe(res);
           let stderr = '';
-          child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+          child.stderr.on('data', (d: Buffer) => {
+            stderr += d.toString();
+          });
           child.on('error', (err: any) => {
             if (!res.headersSent) json(res, 500, { error: err.message });
-            else try { res.end(); } catch {}
+            else
+              try {
+                res.end();
+              } catch {}
           });
           child.on('close', (code: number | null) => {
             if (code !== 0 && code !== null) {
               console.error(`[stream slice] ffmpeg exit ${code}: ${stderr.slice(0, 500)}`);
-              if (!res.writableEnded) try { res.end(); } catch {}
+              if (!res.writableEnded)
+                try {
+                  res.end();
+                } catch {}
             }
           });
-          req.on('close', () => { try { child.kill(); } catch {} });
+          req.on('close', () => {
+            try {
+              child.kill();
+            } catch {}
+          });
           return;
         } catch (e: any) {
           return json(res, 500, { error: e.message });
@@ -1192,7 +1455,10 @@ const server = createServer(async (req, res) => {
             stream.on('error', (e: any) => {
               console.error(`[stream] ${resolved}: ${e.message}`);
               if (!res.headersSent) json(res, 500, { error: e.message });
-              else try { res.end(); } catch {}
+              else
+                try {
+                  res.end();
+                } catch {}
             });
             return stream.pipe(res);
           }
@@ -1202,7 +1468,10 @@ const server = createServer(async (req, res) => {
         stream.on('error', (e: any) => {
           console.error(`[stream] ${resolved}: ${e.message}`);
           if (!res.headersSent) json(res, 500, { error: e.message });
-          else try { res.end(); } catch {}
+          else
+            try {
+              res.end();
+            } catch {}
         });
         return stream.pipe(res);
       } catch (e: any) {
@@ -1234,7 +1503,10 @@ const server = createServer(async (req, res) => {
         const pic = meta.common.picture?.[0];
         if (!pic) {
           // return 1x1 transparent PNG instead of 404 to avoid browser console noise for files without embedded art
-          const placeholder = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+          const placeholder = Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+            'base64'
+          );
           res.writeHead(200, {
             'Content-Type': 'image/png',
             'Content-Length': placeholder.length,
@@ -1255,9 +1527,13 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    if ((url.pathname === '/api/tracks/cover' || url.pathname === '/api/cover') && req.method === 'PUT') {
+    if (
+      (url.pathname === '/api/tracks/cover' || url.pathname === '/api/cover') &&
+      req.method === 'PUT'
+    ) {
       const body = await getBody(req);
-      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      const filePath: string | undefined =
+        body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
       if (!filePath) return json(res, 400, { error: 'path required' });
       const resolved = resolve(filePath);
       const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
@@ -1265,9 +1541,13 @@ const server = createServer(async (req, res) => {
       if (!allowed) {
         const cfg = await getConfig();
         for (const f of cfg.folders ?? []) {
-          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) { allowed = true; break; }
+          if (resolved.startsWith(resolve(f) + '/') || resolved === resolve(f)) {
+            allowed = true;
+            break;
+          }
         }
-        if (!allowed) return json(res, 403, { error: 'file not in library/folders — cover edit denied' });
+        if (!allowed)
+          return json(res, 403, { error: 'file not in library/folders — cover edit denied' });
       }
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
       const remove = body.remove === true || body.remove === 'true' || body.action === 'remove';
@@ -1296,7 +1576,10 @@ const server = createServer(async (req, res) => {
         } else {
           let imageB64: string | undefined = body.image || body.imageBase64 || body.data;
           let mime: string | undefined = body.mime || body.format;
-          if (!imageB64) return json(res, 400, { error: 'image (base64 data URL or raw base64) required, or { remove: true }' });
+          if (!imageB64)
+            return json(res, 400, {
+              error: 'image (base64 data URL or raw base64) required, or { remove: true }',
+            });
           // support data URL
           if (imageB64.startsWith('data:')) {
             const m = imageB64.match(/^data:([^;]+);base64,(.*)$/);
@@ -1309,12 +1592,19 @@ const server = createServer(async (req, res) => {
             mime = 'image/jpeg';
           }
           if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) {
-            return json(res, 400, { error: `unsupported image mime ${mime} (jpeg/png/webp/gif only)` });
+            return json(res, 400, {
+              error: `unsupported image mime ${mime} (jpeg/png/webp/gif only)`,
+            });
           }
           let buf: Buffer;
-          try { buf = Buffer.from(imageB64!, 'base64'); } catch { return json(res, 400, { error: 'invalid base64' }); }
+          try {
+            buf = Buffer.from(imageB64!, 'base64');
+          } catch {
+            return json(res, 400, { error: 'invalid base64' });
+          }
           if (buf.length === 0) return json(res, 400, { error: 'empty image' });
-          if (buf.length > 8 * 1024 * 1024) return json(res, 400, { error: 'image too large (max 8MB)' });
+          if (buf.length > 8 * 1024 * 1024)
+            return json(res, 400, { error: 'image too large (max 8MB)' });
           const tags: any = {
             image: {
               mime,
@@ -1331,7 +1621,9 @@ const server = createServer(async (req, res) => {
         try {
           const meta = await parseFile(resolved);
           hasCover = !!(meta.common.picture && meta.common.picture.length > 0);
-        } catch { hasCover = !remove; }
+        } catch {
+          hasCover = !remove;
+        }
         const updated = updateTrackByPath(resolved, { hasCover } as any);
         return json(res, 200, updated ?? { ok: true, hasCover });
       } catch (e: any) {
@@ -1339,15 +1631,23 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    if ((url.pathname === '/api/shutdown' || url.pathname === '/api/quit') && req.method === 'POST') {
+    if (
+      (url.pathname === '/api/shutdown' || url.pathname === '/api/quit') &&
+      req.method === 'POST'
+    ) {
       // only allow from localhost (applet quit button + helper script) — same as shoplist /api/quit
       const remote = (req.socket as any)?.remoteAddress as string | undefined;
-      const isLocal = !remote || remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+      const isLocal =
+        !remote || remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
       if (!isLocal) return json(res, 403, { error: 'quit only allowed from localhost' });
       json(res, 200, { ok: true, shuttingDown: true });
       // graceful shutdown after response flushed (shoplist uses 300ms; use 150ms)
       setTimeout(() => {
-        try { server.close(() => process.exit(0)); } catch { process.exit(0); }
+        try {
+          server.close(() => process.exit(0));
+        } catch {
+          process.exit(0);
+        }
         // force exit if close hangs
         setTimeout(() => process.exit(0), 1500).unref();
       }, 150);
@@ -1409,7 +1709,13 @@ const server = createServer(async (req, res) => {
       const base = basename(resolved, ext);
       // For custom titles: optional per-segment metadata array [{title,artist,album}]
       const metas: any[] = Array.isArray(body.segments) ? body.segments : [];
-      const skipSet = new Set<number>(Array.isArray(body.skipIndices) ? body.skipIndices.map(Number).filter((n: any) => !isNaN(n)) : Array.isArray(body.skip_indices) ? body.skip_indices.map(Number).filter((n: any) => !isNaN(n)) : []);
+      const skipSet = new Set<number>(
+        Array.isArray(body.skipIndices)
+          ? body.skipIndices.map(Number).filter((n: any) => !isNaN(n))
+          : Array.isArray(body.skip_indices)
+            ? body.skip_indices.map(Number).filter((n: any) => !isNaN(n))
+            : []
+      );
       const created: string[] = [];
       for (let i = 0; i < sorted.length - 1; i++) {
         if (skipSet.has(i)) continue;
@@ -1516,7 +1822,9 @@ const server = createServer(async (req, res) => {
         }
       } catch {}
       // clear draft after successful export — work is done
-      try { deleteSplitDraft(resolved); } catch {}
+      try {
+        deleteSplitDraft(resolved);
+      } catch {}
       return json(res, 200, { ok: true, files: created, count: created.length });
     }
 
@@ -1542,10 +1850,16 @@ const server = createServer(async (req, res) => {
         return json(res, 403, { error: 'file not in library/folders' });
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
       const splitPoints: number[] = body.split_points_ms ?? body.splitPoints ?? body.points;
-      const segmentTitles: string[] = Array.isArray(body.segmentTitles) ? body.segmentTitles : Array.isArray(body.segments) ? body.segments.map((s: any) => (typeof s === 'string' ? s : s?.title ?? '')) : [];
+      const segmentTitles: string[] = Array.isArray(body.segmentTitles)
+        ? body.segmentTitles
+        : Array.isArray(body.segments)
+          ? body.segments.map((s: any) => (typeof s === 'string' ? s : (s?.title ?? '')))
+          : [];
       if (!Array.isArray(splitPoints) || splitPoints.length < 2)
         return json(res, 400, { error: 'split_points_ms must be array with >=2 entries' });
-      const sorted = [...new Set(splitPoints.map(Number).filter(n => !isNaN(n) && n >= 0))].sort((a, b) => a - b);
+      const sorted = [...new Set(splitPoints.map(Number).filter(n => !isNaN(n) && n >= 0))].sort(
+        (a, b) => a - b
+      );
       if (sorted.length < 2) return json(res, 400, { error: 'invalid split points' });
       const titles = sorted.slice(0, -1).map((_, i) => String(segmentTitles[i] ?? ''));
       const draft = setSplitDraft(resolved, sorted, titles);
@@ -1554,7 +1868,10 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/split/draft' && req.method === 'DELETE') {
       let filePath: string | null = url.searchParams.get('path');
       if (!filePath) {
-        try { const b = await getBody(req); filePath = b.path || b.filePath || null; } catch {}
+        try {
+          const b = await getBody(req);
+          filePath = b.path || b.filePath || null;
+        } catch {}
       }
       if (!filePath) return json(res, 400, { error: 'path query required' });
       const resolved = resolve(filePath);
@@ -1568,8 +1885,10 @@ const server = createServer(async (req, res) => {
       const filePath = url.searchParams.get('path');
       if (!filePath) return json(res, 400, { error: 'path query required' });
       const resolved = resolve(filePath);
-      const tracks = getTracks(); const cfg = await getConfig();
-      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
       const tr = getTrackByPath(resolved);
       const artist = url.searchParams.get('artist') || tr?.artist || '';
@@ -1577,7 +1896,8 @@ const server = createServer(async (req, res) => {
       const album = url.searchParams.get('album') || tr?.album || undefined;
       const dur = tr?.duration;
       const hit = await fetchLrclib(artist, title, album, dur);
-      if (!hit || (!hit.plainLyrics && !hit.syncedLyrics)) return json(res, 404, { error: 'No lyrics found on LRClib for this artist/title' });
+      if (!hit || (!hit.plainLyrics && !hit.syncedLyrics))
+        return json(res, 404, { error: 'No lyrics found on LRClib for this artist/title' });
       if (hit.instrumental) return json(res, 404, { error: 'Track is marked as instrumental' });
       const synced = hit.syncedLyrics ? parseLrcToSynced(hit.syncedLyrics) : null;
       return json(res, 200, { ...hit, synced, source: 'lrclib' });
@@ -1587,8 +1907,10 @@ const server = createServer(async (req, res) => {
       const filePath: string | undefined = body.path || body.filePath;
       if (!filePath) return json(res, 400, { error: 'path required' });
       const resolved = resolve(filePath);
-      const tracks = getTracks(); const cfg = await getConfig();
-      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
       const source: string = (body.source || 'auto').toString().toLowerCase(); // auto|lrclib|whisper
       const model: string = (body.model || 'base').toString();
@@ -1596,24 +1918,48 @@ const server = createServer(async (req, res) => {
       const tr = getTrackByPath(resolved);
       const artist = (body.artist || tr?.artist || '').toString();
       const title = (body.title || tr?.title || '').toString();
-      const album = (body.album || tr?.album || undefined) as string|undefined;
+      const album = (body.album || tr?.album || undefined) as string | undefined;
       // try LRClib unless whisper-only
       if (source === 'auto' || source === 'lrclib') {
         const hit = await fetchLrclib(artist, title, album, tr?.duration);
         if (hit && (hit.plainLyrics || hit.syncedLyrics) && !hit.instrumental) {
           const synced = hit.syncedLyrics ? parseLrcToSynced(hit.syncedLyrics) : null;
-          const lrc = hit.syncedLyrics || (synced ? lrcFromSegments(synced.map(s => ({ start: s.ms/1000, text: s.text }))) : hit.plainLyrics);
+          const lrc =
+            hit.syncedLyrics ||
+            (synced
+              ? lrcFromSegments(synced.map(s => ({ start: s.ms / 1000, text: s.text })))
+              : hit.plainLyrics);
           // preview only — do not save
-          return json(res, 200, { source: 'lrclib', plainLyrics: hit.plainLyrics, syncedLyrics: hit.syncedLyrics, lrc, synced, trackName: hit.trackName, artistName: hit.artistName });
+          return json(res, 200, {
+            source: 'lrclib',
+            plainLyrics: hit.plainLyrics,
+            syncedLyrics: hit.syncedLyrics,
+            lrc,
+            synced,
+            trackName: hit.trackName,
+            artistName: hit.artistName,
+          });
         }
-        if (source === 'lrclib') return json(res, 404, { error: 'No lyrics on LRClib — try source: whisper or auto' });
+        if (source === 'lrclib')
+          return json(res, 404, { error: 'No lyrics on LRClib — try source: whisper or auto' });
       }
       // fallback to whisper
       try {
         const w = await transcribeWithWhisper(resolved, model, language);
-        return json(res, 200, { source: 'whisper', model, plainLyrics: w.plain, syncedLyrics: w.lrc, lrc: w.lrc, synced: w.synced });
+        return json(res, 200, {
+          source: 'whisper',
+          model,
+          plainLyrics: w.plain,
+          syncedLyrics: w.lrc,
+          lrc: w.lrc,
+          synced: w.synced,
+        });
       } catch (e: any) {
-        if ((e as any).code === 'WHISPER_NOT_FOUND') return json(res, 503, { error: e.message, hint: 'Run ./start.sh --setup to auto-install whisper into .whisper-venv (or pip install openai-whisper). First transcribe downloads base model ~140MB.' });
+        if ((e as any).code === 'WHISPER_NOT_FOUND')
+          return json(res, 503, {
+            error: e.message,
+            hint: 'Run ./start.sh --setup to auto-install whisper into .whisper-venv (or pip install openai-whisper). First transcribe downloads base model ~140MB.',
+          });
         return json(res, 500, { error: `Whisper failed: ${e.message}` });
       }
     }
@@ -1623,15 +1969,22 @@ const server = createServer(async (req, res) => {
       const filePath: string | undefined = body.path || body.filePath;
       const lrc: string | undefined = body.lrc ?? body.lyrics ?? body.syncedLyrics;
       if (!filePath) return json(res, 400, { error: 'path required' });
-      if (!lrc || !String(lrc).trim()) return json(res, 400, { error: 'lrc (LRC/lyrics text) required' });
+      if (!lrc || !String(lrc).trim())
+        return json(res, 400, { error: 'lrc (LRC/lyrics text) required' });
       const resolved = resolve(filePath);
-      const tracks = getTracks(); const cfg = await getConfig();
-      if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) return json(res, 403, { error: 'file not in library/folders' });
+      const tracks = getTracks();
+      const cfg = await getConfig();
+      if (!isAllowedPath(resolved, tracks, cfg.folders ?? []))
+        return json(res, 403, { error: 'file not in library/folders' });
       if (!existsSync(resolved)) return json(res, 404, { error: 'file not found' });
       const text = String(lrc).trim();
       // write sidecar .lrc
       const lrcPath = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
-      try { await fs.writeFile(lrcPath, text, 'utf-8'); } catch (e: any) { return json(res, 500, { error: `failed to write .lrc: ${e.message}` }); }
+      try {
+        await fs.writeFile(lrcPath, text, 'utf-8');
+      } catch (e: any) {
+        return json(res, 500, { error: `failed to write .lrc: ${e.message}` });
+      }
       // also embed USLT via node-id3
       try {
         const NodeID3: any = (await import('node-id3')).default;
@@ -1652,7 +2005,10 @@ const server = createServer(async (req, res) => {
       for (const t of all) {
         if (candidates.length >= limit) break;
         if (!existsSync(t.filePath)) continue;
-        const lrcPath = join(dirname(t.filePath), basename(t.filePath, extname(t.filePath)) + '.lrc');
+        const lrcPath = join(
+          dirname(t.filePath),
+          basename(t.filePath, extname(t.filePath)) + '.lrc'
+        );
         const hasLrc = existsSync(lrcPath);
         if (hasLrc && !overwrite) continue;
         // also check USLT quickly — skip heavy parse if lrc exists handled; else we treat as missing and let detect confirm
@@ -1661,32 +2017,68 @@ const server = createServer(async (req, res) => {
       const results: any[] = [];
       for (const t of candidates) {
         try {
-          let hit: any = null; let src = '';
+          let hit: any = null;
+          let src = '';
           if (source === 'auto' || source === 'lrclib') {
             const h = await fetchLrclib(t.artist, t.title, t.album, t.duration);
-            if (h && (h.plainLyrics || h.syncedLyrics) && !h.instrumental) { hit = h; src = 'lrclib'; }
-            else if (source === 'lrclib') { results.push({ path: t.filePath, status: 'not_found', source: 'lrclib' }); continue; }
+            if (h && (h.plainLyrics || h.syncedLyrics) && !h.instrumental) {
+              hit = h;
+              src = 'lrclib';
+            } else if (source === 'lrclib') {
+              results.push({ path: t.filePath, status: 'not_found', source: 'lrclib' });
+              continue;
+            }
           }
           if (!hit) {
             try {
               const w = await transcribeWithWhisper(t.filePath, model, body.language);
-              hit = { plainLyrics: w.plain, syncedLyrics: w.lrc }; src = 'whisper';
+              hit = { plainLyrics: w.plain, syncedLyrics: w.lrc };
+              src = 'whisper';
               const synced = w.synced;
-              results.push({ path: t.filePath, status: 'preview', source: src, plainLyrics: w.plain, syncedLyrics: w.lrc, lrc: w.lrc, synced, needsConfirm: true });
+              results.push({
+                path: t.filePath,
+                status: 'preview',
+                source: src,
+                plainLyrics: w.plain,
+                syncedLyrics: w.lrc,
+                lrc: w.lrc,
+                synced,
+                needsConfirm: true,
+              });
               continue;
             } catch (e: any) {
-              results.push({ path: t.filePath, status: 'error', error: e.message, source: 'whisper' });
+              results.push({
+                path: t.filePath,
+                status: 'error',
+                error: e.message,
+                source: 'whisper',
+              });
               continue;
             }
           }
           const lrc = hit.syncedLyrics || hit.plainLyrics;
           const synced = hit.syncedLyrics ? parseLrcToSynced(hit.syncedLyrics) : null;
-          results.push({ path: t.filePath, status: 'preview', source: src, plainLyrics: hit.plainLyrics, syncedLyrics: hit.syncedLyrics, lrc, synced, trackName: hit.trackName, artistName: hit.artistName, needsConfirm: true });
+          results.push({
+            path: t.filePath,
+            status: 'preview',
+            source: src,
+            plainLyrics: hit.plainLyrics,
+            syncedLyrics: hit.syncedLyrics,
+            lrc,
+            synced,
+            trackName: hit.trackName,
+            artistName: hit.artistName,
+            needsConfirm: true,
+          });
         } catch (e: any) {
           results.push({ path: t.filePath, status: 'error', error: e.message });
         }
       }
-      return json(res, 200, { count: candidates.length, results, note: 'Batch returns previews only — call POST /api/lyrics with {path,lrc} per track to confirm/save.' });
+      return json(res, 200, {
+        count: candidates.length,
+        results,
+        note: 'Batch returns previews only — call POST /api/lyrics with {path,lrc} per track to confirm/save.',
+      });
     }
     if (url.pathname === '/api/lyrics/batch/save' && req.method === 'POST') {
       const body = await getBody(req);
@@ -1695,17 +2087,32 @@ const server = createServer(async (req, res) => {
       const out: any[] = [];
       for (const it of items) {
         const resolved = resolve(it.path);
-        const tracks = getTracks(); const cfg = await getConfig();
-        if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) { out.push({ path: it.path, ok: false, error: 'not allowed' }); continue; }
-        if (!existsSync(resolved)) { out.push({ path: it.path, ok: false, error: 'file not found' }); continue; }
+        const tracks = getTracks();
+        const cfg = await getConfig();
+        if (!isAllowedPath(resolved, tracks, cfg.folders ?? [])) {
+          out.push({ path: it.path, ok: false, error: 'not allowed' });
+          continue;
+        }
+        if (!existsSync(resolved)) {
+          out.push({ path: it.path, ok: false, error: 'file not found' });
+          continue;
+        }
         const text = String(it.lrc || '').trim();
-        if (!text) { out.push({ path: it.path, ok: false, error: 'empty lrc' }); continue; }
+        if (!text) {
+          out.push({ path: it.path, ok: false, error: 'empty lrc' });
+          continue;
+        }
         const lrcPath = join(dirname(resolved), basename(resolved, extname(resolved)) + '.lrc');
         try {
           await fs.writeFile(lrcPath, text, 'utf-8');
-          try { const NodeID3: any = (await import('node-id3')).default; NodeID3.update({ unsynchronisedLyrics: { language: 'eng', text } }, resolved); } catch {}
+          try {
+            const NodeID3: any = (await import('node-id3')).default;
+            NodeID3.update({ unsynchronisedLyrics: { language: 'eng', text } }, resolved);
+          } catch {}
           out.push({ path: it.path, ok: true, lrcPath });
-        } catch (e: any) { out.push({ path: it.path, ok: false, error: e.message }); }
+        } catch (e: any) {
+          out.push({ path: it.path, ok: false, error: e.message });
+        }
       }
       return json(res, 200, { count: out.length, results: out });
     }
@@ -1761,7 +2168,9 @@ const server = createServer(async (req, res) => {
           for (const line of lines) {
             const m = line.match(/\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\](.*)/);
             if (m) {
-              const min = Number(m[1]), sec = Number(m[2]), msPart = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0;
+              const min = Number(m[1]),
+                sec = Number(m[2]),
+                msPart = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0;
               const ms = (min * 60 + sec) * 1000 + msPart;
               const text = (m[4] ?? '').trim();
               if (text) parsed.push({ ms, text });
@@ -1819,7 +2228,10 @@ const server = createServer(async (req, res) => {
               ttf: 'font/ttf',
               map: 'application/json',
             };
-            res.writeHead(200, { 'Content-Type': ct[ext] || 'application/octet-stream', 'Cache-Control': ext === 'html' ? 'no-cache' : 'public, max-age=31536000' });
+            res.writeHead(200, {
+              'Content-Type': ct[ext] || 'application/octet-stream',
+              'Cache-Control': ext === 'html' ? 'no-cache' : 'public, max-age=31536000',
+            });
             return res.end(data);
           } catch {}
         }
@@ -1836,8 +2248,16 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/' && req.method === 'GET') {
       return json(res, 200, {
         ok: true,
-        message: 'API server — open http://localhost:5164 for UI (or build frontend: npm run build)',
-        endpoints: ['/api/config', '/api/library', '/api/library/duplicates', '/api/scan', '/api/wishlist', '/api/pick-folder'],
+        message:
+          'API server — open http://localhost:5164 for UI (or build frontend: npm run build)',
+        endpoints: [
+          '/api/config',
+          '/api/library',
+          '/api/library/duplicates',
+          '/api/scan',
+          '/api/wishlist',
+          '/api/pick-folder',
+        ],
       });
     }
     json(res, 404, { error: 'not found', path: url.pathname });
@@ -1855,20 +2275,26 @@ server.listen(PORT, () => {
   if (isCompiled && process.env.NO_OPEN !== '1' && process.env.NODE_ENV !== 'test') {
     const url = `http://localhost:${PORT}`;
     const openCmd =
-      process.platform === 'darwin' ? ['open', url] :
-      process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] :
-      ['xdg-open', url];
-    import('child_process').then(({ spawn }) => {
-      try {
-        const child = spawn(openCmd[0]!, openCmd.slice(1), { stdio: 'ignore', detached: true });
-        child.unref();
-      } catch {}
-    }).catch(() => {});
+      process.platform === 'darwin'
+        ? ['open', url]
+        : process.platform === 'win32'
+          ? ['cmd', '/c', 'start', '', url]
+          : ['xdg-open', url];
+    import('child_process')
+      .then(({ spawn }) => {
+        try {
+          const child = spawn(openCmd[0]!, openCmd.slice(1), { stdio: 'ignore', detached: true });
+          child.unref();
+        } catch {}
+      })
+      .catch(() => {});
   }
 });
 server.on('error', (err: any) => {
   if (err?.code === 'EADDRINUSE') {
-    console.error(`[server] port ${PORT} in use — try PORT=3056 ${process.execPath.includes('music-library') ? './music-library' : 'npm start'}`);
+    console.error(
+      `[server] port ${PORT} in use — try PORT=3056 ${process.execPath.includes('music-library') ? './music-library' : 'npm start'}`
+    );
     process.exit(1);
   }
 });

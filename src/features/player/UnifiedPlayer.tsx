@@ -27,6 +27,7 @@ type Props = {
   onMutedChange: (m: boolean) => void;
   onPlayRandom?: () => void;
   onPreviewChange?: (draft: { path: string; text: string; source: string } | null) => void;
+  onToggleReviewed?: () => void;
 };
 
 function LyricsView({
@@ -42,8 +43,9 @@ function LyricsView({
     if (!synced) return -1;
     const ms = currentTime * 1000;
     let idx = -1;
-    for (let i = 0; i < synced.length; i++) if (ms >= synced[i].ms) idx = i;
-    else break;
+    for (let i = 0; i < synced.length; i++)
+      if (ms >= synced[i].ms) idx = i;
+      else break;
     return idx;
   })();
   const listRef = useRef<HTMLDivElement>(null);
@@ -54,13 +56,21 @@ function LyricsView({
   }, [activeIdx]);
 
   if (!lyrics)
-    return <div className="muted" style={{ padding: 24, textAlign: 'center' }}>No lyrics — add USLT tag or .lrc file</div>;
+    return (
+      <div className="muted" style={{ padding: 24, textAlign: 'center' }}>
+        No lyrics — add USLT tag or .lrc file
+      </div>
+    );
 
   if (synced && synced.length) {
     return (
       <div ref={listRef} className="lyrics-synced">
         {synced.map((s, i) => (
-          <div key={i} data-idx={i} className={`lyric-line ${i === activeIdx ? 'active' : ''} ${i < activeIdx ? 'past' : ''}`}>
+          <div
+            key={i}
+            data-idx={i}
+            className={`lyric-line ${i === activeIdx ? 'active' : ''} ${i < activeIdx ? 'past' : ''}`}
+          >
             {s.text || '♪'}
           </div>
         ))}
@@ -70,11 +80,32 @@ function LyricsView({
   return <div className="lyrics-plain">{lyrics}</div>;
 }
 
-function VolumeControl({ volume, muted, onVolumeChange, onMutedChange, size = 'compact' }: { volume: number; muted: boolean; onVolumeChange: (v: number) => void; onMutedChange: (m: boolean) => void; size?: 'compact' | 'full' }) {
+function VolumeControl({
+  volume,
+  muted,
+  onVolumeChange,
+  onMutedChange,
+  size = 'compact',
+}: {
+  volume: number;
+  muted: boolean;
+  onVolumeChange: (v: number) => void;
+  onMutedChange: (m: boolean) => void;
+  size?: 'compact' | 'full';
+}) {
   const icon = muted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊';
   return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
-      <button className="btn" onClick={() => onMutedChange(!muted)} title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'} style={{ padding: '6px 8px', minWidth: 32 }}>
+    <span
+      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+      onClick={e => e.stopPropagation()}
+    >
+      <button
+        className="btn"
+        onClick={() => onMutedChange(!muted)}
+        title={muted ? 'Unmute' : 'Mute'}
+        aria-label={muted ? 'Unmute' : 'Mute'}
+        style={{ padding: '6px 8px', minWidth: 32 }}
+      >
         {icon}
       </button>
       <input
@@ -86,52 +117,105 @@ function VolumeControl({ volume, muted, onVolumeChange, onMutedChange, size = 'c
         onChange={e => onVolumeChange(Number(e.target.value))}
         aria-label="Volume"
         title={`Volume ${Math.round((muted ? 0 : volume) * 100)}%`}
-        style={{ width: size === 'compact' ? 70 : 100, accentColor: 'var(--accent)', cursor: 'pointer' }}
+        style={{
+          width: size === 'compact' ? 70 : 100,
+          accentColor: 'var(--accent)',
+          cursor: 'pointer',
+        }}
       />
     </span>
   );
 }
 
-export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle, onStop, onSeek, expanded, onExpand, onCollapse, onEdit, onSplit, coverBust, volume, muted, onVolumeChange, onMutedChange, onPlayRandom, onPreviewChange }: Props) {
+export function UnifiedPlayer({
+  track,
+  isPaused,
+  currentTime,
+  duration,
+  onToggle,
+  onStop,
+  onSeek,
+  expanded,
+  onExpand,
+  onCollapse,
+  onEdit,
+  onSplit,
+  coverBust,
+  volume,
+  muted,
+  onVolumeChange,
+  onMutedChange,
+  onPlayRandom,
+  onPreviewChange,
+  onToggleReviewed,
+}: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const { lyrics, synced, reload } = useLyrics(track?.filePath ?? null);
   const [detecting, setDetecting] = useState(false);
-  const [preview, setPreview] = useState<{ lrc: string; source: string; synced: { ms: number; text: string }[] | null } | null>(null);
+  const [preview, setPreview] = useState<{
+    lrc: string;
+    source: string;
+    synced: { ms: number; text: string }[] | null;
+  } | null>(null);
   const [previewText, setPreviewText] = useState('');
   const [detectError, setDetectError] = useState('');
 
   useEffect(() => setArtFailed(false), [track?.filePath, coverBust]);
-  useEffect(() => { setPreview(null); setPreviewText(''); setDetectError(''); onPreviewChange?.(null); }, [track?.filePath]);
+  useEffect(() => {
+    setPreview(null);
+    setPreviewText('');
+    setDetectError('');
+    onPreviewChange?.(null);
+  }, [track?.filePath]);
 
   // notify parent of unsaved generated lyrics so Edit can carry them over
   useEffect(() => {
-    if (!track || !previewText.trim()) { onPreviewChange?.(null); return; }
+    if (!track || !previewText.trim()) {
+      onPreviewChange?.(null);
+      return;
+    }
     onPreviewChange?.({ path: track.filePath, text: previewText, source: preview?.source ?? '' });
   }, [previewText, preview?.source, track?.filePath]);
 
   const handleDetect = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
     if (!track) return;
-    setDetecting(true); setDetectError('');
+    setDetecting(true);
+    setDetectError('');
     try {
       const r = await api.detectLyrics(track.filePath, { source, model: 'base' });
-      setPreview({ lrc: r.lrc || r.syncedLyrics || r.plainLyrics || '', source: r.source, synced: r.synced });
+      setPreview({
+        lrc: r.lrc || r.syncedLyrics || r.plainLyrics || '',
+        source: r.source,
+        synced: r.synced,
+      });
       setPreviewText(r.lrc || r.syncedLyrics || r.plainLyrics || '');
     } catch (e: any) {
       setDetectError(e.message || String(e));
-    } finally { setDetecting(false); }
+    } finally {
+      setDetecting(false);
+    }
   };
   const handleSave = async () => {
     if (!track || !previewText.trim()) return;
     setDetecting(true);
     try {
       await api.saveLyrics(track.filePath, previewText);
-      setPreview(null); setPreviewText(''); onPreviewChange?.(null);
+      setPreview(null);
+      setPreviewText('');
+      onPreviewChange?.(null);
       await reload();
-    } catch (e: any) { setDetectError(e.message); }
-    finally { setDetecting(false); }
+    } catch (e: any) {
+      setDetectError(e.message);
+    } finally {
+      setDetecting(false);
+    }
   };
-  const handleDiscard = () => { setPreview(null); setPreviewText(''); onPreviewChange?.(null); };
+  const handleDiscard = () => {
+    setPreview(null);
+    setPreviewText('');
+    onPreviewChange?.(null);
+  };
 
   if (!track) return null;
 
@@ -140,35 +224,122 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
 
   // collapsed bar (always visible when track exists)
   const collapsed = (
-    <div className="glass unified-collapsed" onClick={onExpand} role="button" tabIndex={0} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onExpand()} aria-label="Expand player">
+    <div
+      className="glass unified-collapsed"
+      onClick={onExpand}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onExpand()}
+      aria-label="Expand player"
+    >
       <div className="unified-collapsed-art">
         {!artFailed ? (
-          <img src={coverUrl(track.filePath, coverBust)} alt="" onError={() => setArtFailed(true)} />
+          <img
+            src={coverUrl(track.filePath, coverBust)}
+            alt=""
+            onError={() => setArtFailed(true)}
+          />
         ) : (
           <span>♪</span>
         )}
       </div>
       <div className="unified-collapsed-info">
-        <b style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' }}>{track.title}</span>
-          {track.isCover ? <span className="dup-badge dup-badge--sm" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff', flexShrink: 0, marginLeft: 0 }}>cover</span> : null}
-          {track.reviewed ? <span className="dup-badge dup-badge--sm" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f', flexShrink: 0, marginLeft: 0 }}>✓ done</span> : null}
+        <b
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+          }}
+        >
+          <span
+            style={{
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: '1 1 auto',
+            }}
+          >
+            {track.title}
+          </span>
+          {track.isCover ? (
+            <span
+              className="dup-badge dup-badge--sm"
+              style={{
+                background: 'rgba(124,92,255,0.95)',
+                color: '#fff',
+                flexShrink: 0,
+                marginLeft: 0,
+              }}
+            >
+              cover
+            </span>
+          ) : null}
+          {track.reviewed ? (
+            <span
+              className="dup-badge dup-badge--sm"
+              style={{
+                background: 'rgba(46,204,113,0.9)',
+                color: '#0a1a0f',
+                flexShrink: 0,
+                marginLeft: 0,
+              }}
+            >
+              ✓ done
+            </span>
+          ) : null}
         </b>
         <span>
           {track.artist} · {track.album}
-          {hasSynced && <span className="lyrics-dot" title="Synced lyrics available"> ● LRC</span>}
+          {hasSynced && (
+            <span className="lyrics-dot" title="Synced lyrics available">
+              {' '}
+              ● LRC
+            </span>
+          )}
         </span>
       </div>
       <div className="unified-collapsed-progress" aria-hidden>
         <div className="unified-collapsed-progress-fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="player-controls" onClick={e => e.stopPropagation()}>
-        <VolumeControl volume={volume} muted={muted} onVolumeChange={onVolumeChange} onMutedChange={onMutedChange} size="compact" />
+        <VolumeControl
+          volume={volume}
+          muted={muted}
+          onVolumeChange={onVolumeChange}
+          onMutedChange={onMutedChange}
+          size="compact"
+        />
         <span className="muted" style={{ fontSize: 11, minWidth: 36, textAlign: 'right' }}>
-          {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration || track.duration || 0))}
+          {formatDuration(Math.floor(currentTime))} /{' '}
+          {formatDuration(Math.floor(duration || track.duration || 0))}
         </span>
+        {onToggleReviewed && (
+          <button
+            className="btn"
+            onClick={onToggleReviewed}
+            aria-label={track.reviewed ? 'Mark as not done' : 'Mark as done'}
+            title={track.reviewed ? 'Mark as not done' : 'Mark as done'}
+            style={{
+              padding: '6px 10px',
+              background: track.reviewed ? 'rgba(46,204,113,0.22)' : undefined,
+              borderColor: track.reviewed ? 'rgba(46,204,113,0.8)' : undefined,
+              color: track.reviewed ? '#8ff5b8' : undefined,
+            }}
+          >
+            {track.reviewed ? '✓ Done' : '○ Done'}
+          </button>
+        )}
         {onPlayRandom && (
-          <button className="btn" onClick={onPlayRandom} aria-label="Play random" title="Play random track" style={{ padding: '6px 10px' }}>
+          <button
+            className="btn"
+            onClick={onPlayRandom}
+            aria-label="Play random"
+            title="Play random track"
+            style={{ padding: '6px 10px' }}
+          >
             🔀
           </button>
         )}
@@ -179,11 +350,22 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
           ⏹
         </button>
         {onEdit && (
-          <button className="btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title="Edit song" style={{ padding: '6px 10px' }}>
+          <button
+            className="btn"
+            onClick={onEdit}
+            aria-label={`Edit ${track.title}`}
+            title="Edit song"
+            style={{ padding: '6px 10px' }}
+          >
             ✎
           </button>
         )}
-        <button className="btn" onClick={onExpand} aria-label="Expand" style={{ padding: '6px 10px' }}>
+        <button
+          className="btn"
+          onClick={onExpand}
+          aria-label="Expand"
+          style={{ padding: '6px 10px' }}
+        >
           {expanded ? '⌄' : '⌃'}
         </button>
       </div>
@@ -198,27 +380,95 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
       <div className="glass unified-expanded">
         <div className="now-header">
           <div className="now-header-meta">
-            <b>{track.title} {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff', verticalAlign: 'middle', marginLeft: 6 }}>cover</span> : null}{track.reviewed ? <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f', verticalAlign: 'middle', marginLeft: 6 }}>✓ done</span> : null}</b>
+            <b>
+              {track.title}{' '}
+              {track.isCover ? (
+                <span
+                  className="dup-badge"
+                  style={{
+                    background: 'rgba(124,92,255,0.95)',
+                    color: '#fff',
+                    verticalAlign: 'middle',
+                    marginLeft: 6,
+                  }}
+                >
+                  cover
+                </span>
+              ) : null}
+              {track.reviewed ? (
+                <span
+                  className="dup-badge"
+                  style={{
+                    background: 'rgba(46,204,113,0.9)',
+                    color: '#0a1a0f',
+                    verticalAlign: 'middle',
+                    marginLeft: 6,
+                  }}
+                >
+                  ✓ done
+                </span>
+              ) : null}
+            </b>
             <span className="muted">
-              {track.artist} · {track.album} {track.year ? `· ${track.year}` : ''} {hasSynced ? '· synced' : ''} {track.isCover ? '· cover' : '· orig'} {track.reviewed ? '· done' : ''}
+              {track.artist} · {track.album} {track.year ? `· ${track.year}` : ''}{' '}
+              {hasSynced ? '· synced' : ''} {track.isCover ? '· cover' : '· orig'}{' '}
+              {track.reviewed ? '· done' : ''}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {onToggleReviewed && (
+              <button
+                className="btn"
+                onClick={onToggleReviewed}
+                aria-label={track.reviewed ? 'Mark as not done' : 'Mark as done'}
+                title={track.reviewed ? 'Mark as not done' : 'Mark as done'}
+                style={{
+                  padding: '6px 12px',
+                  background: track.reviewed ? 'rgba(46,204,113,0.22)' : undefined,
+                  borderColor: track.reviewed ? 'rgba(46,204,113,0.8)' : undefined,
+                  color: track.reviewed ? '#8ff5b8' : undefined,
+                }}
+              >
+                {track.reviewed ? '✓ Done' : '○ Done'}
+              </button>
+            )}
             {onPlayRandom && (
-              <button className="btn" onClick={onPlayRandom} aria-label="Play random" title="Play random track (from current filter)" style={{ padding: '6px 12px' }}>
+              <button
+                className="btn"
+                onClick={onPlayRandom}
+                aria-label="Play random"
+                title="Play random track (from current filter)"
+                style={{ padding: '6px 12px' }}
+              >
                 🔀 Random
               </button>
             )}
             {onEdit && (
-              <button className="btn" onClick={onEdit} aria-label={`Edit ${track.title}`} title="Edit metadata, artwork and lyrics" style={{ padding: '6px 12px' }}>
+              <button
+                className="btn"
+                onClick={onEdit}
+                aria-label={`Edit ${track.title}`}
+                title="Edit metadata, artwork and lyrics"
+                style={{ padding: '6px 12px' }}
+              >
                 ✎ Edit
               </button>
             )}
             <PlayerActionsMenu track={track} onSplit={onSplit} />
-            <button className="btn" onClick={onCollapse} aria-label="Collapse" style={{ padding: '6px 10px' }}>
+            <button
+              className="btn"
+              onClick={onCollapse}
+              aria-label="Collapse"
+              style={{ padding: '6px 10px' }}
+            >
               ⌄
             </button>
-            <button className="btn" onClick={onStop} aria-label="Close player" style={{ padding: '6px 10px' }}>
+            <button
+              className="btn"
+              onClick={onStop}
+              aria-label="Close player"
+              style={{ padding: '6px 10px' }}
+            >
               ✕
             </button>
           </div>
@@ -234,7 +484,11 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             style={{ border: 'none', padding: 0, cursor: 'zoom-in' }}
           >
             {!artFailed ? (
-              <img src={coverUrl(track.filePath, coverBust)} alt={`${track.album} cover`} onError={() => setArtFailed(true)} />
+              <img
+                src={coverUrl(track.filePath, coverBust)}
+                alt={`${track.album} cover`}
+                onError={() => setArtFailed(true)}
+              />
             ) : (
               <div className="now-artwork-fallback">♪</div>
             )}
@@ -247,37 +501,154 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             <div className="unified-lyrics-header">
               <span>Lyrics</span>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {hasSynced && <span className="muted" style={{ fontSize: 11 }}>synced</span>}
-                <button className="btn" style={{ padding: '4px 8px', fontSize: 11, borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => handleDetect('auto')} disabled={detecting} aria-busy={detecting} title="Auto: try LRClib then Whisper (base, local)">{detecting ? <><span className="btn-spinner" aria-hidden /><span>Detecting…</span></> : '✨ Detect'}</button>
+                {hasSynced && (
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    synced
+                  </span>
+                )}
+                <button
+                  className="btn"
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 11,
+                    borderRadius: 999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  onClick={() => handleDetect('auto')}
+                  disabled={detecting}
+                  aria-busy={detecting}
+                  title="Auto: try LRClib then Whisper (base, local)"
+                >
+                  {detecting ? (
+                    <>
+                      <span className="btn-spinner" aria-hidden />
+                      <span>Detecting…</span>
+                    </>
+                  ) : (
+                    '✨ Detect'
+                  )}
+                </button>
               </span>
             </div>
             <div className="unified-lyrics-body">
               {detecting && !preview ? (
                 <div className="lyrics-loading" aria-busy="true" aria-live="polite">
-                  <span className="btn-spinner" style={{ width: 18, height: 18, borderWidth: 2.5 }} aria-hidden />
+                  <span
+                    className="btn-spinner"
+                    style={{ width: 18, height: 18, borderWidth: 2.5 }}
+                    aria-hidden
+                  />
                   <span>Detecting lyrics…</span>
-                  <span style={{ fontSize: 11, opacity: 0.7 }}>Trying LRClib, then local Whisper (base) if needed — may take 10–30s</span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>
+                    Trying LRClib, then local Whisper (base) if needed — may take 10–30s
+                  </span>
                 </div>
               ) : preview ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Preview · source: <b style={{ color: 'var(--text)' }}>{preview.source}</b> · synced: {preview.synced?.length ?? 0} lines — edit then Save</div>
-                  <textarea value={previewText} onChange={e => setPreviewText(e.target.value)} rows={10} style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical' }} placeholder="[00:12.00]Lyric line" />
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={detecting || !previewText.trim()} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Save to .lrc + USLT</button>
-                    <button className="btn" onClick={handleDiscard} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Discard</button>
-                    <button className="btn" onClick={() => handleDetect('lrclib')} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Try LRClib only</button>
-                    <button className="btn" onClick={() => handleDetect('whisper')} disabled={detecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}>Whisper base</button>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    Preview · source: <b style={{ color: 'var(--text)' }}>{preview.source}</b> ·
+                    synced: {preview.synced?.length ?? 0} lines — edit then Save
                   </div>
-                  {detectError && <div style={{ fontSize: 11, color: 'var(--danger, #e53e3e)' }}>{detectError}</div>}
+                  <textarea
+                    value={previewText}
+                    onChange={e => setPreviewText(e.target.value)}
+                    rows={10}
+                    style={{
+                      width: '100%',
+                      fontFamily: 'ui-monospace, monospace',
+                      fontSize: 12,
+                      padding: 8,
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'var(--text)',
+                      resize: 'vertical',
+                    }}
+                    placeholder="[00:12.00]Lyric line"
+                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleSave}
+                      disabled={detecting || !previewText.trim()}
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}
+                    >
+                      Save to .lrc + USLT
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={handleDiscard}
+                      disabled={detecting}
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}
+                    >
+                      Discard
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() => handleDetect('lrclib')}
+                      disabled={detecting}
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}
+                    >
+                      Try LRClib only
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() => handleDetect('whisper')}
+                      disabled={detecting}
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999 }}
+                    >
+                      Whisper base
+                    </button>
+                  </div>
+                  {detectError && (
+                    <div style={{ fontSize: 11, color: 'var(--danger, #e53e3e)' }}>
+                      {detectError}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
                   <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />
-                  {detectError && <div style={{ padding: 8, fontSize: 11, color: 'var(--danger, #e53e3e)', textAlign: 'center' }}>{detectError}</div>}
+                  {detectError && (
+                    <div
+                      style={{
+                        padding: 8,
+                        fontSize: 11,
+                        color: 'var(--danger, #e53e3e)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {detectError}
+                    </div>
+                  )}
                   {!lyrics && (
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', padding: '0 12px 12px', flexWrap: 'wrap' }}>
-                      <button className="btn" onClick={() => handleDetect('lrclib')} disabled={detecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Search LRClib</button>
-                      <button className="btn" onClick={() => handleDetect('whisper')} disabled={detecting} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Transcribe (Whisper base)</button>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 6,
+                        justifyContent: 'center',
+                        padding: '0 12px 12px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <button
+                        className="btn"
+                        onClick={() => handleDetect('lrclib')}
+                        disabled={detecting}
+                        style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
+                      >
+                        Search LRClib
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => handleDetect('whisper')}
+                        disabled={detecting}
+                        style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
+                      >
+                        Transcribe (Whisper base)
+                      </button>
                     </div>
                   )}
                 </>
@@ -306,13 +677,23 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
             </span>
           </div>
           <div className="now-controls" style={{ alignItems: 'center' }}>
-            <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
+            <button
+              className="play-btn"
+              onClick={onToggle}
+              aria-label={isPaused ? 'Play' : 'Pause'}
+            >
               {isPaused ? '▶' : '⏸'}
             </button>
             <button className="play-btn ghost" onClick={onStop} aria-label="Stop">
               ⏹
             </button>
-            <VolumeControl volume={volume} muted={muted} onVolumeChange={onVolumeChange} onMutedChange={onMutedChange} size="full" />
+            <VolumeControl
+              volume={volume}
+              muted={muted}
+              onVolumeChange={onVolumeChange}
+              onMutedChange={onMutedChange}
+              size="full"
+            />
           </div>
         </div>
       </div>
@@ -320,7 +701,14 @@ export function UnifiedPlayer({ track, isPaused, currentTime, duration, onToggle
       {collapsed}
 
       {lightboxOpen && (
-        <ArtworkLightbox track={track} coverBust={coverBust} onClose={() => setLightboxOpen(false)} onEdit={onEdit} onPlay={onToggle} isPlaying={!isPaused} />
+        <ArtworkLightbox
+          track={track}
+          coverBust={coverBust}
+          onClose={() => setLightboxOpen(false)}
+          onEdit={onEdit}
+          onPlay={onToggle}
+          isPlaying={!isPaused}
+        />
       )}
     </div>
   );

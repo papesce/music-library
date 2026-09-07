@@ -15,20 +15,21 @@ function fmt(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function WaveformMinimap({ durationMs, splitPoints, focusedIndex, viewportMs, cursorMs, onSeek, onPan }: Props) {
-  if (!durationMs) return null;
-  const total = durationMs;
-  const trackCount = splitPoints.length - 1;
-
+export function WaveformMinimap({
+  durationMs,
+  splitPoints,
+  focusedIndex,
+  viewportMs,
+  cursorMs,
+  onSeek,
+  onPan,
+}: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
   const [hoverMs, setHoverMs] = useState<number | null>(null);
 
-  const focused = focusedIndex !== null && focusedIndex !== undefined;
-  const vpLeftPct = viewportMs ? (viewportMs.left / total) * 100 : null;
-  const vpWidthPct = viewportMs ? ((viewportMs.right - viewportMs.left) / total) * 100 : null;
-  const cursorPct = cursorMs !== null && cursorMs !== undefined ? (cursorMs / total) * 100 : null;
-  const isFullView = viewportMs ? viewportMs.left === 0 && viewportMs.right >= total - 50 : false;
+  const total = durationMs;
+  const trackCount = splitPoints.length - 1;
 
   const msFromClientX = useCallback(
     (clientX: number) => {
@@ -40,6 +41,14 @@ export function WaveformMinimap({ durationMs, splitPoints, focusedIndex, viewpor
     },
     [total]
   );
+
+  if (!durationMs) return null;
+
+  const focused = focusedIndex !== null && focusedIndex !== undefined;
+  const vpLeftPct = viewportMs ? (viewportMs.left / total) * 100 : null;
+  const vpWidthPct = viewportMs ? ((viewportMs.right - viewportMs.left) / total) * 100 : null;
+  const cursorPct = cursorMs !== null && cursorMs !== undefined ? (cursorMs / total) * 100 : null;
+  const isFullView = viewportMs ? viewportMs.left === 0 && viewportMs.right >= total - 50 : false;
 
   const handlePointerMove = (e: React.PointerEvent) => {
     const ms = msFromClientX(e.clientX);
@@ -240,7 +249,16 @@ export function WaveformMinimap({ durationMs, splitPoints, focusedIndex, viewpor
             }
           >
             {!isFullView && !focused && vpWidthPct !== null && vpWidthPct > 12 && (
-              <span style={{ width: 10, height: 10, borderRadius: 99, background: 'rgba(124,92,255,0.9)', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', pointerEvents: 'none' }} />
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 99,
+                  background: 'rgba(124,92,255,0.9)',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                  pointerEvents: 'none',
+                }}
+              />
             )}
           </div>
         )}
@@ -276,15 +294,31 @@ export function WaveformMinimap({ durationMs, splitPoints, focusedIndex, viewpor
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: 'ui-monospace, monospace', color: 'rgba(238,241,255,0.55)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: 10,
+          fontFamily: 'ui-monospace, monospace',
+          color: 'rgba(238,241,255,0.55)',
+        }}
+      >
         <span>
           {focused && focusedIndex !== null
             ? `Track ${focusedIndex + 1}/${trackCount} · ${fmt(splitPoints[focusedIndex] ?? 0)} → ${fmt(splitPoints[focusedIndex + 1] ?? total)}`
             : `Full track · ${trackCount} segments`}
-          {viewportMs && !isFullView && ` · view ${fmt(viewportMs.left)} → ${fmt(viewportMs.right)}`}
+          {viewportMs &&
+            !isFullView &&
+            ` · view ${fmt(viewportMs.left)} → ${fmt(viewportMs.right)}`}
           {isFullView && ` · full view`}
-          {hoverMs !== null && <span style={{ color: 'rgba(255,255,255,0.85)', marginLeft: 6 }}>· hover {fmt(hoverMs)}</span>}
-          {cursorMs !== null && cursorMs !== undefined && <span style={{ color: '#a78bfa', marginLeft: 6 }}>· cursor {fmt(cursorMs)}</span>}
+          {hoverMs !== null && (
+            <span style={{ color: 'rgba(255,255,255,0.85)', marginLeft: 6 }}>
+              · hover {fmt(hoverMs)}
+            </span>
+          )}
+          {cursorMs !== null && cursorMs !== undefined && (
+            <span style={{ color: '#a78bfa', marginLeft: 6 }}>· cursor {fmt(cursorMs)}</span>
+          )}
         </span>
         <span>{fmt(total)} total</span>
       </div>

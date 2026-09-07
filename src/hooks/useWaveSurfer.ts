@@ -85,7 +85,9 @@ export function useWaveSurfer({
         setTimeout(resetScroll, 180);
         try {
           const onRedraw = () => {
-            try { (ws as unknown as { un: (e: string, cb: unknown) => void }).un('redraw', onRedraw); } catch {}
+            try {
+              (ws as unknown as { un: (e: string, cb: unknown) => void }).un('redraw', onRedraw);
+            } catch {}
             resetScroll();
           };
           (ws as unknown as { on: (e: string, cb: unknown) => void }).on('redraw', onRedraw);
@@ -185,10 +187,20 @@ export function useWaveSurfer({
               } catch {}
             };
             const onRedraw = () => {
-              try { ws.un('redraw' as unknown as Parameters<typeof ws.on>[0], onRedraw as unknown as Parameters<typeof ws.on>[1]); } catch {}
+              try {
+                ws.un(
+                  'redraw' as unknown as Parameters<typeof ws.on>[0],
+                  onRedraw as unknown as Parameters<typeof ws.on>[1]
+                );
+              } catch {}
               requestAnimationFrame(doScroll);
             };
-            try { ws.on('redraw' as unknown as Parameters<typeof ws.on>[0], onRedraw as unknown as Parameters<typeof ws.on>[1]); } catch {}
+            try {
+              ws.on(
+                'redraw' as unknown as Parameters<typeof ws.on>[0],
+                onRedraw as unknown as Parameters<typeof ws.on>[1]
+              );
+            } catch {}
             requestAnimationFrame(() => requestAnimationFrame(doScroll));
             setTimeout(doScroll, 120);
           }

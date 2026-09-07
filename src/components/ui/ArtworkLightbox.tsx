@@ -14,7 +14,9 @@ type Props = {
 
 export function ArtworkLightbox({ track, onClose, onEdit, onPlay, isPlaying, coverBust }: Props) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => { setFailed(false); }, [track.filePath, coverBust]);
+  useEffect(() => {
+    setFailed(false);
+  }, [track.filePath, coverBust]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -28,7 +30,9 @@ export function ArtworkLightbox({ track, onClose, onEdit, onPlay, isPlaying, cov
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, []);
 
   return createPortal(
@@ -51,22 +55,39 @@ export function ArtworkLightbox({ track, onClose, onEdit, onPlay, isPlaying, cov
               onError={() => setFailed(true)}
             />
           ) : (
-            <div className="artwork-lightbox-fallback">♪<span>No cover</span></div>
+            <div className="artwork-lightbox-fallback">
+              ♪<span>No cover</span>
+            </div>
           )}
         </div>
         <div className="artwork-lightbox-meta">
           <b>{track.title}</b>
-          <span className="muted">{track.artist} · {track.album}{track.year ? ` · ${track.year}` : ''}</span>
+          <span className="muted">
+            {track.artist} · {track.album}
+            {track.year ? ` · ${track.year}` : ''}
+          </span>
         </div>
         {(onPlay || onEdit) && (
           <div className="artwork-lightbox-actions">
             {onPlay && (
-              <button className="btn btn-primary" onClick={() => { onPlay(); onClose(); }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  onPlay();
+                  onClose();
+                }}
+              >
                 {isPlaying ? '⏸ Pause' : '▶ Play'}
               </button>
             )}
             {onEdit && (
-              <button className="btn" onClick={() => { onClose(); onEdit(); }}>
+              <button
+                className="btn"
+                onClick={() => {
+                  onClose();
+                  onEdit();
+                }}
+              >
                 ✎ Edit song
               </button>
             )}

@@ -13,10 +13,17 @@ export function useLibrary(tracks: Track[]) {
   const [sortDirRaw, setSortDir] = usePersistedState<SortDir>('lib:sortDir', 'asc');
   const [showDupesOnly, setShowDupesOnly] = usePersistedState<boolean>('lib:showDupesOnly', false);
   const [hideReviewed, setHideReviewed] = usePersistedState<boolean>('lib:hideReviewed', false);
-  const [loudnessFilterRaw, setLoudnessFilter] = usePersistedState<string | null>('lib:loudnessFilter', null);
+  const [loudnessFilterRaw, setLoudnessFilter] = usePersistedState<string | null>(
+    'lib:loudnessFilter',
+    null
+  );
   const loudnessFilter = loudnessFilterRaw === 'quiet' ? null : loudnessFilterRaw;
   const sortKey: SortKey | null =
-    sortKeyRaw === null ? null : VALID_KEYS.includes(sortKeyRaw as SortKey) ? (sortKeyRaw as SortKey) : 'artist';
+    sortKeyRaw === null
+      ? null
+      : VALID_KEYS.includes(sortKeyRaw as SortKey)
+        ? (sortKeyRaw as SortKey)
+        : 'artist';
   const sortDir: SortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
 
   const toggleSort = (key: SortKey) => {
@@ -66,10 +73,29 @@ export function useLibrary(tracks: Track[]) {
   const dupeCount = useMemo(() => tracks.filter(t => t.duplicateGroupId).length, [tracks]);
   const reviewedCount = useMemo(() => tracks.filter(t => t.reviewed).length, [tracks]);
 
-  const loudnessCount = useMemo(() => ({
-    normal: tracks.filter(t => t.loudness === 'normal').length,
-    loud: tracks.filter(t => t.loudness === 'loud').length,
-  }), [tracks]);
+  const loudnessCount = useMemo(
+    () => ({
+      normal: tracks.filter(t => t.loudness === 'normal').length,
+      loud: tracks.filter(t => t.loudness === 'loud').length,
+    }),
+    [tracks]
+  );
 
-  return { search, setSearch, sortKey, sortDir, toggleSort, showDupesOnly, setShowDupesOnly, hideReviewed, setHideReviewed, loudnessFilter, setLoudnessFilter, loudnessCount, filteredSorted, dupeCount, reviewedCount };
+  return {
+    search,
+    setSearch,
+    sortKey,
+    sortDir,
+    toggleSort,
+    showDupesOnly,
+    setShowDupesOnly,
+    hideReviewed,
+    setHideReviewed,
+    loudnessFilter,
+    setLoudnessFilter,
+    loudnessCount,
+    filteredSorted,
+    dupeCount,
+    reviewedCount,
+  };
 }

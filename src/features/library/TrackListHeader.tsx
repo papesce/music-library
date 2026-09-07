@@ -6,12 +6,28 @@ type Props = {
   toggleSort: (k: SortKey) => void;
 };
 
-function SortButton({ active, dir, onClick, children }: { active: boolean; dir: SortDir; onClick: () => void; children: string }) {
+function SortButton({
+  active,
+  dir,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  children: string;
+}) {
   return (
     <button
       className="sort-btn"
       onClick={onClick}
-      title={active ? (dir === 'asc' ? 'Sorted ascending — click for descending' : 'Sorted descending — click for original order') : 'Not sorted — click to sort ascending'}
+      title={
+        active
+          ? dir === 'asc'
+            ? 'Sorted ascending — click for descending'
+            : 'Sorted descending — click for original order'
+          : 'Not sorted — click to sort ascending'
+      }
       aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
       aria-label={`Sort by ${children}${active ? `, currently ${dir === 'asc' ? 'ascending' : 'descending'}` : ', currently unsorted'}`}
     >
@@ -34,7 +50,11 @@ export function TrackListHeader({ sortKey, sortDir, toggleSort }: Props) {
       </div>
       <div role="columnheader" className="header-cell cell-edit" aria-label="Edit" />
       <div role="columnheader" className="header-cell cell-artist">
-        <SortButton active={sortKey === 'artist'} dir={sortDir} onClick={() => toggleSort('artist')}>
+        <SortButton
+          active={sortKey === 'artist'}
+          dir={sortDir}
+          onClick={() => toggleSort('artist')}
+        >
           Artist
         </SortButton>
       </div>
@@ -47,7 +67,11 @@ export function TrackListHeader({ sortKey, sortDir, toggleSort }: Props) {
         Genre
       </div>
       <div role="columnheader" className="header-cell cell-duration">
-        <SortButton active={sortKey === 'duration'} dir={sortDir} onClick={() => toggleSort('duration')}>
+        <SortButton
+          active={sortKey === 'duration'}
+          dir={sortDir}
+          onClick={() => toggleSort('duration')}
+        >
           Duration
         </SortButton>
       </div>

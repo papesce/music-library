@@ -19,6 +19,6 @@ export function highlightMatch(text: string, query: string): ReactNode {
       </mark>
     ) : (
       <span key={i}>{part}</span>
-    ),
+    )
   );
 }

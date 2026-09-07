@@ -86,44 +86,102 @@ export const api = {
       body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segments, skipIndices }),
     }),
   getSplitDraft: (filePath: string) =>
-    req<{ draft: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string } | null }>(
-      `/api/split/draft?path=${encodeURIComponent(filePath)}`
-    ),
+    req<{
+      draft: {
+        filePath: string;
+        splitPoints: number[];
+        segmentTitles: string[];
+        updatedAt: string;
+      } | null;
+    }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`),
   saveSplitDraft: (filePath: string, splitPoints: number[], segmentTitles: string[]) =>
-    req<{ draft: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string } }>(
-      '/api/split/draft',
-      { method: 'PUT', body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles }) }
-    ),
+    req<{
+      draft: {
+        filePath: string;
+        splitPoints: number[];
+        segmentTitles: string[];
+        updatedAt: string;
+      };
+    }>('/api/split/draft', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles }),
+    }),
   deleteSplitDraft: (filePath: string) =>
-    req<{ ok: boolean }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' }),
+    req<{ ok: boolean }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`, {
+      method: 'DELETE',
+    }),
   getLyrics: (filePath: string) =>
     req<{ lyrics: string | null; synced: { ms: number; text: string }[] | null }>(
       `/api/lyrics?path=${encodeURIComponent(filePath)}`
     ),
   lookupLyrics: (filePath: string) =>
-    req<{ plainLyrics: string; syncedLyrics: string; synced: { ms: number; text: string }[] | null; source: string; trackName: string; artistName: string }>(
-      `/api/lyrics/lookup?path=${encodeURIComponent(filePath)}`
-    ),
-  detectLyrics: (filePath: string, opts?: { source?: 'auto' | 'lrclib' | 'whisper'; model?: string; language?: string; artist?: string; title?: string; album?: string }) =>
-    req<{ source: string; plainLyrics: string; syncedLyrics: string; lrc: string; synced: { ms: number; text: string }[] | null; model?: string }>(
-      '/api/lyrics/detect',
-      { method: 'POST', body: JSON.stringify({ path: filePath, source: opts?.source || 'auto', model: opts?.model || 'base', ...opts }) }
-    ),
+    req<{
+      plainLyrics: string;
+      syncedLyrics: string;
+      synced: { ms: number; text: string }[] | null;
+      source: string;
+      trackName: string;
+      artistName: string;
+    }>(`/api/lyrics/lookup?path=${encodeURIComponent(filePath)}`),
+  detectLyrics: (
+    filePath: string,
+    opts?: {
+      source?: 'auto' | 'lrclib' | 'whisper';
+      model?: string;
+      language?: string;
+      artist?: string;
+      title?: string;
+      album?: string;
+    }
+  ) =>
+    req<{
+      source: string;
+      plainLyrics: string;
+      syncedLyrics: string;
+      lrc: string;
+      synced: { ms: number; text: string }[] | null;
+      model?: string;
+    }>('/api/lyrics/detect', {
+      method: 'POST',
+      body: JSON.stringify({
+        path: filePath,
+        source: opts?.source || 'auto',
+        model: opts?.model || 'base',
+        ...opts,
+      }),
+    }),
   saveLyrics: (filePath: string, lrc: string) =>
     req<{ ok: boolean; lrcPath: string; synced: { ms: number; text: string }[] | null }>(
       '/api/lyrics',
       { method: 'POST', body: JSON.stringify({ path: filePath, lrc }) }
     ),
-  batchDetectLyrics: (opts?: { source?: string; model?: string; limit?: number; overwrite?: boolean }) =>
-    req<{ count: number; results: { path: string; status: string; source?: string; lrc?: string; synced?: { ms: number; text: string }[] | null; plainLyrics?: string; error?: string; needsConfirm?: boolean }[] }>(
-      '/api/lyrics/batch',
-      { method: 'POST', body: JSON.stringify(opts || {}) }
-    ),
+  batchDetectLyrics: (opts?: {
+    source?: string;
+    model?: string;
+    limit?: number;
+    overwrite?: boolean;
+  }) =>
+    req<{
+      count: number;
+      results: {
+        path: string;
+        status: string;
+        source?: string;
+        lrc?: string;
+        synced?: { ms: number; text: string }[] | null;
+        plainLyrics?: string;
+        error?: string;
+        needsConfirm?: boolean;
+      }[];
+    }>('/api/lyrics/batch', { method: 'POST', body: JSON.stringify(opts || {}) }),
   batchSaveLyrics: (items: { path: string; lrc: string }[]) =>
-    req<{ count: number; results: { path: string; ok: boolean; error?: string }[] }>('/api/lyrics/batch/save', {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    }),
+    req<{ count: number; results: { path: string; ok: boolean; error?: string }[] }>(
+      '/api/lyrics/batch/save',
+      {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      }
+    ),
   setCover: (filePath: string, imageDataUrl: string) =>
     req<Track>('/api/tracks/cover', {
       method: 'PUT',
@@ -134,13 +192,68 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path: filePath, remove: true }),
     }),
-  exportReviewed: (opts: { destination?: string; mode?: 'copy' | 'move' | 'm3u'; playlistName?: string; overwrite?: boolean }) =>
-    req<{ ok: boolean; mode: string; destination: string; playlist?: string; count: number; exported?: number; results?: { file: string; dest: string; ok: boolean; error?: string }[] }>(
-      '/api/tracks/export-reviewed',
-      { method: 'POST', body: JSON.stringify(opts) }
-    ),
+  exportReviewed: (opts: {
+    destination?: string;
+    mode?: 'copy' | 'move' | 'm3u';
+    playlistName?: string;
+    overwrite?: boolean;
+  }) =>
+    req<{
+      ok: boolean;
+      mode: string;
+      destination: string;
+      playlist?: string;
+      count: number;
+      exported?: number;
+      results?: { file: string; dest: string; ok: boolean; error?: string }[];
+    }>('/api/tracks/export-reviewed', { method: 'POST', body: JSON.stringify(opts) }),
   shutdown: () => req<{ ok: boolean; shuttingDown: boolean }>('/api/quit', { method: 'POST' }),
-  exportState: () => req<{ version: number; exportedAt: string; folders: string[]; tracks: { filePath: string; reviewed: boolean; reviewedAt: string | null; isCover: boolean; loudness: string | null }[]; wishlist: WishlistItem[]; splitDrafts: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt: string }[] }>('/api/state/export'),
-  importState: (data: { folders?: string[]; tracks?: { filePath: string; reviewed?: boolean; reviewedAt?: string | null; isCover?: boolean; loudness?: string | null }[]; wishlist?: WishlistItem[]; splitDrafts?: { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt?: string }[]; mode?: 'merge' | 'replace' }) =>
-    req<{ ok: boolean; mode: string; folders: number; tracks: number; wishlist: number; splitDrafts: number; library: Track[]; wishlistItems: WishlistItem[] }>('/api/state/import', { method: 'POST', body: JSON.stringify(data) }),
+  exportState: () =>
+    req<{
+      version: number;
+      exportedAt: string;
+      folders: string[];
+      tracks: {
+        filePath: string;
+        reviewed: boolean;
+        reviewedAt: string | null;
+        isCover: boolean;
+        loudness: string | null;
+      }[];
+      wishlist: WishlistItem[];
+      splitDrafts: {
+        filePath: string;
+        splitPoints: number[];
+        segmentTitles: string[];
+        updatedAt: string;
+      }[];
+    }>('/api/state/export'),
+  importState: (data: {
+    folders?: string[];
+    tracks?: {
+      filePath: string;
+      reviewed?: boolean;
+      reviewedAt?: string | null;
+      isCover?: boolean;
+      loudness?: string | null;
+    }[];
+    wishlist?: WishlistItem[];
+    splitDrafts?: {
+      filePath: string;
+      splitPoints: number[];
+      segmentTitles: string[];
+      updatedAt?: string;
+    }[];
+    mode?: 'merge' | 'replace';
+  }) =>
+    req<{
+      ok: boolean;
+      mode: string;
+      folders: number;
+      tracks: number;
+      wishlist: number;
+      splitDrafts: number;
+      library: Track[];
+      wishlistItems: WishlistItem[];
+    }>('/api/state/import', { method: 'POST', body: JSON.stringify(data) }),
 };

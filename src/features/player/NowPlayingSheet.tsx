@@ -29,21 +29,39 @@ function ArtworkView({ track, onExpand }: { track: Track; onExpand?: () => void 
       style={{ cursor: onExpand ? 'zoom-in' : undefined, border: 'none', padding: 0 }}
     >
       {!failed ? (
-        <img src={coverUrl(track.filePath)} alt={`${track.album} cover`} onError={() => setFailed(true)} />
+        <img
+          src={coverUrl(track.filePath)}
+          alt={`${track.album} cover`}
+          onError={() => setFailed(true)}
+        />
       ) : (
         <div className="now-artwork-fallback">♪</div>
       )}
-      {onExpand && <span className="now-artwork-zoom-hint" aria-hidden>⤢</span>}
+      {onExpand && (
+        <span className="now-artwork-zoom-hint" aria-hidden>
+          ⤢
+        </span>
+      )}
     </button>
   );
 }
 
-function LyricsView({ lyrics, synced, currentTime }: { lyrics: string | null; synced: { ms: number; text: string }[] | null; currentTime: number }) {
+function LyricsView({
+  lyrics,
+  synced,
+  currentTime,
+}: {
+  lyrics: string | null;
+  synced: { ms: number; text: string }[] | null;
+  currentTime: number;
+}) {
   const activeIdx = (() => {
     if (!synced) return -1;
     const ms = currentTime * 1000;
     let idx = -1;
-    for (let i = 0; i < synced.length; i++) if (ms >= synced[i].ms) idx = i; else break;
+    for (let i = 0; i < synced.length; i++)
+      if (ms >= synced[i].ms) idx = i;
+      else break;
     return idx;
   })();
   const listRef = useRef<HTMLDivElement>(null);
@@ -53,13 +71,22 @@ function LyricsView({ lyrics, synced, currentTime }: { lyrics: string | null; sy
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [activeIdx]);
 
-  if (!lyrics) return <div className="muted" style={{ padding: 24, textAlign: 'center' }}>No lyrics — add USLT tag or .lrc file</div>;
+  if (!lyrics)
+    return (
+      <div className="muted" style={{ padding: 24, textAlign: 'center' }}>
+        No lyrics — add USLT tag or .lrc file
+      </div>
+    );
 
   if (synced && synced.length) {
     return (
       <div ref={listRef} className="lyrics-synced">
         {synced.map((s, i) => (
-          <div key={i} data-idx={i} className={`lyric-line ${i === activeIdx ? 'active' : ''} ${i < activeIdx ? 'past' : ''}`}>
+          <div
+            key={i}
+            data-idx={i}
+            className={`lyric-line ${i === activeIdx ? 'active' : ''} ${i < activeIdx ? 'past' : ''}`}
+          >
             {s.text}
           </div>
         ))}
@@ -69,7 +96,17 @@ function LyricsView({ lyrics, synced, currentTime }: { lyrics: string | null; sy
   return <div className="lyrics-plain">{lyrics}</div>;
 }
 
-export function NowPlayingSheet({ track, isPaused, onToggle, onStop, onClose, currentTime, duration, onSeek, onEdit }: Props & { onEdit?: () => void }) {
+export function NowPlayingSheet({
+  track,
+  isPaused,
+  onToggle,
+  onStop,
+  onClose,
+  currentTime,
+  duration,
+  onSeek,
+  onEdit,
+}: Props & { onEdit?: () => void }) {
   const [tab, setTab] = useState<'artwork' | 'lyrics'>('artwork');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const { lyrics, synced } = useLyrics(track?.filePath ?? null);
@@ -104,10 +141,20 @@ export function NowPlayingSheet({ track, isPaused, onToggle, onStop, onClose, cu
         </div>
 
         <div className="now-body">
-          {tab === 'artwork' ? <ArtworkView track={track} onExpand={() => setLightboxOpen(true)} /> : <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />}
+          {tab === 'artwork' ? (
+            <ArtworkView track={track} onExpand={() => setLightboxOpen(true)} />
+          ) : (
+            <LyricsView lyrics={lyrics} synced={synced} currentTime={currentTime} />
+          )}
         </div>
         {lightboxOpen && track && (
-          <ArtworkLightbox track={track} onClose={() => setLightboxOpen(false)} onEdit={onEdit} onPlay={onToggle} isPlaying={!isPaused} />
+          <ArtworkLightbox
+            track={track}
+            onClose={() => setLightboxOpen(false)}
+            onEdit={onEdit}
+            onPlay={onToggle}
+            isPlaying={!isPaused}
+          />
         )}
 
         <div className="now-transport">
@@ -130,7 +177,11 @@ export function NowPlayingSheet({ track, isPaused, onToggle, onStop, onClose, cu
             </span>
           </div>
           <div className="now-controls">
-            <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
+            <button
+              className="play-btn"
+              onClick={onToggle}
+              aria-label={isPaused ? 'Play' : 'Pause'}
+            >
               {isPaused ? '▶' : '⏸'}
             </button>
             <button className="play-btn ghost" onClick={onStop} aria-label="Stop">

@@ -26,7 +26,24 @@ type Props = {
 
 const ROW_HEIGHT = 64;
 
-export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggleSort, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, onSetLoudness, showDupesOnly, coverBust, revealId, searchQuery }: Props) {
+export function TrackList({
+  tracks,
+  playingId,
+  isPaused,
+  sortKey,
+  sortDir,
+  toggleSort,
+  onPlay,
+  onSplit,
+  onEdit,
+  onDelete,
+  onToggleReviewed,
+  onSetLoudness,
+  showDupesOnly,
+  coverBust,
+  revealId,
+  searchQuery,
+}: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
@@ -46,7 +63,9 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
         virtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
       } catch {
         // fallback: direct DOM scroll
-        parentRef.current?.querySelector(`[data-track-id="${revealId}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        parentRef.current
+          ?.querySelector(`[data-track-id="${revealId}"]`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     });
   }, [revealId, tracks, virtualizer]);
@@ -57,7 +76,9 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
         <TrackListHeader sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
         <div className="empty" style={{ border: 'none', margin: 16 }}>
           <b>{showDupesOnly ? 'No duplicates' : 'No tracks yet'}</b>
-          <span>{showDupesOnly ? 'Your library is clean.' : 'Add a folder in settings and hit Scan.'}</span>
+          <span>
+            {showDupesOnly ? 'Your library is clean.' : 'Add a folder in settings and hit Scan.'}
+          </span>
         </div>
       </div>
     );
@@ -69,7 +90,9 @@ export function TrackList({ tracks, playingId, isPaused, sortKey, sortDir, toggl
     <div className="glass track-list" role="grid" aria-rowcount={tracks.length} aria-colcount={9}>
       <TrackListHeader sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
       <div ref={parentRef} className="track-list-body">
-        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
+        <div
+          style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}
+        >
           {items.map(virtualRow => {
             const t = tracks[virtualRow.index]!;
             return (

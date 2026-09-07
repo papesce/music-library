@@ -8,18 +8,24 @@ const MAX = 20;
 export function usePlayHistory(tracks: Track[]) {
   const [historyIds, setHistoryIds] = usePersistedState<string[]>(KEY, []);
 
-  const push = useCallback((id: string) => {
-    setHistoryIds(prev => {
-      const next = [id, ...prev.filter(x => x !== id)];
-      return next.slice(0, MAX);
-    });
-  }, [setHistoryIds]);
+  const push = useCallback(
+    (id: string) => {
+      setHistoryIds(prev => {
+        const next = [id, ...prev.filter(x => x !== id)];
+        return next.slice(0, MAX);
+      });
+    },
+    [setHistoryIds]
+  );
 
   const clear = useCallback(() => setHistoryIds([]), [setHistoryIds]);
 
-  const remove = useCallback((id: string) => {
-    setHistoryIds(prev => prev.filter(x => x !== id));
-  }, [setHistoryIds]);
+  const remove = useCallback(
+    (id: string) => {
+      setHistoryIds(prev => prev.filter(x => x !== id));
+    },
+    [setHistoryIds]
+  );
 
   // map ids to tracks, filter missing (deleted/renamed)
   const historyTracks = useMemo(() => {

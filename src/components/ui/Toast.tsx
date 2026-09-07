@@ -11,7 +11,7 @@ export function Toast({
   toast?: ToastState;
   onDismiss: () => void;
 }) {
-  const resolved = toast ?? (message ? { message, variant: variant ?? 'error' as const } : null);
+  const resolved = toast ?? (message ? { message, variant: variant ?? ('error' as const) } : null);
   if (!resolved?.message) return null;
   const v = resolved.variant ?? 'error';
   return (

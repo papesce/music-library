@@ -227,7 +227,9 @@ function ensureTrackMigrations(d: DatabaseSync) {
     }
   }
   // migrate legacy 'quiet' -> 'normal'
-  try { d.prepare("UPDATE tracks SET loudness='normal' WHERE loudness='quiet'").run(); } catch {}
+  try {
+    d.prepare("UPDATE tracks SET loudness='normal' WHERE loudness='quiet'").run();
+  } catch {}
 }
 
 export function getTracks(): Track[] {
@@ -239,21 +241,22 @@ export function getTracks(): Track[] {
     if ((loud as any) === 'quiet') loud = 'normal';
     if (loud !== null && loud !== 'normal' && loud !== 'loud') loud = null;
     return {
-    id: r.id,
-    filePath: r.filePath,
-    title: r.title,
-    artist: r.artist,
-    album: r.album,
-    genre: r.genre,
-    year: r.year ?? undefined,
-    duration: r.duration ?? undefined,
-    duplicateGroupId: r.duplicateGroupId ?? undefined,
-    hasCover: !!r.hasCover,
-    reviewed: !!r.reviewed,
-    reviewedAt: r.reviewedAt ?? undefined,
-    isCover: !!r.isCover,
-    loudness: loud,
-  };});
+      id: r.id,
+      filePath: r.filePath,
+      title: r.title,
+      artist: r.artist,
+      album: r.album,
+      genre: r.genre,
+      year: r.year ?? undefined,
+      duration: r.duration ?? undefined,
+      duplicateGroupId: r.duplicateGroupId ?? undefined,
+      hasCover: !!r.hasCover,
+      reviewed: !!r.reviewed,
+      reviewedAt: r.reviewedAt ?? undefined,
+      isCover: !!r.isCover,
+      loudness: loud,
+    };
+  });
 }
 
 export function setTracks(tracks: Track[]) {
@@ -411,10 +414,19 @@ export function setTrackIsCover(filePath: string, isCover: boolean): Track | nul
   ensureTrackMigrations(d);
   const resolved = resolve(filePath);
   const existing =
-    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
-    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+    (d
+      .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+      .get(resolved, resolved) as any) ||
+    (filePath !== resolved
+      ? (d
+          .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+          .get(filePath, filePath) as any)
+      : null);
   if (!existing) return null;
-  d.prepare('UPDATE tracks SET isCover = ? WHERE filePath = ?').run(isCover ? 1 : 0, existing.filePath);
+  d.prepare('UPDATE tracks SET isCover = ? WHERE filePath = ?').run(
+    isCover ? 1 : 0,
+    existing.filePath
+  );
   const row2 = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
   if (!row2) return null;
   return {
@@ -440,11 +452,21 @@ export function setTrackReviewed(filePath: string, reviewed: boolean): Track | n
   ensureTrackMigrations(d);
   const resolved = resolve(filePath);
   const existing =
-    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
-    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+    (d
+      .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+      .get(resolved, resolved) as any) ||
+    (filePath !== resolved
+      ? (d
+          .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+          .get(filePath, filePath) as any)
+      : null);
   if (!existing) return null;
   const reviewedAt = reviewed ? new Date().toISOString() : null;
-  d.prepare('UPDATE tracks SET reviewed = ?, reviewedAt = ? WHERE filePath = ?').run(reviewed ? 1 : 0, reviewedAt, existing.filePath);
+  d.prepare('UPDATE tracks SET reviewed = ?, reviewedAt = ? WHERE filePath = ?').run(
+    reviewed ? 1 : 0,
+    reviewedAt,
+    existing.filePath
+  );
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
   if (!row) return null;
   return {
@@ -562,7 +584,9 @@ export function renameTrackPath(oldPath: string, newPath: string): Track | null 
       .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
       .get(oldResolved, oldResolved) as any) ||
     (oldPath !== oldResolved
-      ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(oldPath, oldPath) as any)
+      ? (d
+          .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+          .get(oldPath, oldPath) as any)
       : null);
   if (!existing) return null;
   d.prepare('UPDATE tracks SET filePath = ?, id = ? WHERE filePath = ?').run(
@@ -607,10 +631,21 @@ export function setAllSplitDrafts(drafts: SplitDraft[]) {
   d.exec('BEGIN');
   try {
     d.prepare('DELETE FROM split_drafts').run();
-    const stmt = d.prepare('INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, updatedAt) VALUES (?, ?, ?, ?)');
-    for (const dr of drafts) stmt.run(resolve(dr.filePath), JSON.stringify(dr.splitPoints), JSON.stringify(dr.segmentTitles), dr.updatedAt);
+    const stmt = d.prepare(
+      'INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, updatedAt) VALUES (?, ?, ?, ?)'
+    );
+    for (const dr of drafts)
+      stmt.run(
+        resolve(dr.filePath),
+        JSON.stringify(dr.splitPoints),
+        JSON.stringify(dr.segmentTitles),
+        dr.updatedAt
+      );
     d.exec('COMMIT');
-  } catch (e) { d.exec('ROLLBACK'); throw e; }
+  } catch (e) {
+    d.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 export function clearWishlist() {
@@ -623,10 +658,17 @@ export function setTrackLoudness(filePath: string, loudness: Loudness | null): T
   ensureTrackMigrations(d);
   const resolved = resolve(filePath);
   const existing =
-    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
-    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+    (d
+      .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+      .get(resolved, resolved) as any) ||
+    (filePath !== resolved
+      ? (d
+          .prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?')
+          .get(filePath, filePath) as any)
+      : null);
   if (!existing) return null;
-  if (loudness !== null && !['normal','loud'].includes(loudness)) throw new Error('invalid loudness');
+  if (loudness !== null && !['normal', 'loud'].includes(loudness))
+    throw new Error('invalid loudness');
   d.prepare('UPDATE tracks SET loudness = ? WHERE filePath = ?').run(loudness, existing.filePath);
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
   if (!row) return null;

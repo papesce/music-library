@@ -17,10 +17,20 @@ export function PlayerDock({
   const [failed, setFailed] = useState(false);
   if (!track) return null;
   return (
-    <div className="glass player-dock" onClick={onExpand} role={onExpand ? 'button' : undefined} style={onExpand ? { cursor: 'pointer' } : undefined}>
+    <div
+      className="glass player-dock"
+      onClick={onExpand}
+      role={onExpand ? 'button' : undefined}
+      style={onExpand ? { cursor: 'pointer' } : undefined}
+    >
       <div className="player-art" style={{ overflow: 'hidden', padding: 0 }}>
         {!failed ? (
-          <img src={coverUrl(track.filePath)} alt="" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img
+            src={coverUrl(track.filePath)}
+            alt=""
+            onError={() => setFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <span>♪</span>
         )}

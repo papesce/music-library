@@ -6,28 +6,62 @@ import { coverUrl } from '../../lib/path';
 import { buildGoogleQuery, openGoogle } from '../../lib/googleQuery';
 import { copyThenOpenChosic } from '../../lib/chosic';
 
-type TrackPatch = Partial<Pick<Track, 'title' | 'artist' | 'album' | 'genre'>> & { year?: number | null };
+type TrackPatch = Partial<Pick<Track, 'title' | 'artist' | 'album' | 'genre'>> & {
+  year?: number | null;
+};
 type Tab = 'details' | 'artwork' | 'lyrics' | 'file';
 const TAB_ORDER: Tab[] = ['details', 'artwork', 'lyrics', 'file'];
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const;
-type WhisperModel = typeof WHISPER_MODELS[number];
+type WhisperModel = (typeof WHISPER_MODELS)[number];
 
-function Field({ label, value, onChange, placeholder, inputMode }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'] }) {
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  inputMode,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+}) {
   const isUnknown = value.trim().toLowerCase() === 'unknown';
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
+    <label
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        fontSize: 12,
+        color: 'var(--muted)',
+      }}
+    >
       {label}
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
-        onFocus={e => { if (isUnknown) { const t = e.target as HTMLInputElement; requestAnimationFrame(() => t.select()); } }}
-        onMouseUp={e => { if (isUnknown) e.preventDefault(); }}
-        onClick={e => { if (isUnknown) (e.target as HTMLInputElement).select(); }}
+        onFocus={e => {
+          if (isUnknown) {
+            const t = e.target as HTMLInputElement;
+            requestAnimationFrame(() => t.select());
+          }
+        }}
+        onMouseUp={e => {
+          if (isUnknown) e.preventDefault();
+        }}
+        onClick={e => {
+          if (isUnknown) (e.target as HTMLInputElement).select();
+        }}
         placeholder={placeholder}
         inputMode={inputMode}
         style={{
-          padding: '9px 12px', borderRadius: 12, border: '1px solid var(--border)',
-          background: 'rgba(255,255,255,0.06)', color: isUnknown ? 'var(--muted)' : 'var(--text)',
+          padding: '9px 12px',
+          borderRadius: 12,
+          border: '1px solid var(--border)',
+          background: 'rgba(255,255,255,0.06)',
+          color: isUnknown ? 'var(--muted)' : 'var(--text)',
           fontStyle: isUnknown ? 'italic' : 'normal',
           outline: 'none',
         }}
@@ -36,7 +70,21 @@ function Field({ label, value, onChange, placeholder, inputMode }: { label: stri
   );
 }
 
-export function EditTrackModal({ track, onClose, onUpdated, setError, playback, pendingLyricsDraft }: { track: Track; onClose: () => void; onUpdated: (t: Track, oldFilePath?: string) => void; setError: (m: string) => void; playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void }; pendingLyricsDraft?: { text: string; source: string } | null }) {
+export function EditTrackModal({
+  track,
+  onClose,
+  onUpdated,
+  setError,
+  playback,
+  pendingLyricsDraft,
+}: {
+  track: Track;
+  onClose: () => void;
+  onUpdated: (t: Track, oldFilePath?: string) => void;
+  setError: (m: string) => void;
+  playback?: { isActive: boolean; isPaused: boolean; onToggle: () => void };
+  pendingLyricsDraft?: { text: string; source: string } | null;
+}) {
   const getFilename = (p: string) => p.split('/').pop()?.split('\\').pop() ?? p;
   const getDir = (p: string) => {
     const f = getFilename(p);
@@ -95,33 +143,46 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
     coverKey.current += 1;
     setActiveTab('details');
     // load current lyrics
-    setLyricsText(null); setLyricsPreview(''); setLyricsSource(''); setLyricsError(''); setLyricsSaved(false); setLyricsSelection('');
+    setLyricsText(null);
+    setLyricsPreview('');
+    setLyricsSource('');
+    setLyricsError('');
+    setLyricsSaved(false);
+    setLyricsSelection('');
     setLyricsLoading(true);
-    api.getLyrics(track.filePath).then(r => {
-      if (r.lyrics) { setLyricsText(r.lyrics); setLyricsPreview(r.lyrics); }
-      // carry over unsaved generated lyrics from player (user generated then opened Edit without saving)
-      if (pendingLyricsDraft?.text?.trim()) {
-        // if draft differs from saved, use draft as editable preview and flag source
-        if (pendingLyricsDraft.text.trim() !== (r.lyrics ?? '').trim()) {
+    api
+      .getLyrics(track.filePath)
+      .then(r => {
+        if (r.lyrics) {
+          setLyricsText(r.lyrics);
+          setLyricsPreview(r.lyrics);
+        }
+        // carry over unsaved generated lyrics from player (user generated then opened Edit without saving)
+        if (pendingLyricsDraft?.text?.trim()) {
+          // if draft differs from saved, use draft as editable preview and flag source
+          if (pendingLyricsDraft.text.trim() !== (r.lyrics ?? '').trim()) {
+            setLyricsPreview(pendingLyricsDraft.text);
+            setLyricsSource(pendingLyricsDraft.source || 'generated (unsaved)');
+            setActiveTab('lyrics');
+          }
+        }
+      })
+      .catch(() => {
+        // still carry over even if fetch failed / no saved lyrics
+        if (pendingLyricsDraft?.text?.trim()) {
           setLyricsPreview(pendingLyricsDraft.text);
           setLyricsSource(pendingLyricsDraft.source || 'generated (unsaved)');
           setActiveTab('lyrics');
         }
-      }
-    }).catch(() => {
-      // still carry over even if fetch failed / no saved lyrics
-      if (pendingLyricsDraft?.text?.trim()) {
-        setLyricsPreview(pendingLyricsDraft.text);
-        setLyricsSource(pendingLyricsDraft.source || 'generated (unsaved)');
-        setActiveTab('lyrics');
-      }
-    }).finally(() => setLyricsLoading(false));
+      })
+      .finally(() => setLyricsLoading(false));
   }, [track.filePath]);
 
   const sanitizeForFilename = (s: string) =>
     s
       .trim()
       // strip control chars + chars illegal on Windows/macOS
+      // eslint-disable-next-line no-control-regex
       .replace(/[\x00-\x1F\x7F]/g, '')
       .replace(/[\\/:*?"<>|]/g, ' ')
       .replace(/\s+/g, ' ')
@@ -129,7 +190,12 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
       .replace(/\.+$/g, '')
       .trim();
 
-  const buildSuggestedFilename = (artistVal: string, titleVal: string, yearVal: string, coverFlag: boolean): string | null => {
+  const buildSuggestedFilename = (
+    artistVal: string,
+    titleVal: string,
+    yearVal: string,
+    coverFlag: boolean
+  ): string | null => {
     const a = sanitizeForFilename(artistVal);
     const t = sanitizeForFilename(titleVal);
     const isUnknown = (v: string) => !v || v.toLowerCase() === 'unknown';
@@ -183,7 +249,14 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
     reader.readAsDataURL(file);
   };
 
-  const googleQuery = buildGoogleQuery({ title, artist, album, genre, year, filePath: track.filePath });
+  const googleQuery = buildGoogleQuery({
+    title,
+    artist,
+    album,
+    genre,
+    year,
+    filePath: track.filePath,
+  });
   const googleQueryForSearch = `${googleQuery} metadata`;
 
   const copyGoogleQuery = async () => {
@@ -202,7 +275,9 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
   };
 
   const handleOpenGoogle = () => openGoogle(googleQueryForSearch);
-  const openChosic = () => { void copyThenOpenChosic(title, artist); };
+  const openChosic = () => {
+    void copyThenOpenChosic(title, artist);
+  };
 
   const stripLyricsMetadata = (raw: string): string =>
     raw
@@ -251,15 +326,26 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
     openGoogle(query);
   };
   const detectLyrics = async (source: 'auto' | 'lrclib' | 'whisper' = 'auto') => {
-    setLyricsDetecting(true); setLyricsError(''); setLyricsSaved(false);
+    setLyricsDetecting(true);
+    setLyricsError('');
+    setLyricsSaved(false);
     try {
       const model = source === 'whisper' || source === 'auto' ? whisperModel : 'base';
-      const r = await api.detectLyrics(track.filePath, { source, model, artist: artist.trim(), title: title.trim(), album: album.trim() });
+      const r = await api.detectLyrics(track.filePath, {
+        source,
+        model,
+        artist: artist.trim(),
+        title: title.trim(),
+        album: album.trim(),
+      });
       setLyricsPreview(r.lrc || r.syncedLyrics || r.plainLyrics || '');
       setLyricsSource(r.source);
       setLyricsSelection('');
-    } catch (e: any) { setLyricsError(e.message); }
-    finally { setLyricsDetecting(false); }
+    } catch (e: any) {
+      setLyricsError(e.message);
+    } finally {
+      setLyricsDetecting(false);
+    }
   };
   const save = async () => {
     const filenameTrimmed = filename.trim();
@@ -297,7 +383,8 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
       if (artist.trim() !== track.artist) patch.artist = artist.trim();
       if (album.trim() !== track.album) patch.album = album.trim();
       if (genre.trim() !== track.genre) patch.genre = genre.trim();
-      if (year.trim() !== (track.year ? String(track.year) : '')) patch.year = year.trim() ? Number(year.trim()) : null;
+      if (year.trim() !== (track.year ? String(track.year) : ''))
+        patch.year = year.trim() ? Number(year.trim()) : null;
       const hasPatch = Object.keys(patch).length > 0;
       if (hasPatch) {
         const targetPath = didRename ? currentTrack.filePath : track.filePath;
@@ -332,7 +419,15 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
         setLyricsSaved(true);
         setTimeout(() => setLyricsSaved(false), 2000);
       }
-      if (!hasPatch && !reviewedChanged && !isCoverChanged && !loudnessChanged && !didRename && !coverChanged && !lyricsDirtyAtSave) {
+      if (
+        !hasPatch &&
+        !reviewedChanged &&
+        !isCoverChanged &&
+        !loudnessChanged &&
+        !didRename &&
+        !coverChanged &&
+        !lyricsDirtyAtSave
+      ) {
         onClose();
         return;
       }
@@ -352,7 +447,14 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
   const isSynced = lyricsText ? /\[\d{1,3}:\d{2}/.test(lyricsText) : false;
 
   // per-tab dirty (reviewed is now in persistent footer, not tab-specific)
-  const detailsDirty = title.trim() !== track.title || artist.trim() !== track.artist || album.trim() !== track.album || genre.trim() !== track.genre || year.trim() !== (track.year ? String(track.year) : '') || isCover !== !!track.isCover || (loudness ?? null) !== (track.loudness ?? null);
+  const detailsDirty =
+    title.trim() !== track.title ||
+    artist.trim() !== track.artist ||
+    album.trim() !== track.album ||
+    genre.trim() !== track.genre ||
+    year.trim() !== (track.year ? String(track.year) : '') ||
+    isCover !== !!track.isCover ||
+    (loudness ?? null) !== (track.loudness ?? null);
   const fileDirty = filename.trim() !== getFilename(track.filePath);
   const lyricsDirty = lyricsPreview !== (lyricsText ?? '') && lyricsPreview.trim() !== '';
 
@@ -370,12 +472,18 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
   ];
 
   // keyboard nav for tabs
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ details: null, artwork: null, lyrics: null, file: null });
+  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({
+    details: null,
+    artwork: null,
+    lyrics: null,
+    file: null,
+  });
   const onTabKeyDown = (e: React.KeyboardEvent) => {
     const idx = TAB_ORDER.indexOf(activeTab);
     let next: Tab | null = null;
     if (e.key === 'ArrowRight') next = TAB_ORDER[(idx + 1) % TAB_ORDER.length];
-    else if (e.key === 'ArrowLeft') next = TAB_ORDER[(idx - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+    else if (e.key === 'ArrowLeft')
+      next = TAB_ORDER[(idx - 1 + TAB_ORDER.length) % TAB_ORDER.length];
     else if (e.key === 'Home') next = TAB_ORDER[0];
     else if (e.key === 'End') next = TAB_ORDER[TAB_ORDER.length - 1];
     if (next) {
@@ -386,19 +494,80 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
   };
 
   return (
-    <Modal onClose={() => !saving && !lyricsDetecting && onClose()} width="min(640px, calc(100% - 32px))">
+    <Modal
+      onClose={() => !saving && !lyricsDetecting && onClose()}
+      width="min(640px, calc(100% - 32px))"
+    >
       {/* Header — always visible */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)', display: 'grid', placeItems: 'center' }}>
-          {coverRemove ? <span style={{ fontSize: 20, opacity: 0.6 }}>♪</span>
-            : coverPreview ? <img src={coverPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : !coverFailed ? <img key={coverKey.current} src={`${coverUrl(track.filePath)}&t=${coverKey.current}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setCoverFailed(true)} />
-            : <span style={{ fontSize: 20, opacity: 0.6 }}>♪</span>}
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 10,
+            overflow: 'hidden',
+            flexShrink: 0,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid var(--border-soft)',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          {coverRemove ? (
+            <span style={{ fontSize: 20, opacity: 0.6 }}>♪</span>
+          ) : coverPreview ? (
+            <img
+              src={coverPreview}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : !coverFailed ? (
+            <img
+              key={coverKey.current}
+              src={`${coverUrl(track.filePath)}&t=${coverKey.current}`}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={() => setCoverFailed(true)}
+            />
+          ) : (
+            <span style={{ fontSize: 20, opacity: 0.6 }}>♪</span>
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ fontSize: 15, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.title || getFilename(track.filePath)}</h3>
-          <p style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.artist} {track.album ? `· ${track.album}` : ''}</p>
-          <p className="muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', opacity: 0.7, marginTop: 2 }}>{track.filePath}</p>
+          <h3
+            style={{
+              fontSize: 15,
+              lineHeight: 1.2,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {track.title || getFilename(track.filePath)}
+          </h3>
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--muted)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {track.artist} {track.album ? `· ${track.album}` : ''}
+          </p>
+          <p
+            className="muted"
+            style={{
+              fontSize: 11,
+              fontFamily: 'ui-monospace, monospace',
+              wordBreak: 'break-all',
+              opacity: 0.7,
+              marginTop: 2,
+            }}
+          >
+            {track.filePath}
+          </p>
         </div>
         {playback && (
           <button
@@ -414,14 +583,29 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
       </div>
 
       {/* Tab bar — keyboard: ArrowLeft/Right, Home/End */}
-      <div role="tablist" aria-label="Edit sections" onKeyDown={onTabKeyDown} style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)', marginBottom: 14 }}>
+      <div
+        role="tablist"
+        aria-label="Edit sections"
+        onKeyDown={onTabKeyDown}
+        style={{
+          display: 'flex',
+          gap: 4,
+          padding: 4,
+          borderRadius: 999,
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid var(--border-soft)',
+          marginBottom: 14,
+        }}
+      >
         {tabs.map(t => {
           const isActive = activeTab === t.id;
           const isDirty = t.badge === '•';
           return (
             <button
               key={t.id}
-              ref={el => { tabRefs.current[t.id] = el; }}
+              ref={el => {
+                tabRefs.current[t.id] = el;
+              }}
               role="tab"
               id={`edit-tab-${t.id}`}
               aria-selected={isActive}
@@ -430,24 +614,60 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
               onClick={() => setActiveTab(t.id)}
               title={isDirty ? 'Unsaved changes' : undefined}
               style={{
-                flex: 1, padding: '7px 10px', borderRadius: 999, border: 'none',
+                flex: 1,
+                padding: '7px 10px',
+                borderRadius: 999,
+                border: 'none',
                 background: isActive ? 'rgba(255,255,255,0.95)' : 'transparent',
                 color: isActive ? '#0a0a14' : 'var(--muted)',
-                fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                boxShadow: isActive ? '0 2px 10px rgba(0,0,0,0.2)' : 'none', transition: 'all 0.15s',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                boxShadow: isActive ? '0 2px 10px rgba(0,0,0,0.2)' : 'none',
+                transition: 'all 0.15s',
                 outline: 'none',
                 position: 'relative',
               }}
-              onFocus={e => { e.currentTarget.style.boxShadow = isActive ? '0 2px 10px rgba(0,0,0,0.2), 0 0 0 2px var(--accent)' : '0 0 0 2px var(--accent)'; }}
-              onBlur={e => { e.currentTarget.style.boxShadow = isActive ? '0 2px 10px rgba(0,0,0,0.2)' : 'none'; }}
+              onFocus={e => {
+                e.currentTarget.style.boxShadow = isActive
+                  ? '0 2px 10px rgba(0,0,0,0.2), 0 0 0 2px var(--accent)'
+                  : '0 0 0 2px var(--accent)';
+              }}
+              onBlur={e => {
+                e.currentTarget.style.boxShadow = isActive ? '0 2px 10px rgba(0,0,0,0.2)' : 'none';
+              }}
             >
-              {isDirty && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: '#2ecc71', flexShrink: 0 }} />}
+              {isDirty && (
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: '#2ecc71',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
               {t.label}
-              {t.badge && t.badge !== '•' && <span style={{
-                fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
-                background: t.badge === '!' ? '#ff4d6d' : 'rgba(0,0,0,0.08)',
-                color: t.badge === '!' ? '#fff' : 'inherit',
-              }}>{t.badge}</span>}
+              {t.badge && t.badge !== '•' && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 999,
+                    background: t.badge === '!' ? '#ff4d6d' : 'rgba(0,0,0,0.08)',
+                    color: t.badge === '!' ? '#fff' : 'inherit',
+                  }}
+                >
+                  {t.badge}
+                </span>
+              )}
             </button>
           );
         })}
@@ -456,20 +676,63 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
       {/* Tab bodies — fixed height, internal scroll */}
       <div style={{ minHeight: 280, maxHeight: '52vh', overflow: 'auto', paddingRight: 2 }}>
         {activeTab === 'details' && (
-          <div role="tabpanel" id="edit-panel-details" aria-labelledby="edit-tab-details" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div
+            role="tabpanel"
+            id="edit-panel-details"
+            aria-labelledby="edit-tab-details"
+            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+          >
             <Field label="Title" value={title} onChange={setTitle} placeholder="Title" />
             <Field label="Artist" value={artist} onChange={setArtist} placeholder="Artist" />
             <Field label="Album" value={album} onChange={setAlbum} placeholder="Album" />
             <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1 }}><Field label="Genre" value={genre} onChange={setGenre} placeholder="Genre" /></div>
-              <div style={{ width: 120 }}><Field label="Year" value={year} onChange={setYear} placeholder="2024" inputMode="numeric" /></div>
+              <div style={{ flex: 1 }}>
+                <Field label="Genre" value={genre} onChange={setGenre} placeholder="Genre" />
+              </div>
+              <div style={{ width: 120 }}>
+                <Field
+                  label="Year"
+                  value={year}
+                  onChange={setYear}
+                  placeholder="2024"
+                  inputMode="numeric"
+                />
+              </div>
             </div>
 
             {/* Cover/Original — segmented control so both options are visible (fix discoverability: user looking for "cover" always sees it) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>Version</span>
-              <div role="group" aria-label="Version" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}>
-                {([{ v: false, label: 'Original' }, { v: true, label: 'Cover' }] as const).map(opt => {
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-soft)',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--text)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Version
+              </span>
+              <div
+                role="group"
+                aria-label="Version"
+                style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}
+              >
+                {(
+                  [
+                    { v: false, label: 'Original' },
+                    { v: true, label: 'Cover' },
+                  ] as const
+                ).map(opt => {
                   const active = isCover === opt.v;
                   return (
                     <button
@@ -477,11 +740,20 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
                       type="button"
                       aria-pressed={active}
                       onClick={() => setIsCover(opt.v)}
-                      title={opt.v ? 'Mark as cover — shows cover badge in list' : 'Mark as original recording'}
+                      title={
+                        opt.v
+                          ? 'Mark as cover — shows cover badge in list'
+                          : 'Mark as original recording'
+                      }
                       style={{
-                        padding: '5px 12px', borderRadius: 999, border: `1px solid ${active ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`,
+                        padding: '5px 12px',
+                        borderRadius: 999,
+                        border: `1px solid ${active ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`,
                         background: active ? 'rgba(124,92,255,0.18)' : 'rgba(255,255,255,0.06)',
-                        color: active ? '#c4b5ff' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                        color: active ? '#c4b5ff' : 'var(--muted)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
                       }}
                     >
                       {opt.label}
@@ -489,12 +761,38 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
                   );
                 })}
               </div>
-              <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{isCover ? 'Shows cover badge' : 'Original recording'}</span>
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>
+                {isCover ? 'Shows cover badge' : 'Original recording'}
+              </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>Loudness</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-soft)',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--text)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Loudness
+              </span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}>
-                {([['normal','🔉 Normal'],['loud','🔊 Loud']] as const).map(([v,label]) => {
+                {(
+                  [
+                    ['normal', '🔉 Normal'],
+                    ['loud', '🔊 Loud'],
+                  ] as const
+                ).map(([v, label]) => {
                   const active = loudness === v;
                   return (
                     <button
@@ -503,9 +801,14 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
                       onClick={() => setLoudness(active ? null : v)}
                       title={active ? 'Click to clear' : `Mark as ${v}`}
                       style={{
-                        padding: '5px 10px', borderRadius: 999, border: `1px solid ${active ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`,
+                        padding: '5px 10px',
+                        borderRadius: 999,
+                        border: `1px solid ${active ? 'rgba(124,92,255,0.45)' : 'var(--border)'}`,
                         background: active ? 'rgba(124,92,255,0.18)' : 'rgba(255,255,255,0.06)',
-                        color: active ? '#c4b5ff' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                        color: active ? '#c4b5ff' : 'var(--muted)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
                       }}
                     >
                       {label}
@@ -513,121 +816,486 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
                   );
                 })}
               </div>
-              {loudness && <button type="button" onClick={() => setLoudness(null)} style={{ marginLeft: 'auto', padding: '5px 8px', borderRadius: 999, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 11, cursor: 'pointer' }}>Clear</button>}
+              {loudness && (
+                <button
+                  type="button"
+                  onClick={() => setLoudness(null)}
+                  style={{
+                    marginLeft: 'auto',
+                    padding: '5px 8px',
+                    borderRadius: 999,
+                    border: '1px solid var(--border)',
+                    background: 'transparent',
+                    color: 'var(--muted)',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
             {/* Google validation — inline, not a big card */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQueryForSearch}>{googleQueryForSearch}</span>
-              <button className="btn" onClick={copyGoogleQuery} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>{copied ? '✓ Copied' : 'Copy'}</button>
-              <button className="btn" onClick={handleOpenGoogle} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>Google ↗</button>
-              <button className="btn" onClick={openChosic} title="Open Chosic Similar Songs Finder (copies Artist - Title to clipboard, Chosic only pre-fills via Spotify ID)" style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}>Chosic ↗</button>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-soft)',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--muted)',
+                  flex: 1,
+                  fontFamily: 'ui-monospace, monospace',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={googleQueryForSearch}
+              >
+                {googleQueryForSearch}
+              </span>
+              <button
+                className="btn"
+                onClick={copyGoogleQuery}
+                style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
+              >
+                {copied ? '✓ Copied' : 'Copy'}
+              </button>
+              <button
+                className="btn"
+                onClick={handleOpenGoogle}
+                style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
+              >
+                Google ↗
+              </button>
+              <button
+                className="btn"
+                onClick={openChosic}
+                title="Open Chosic Similar Songs Finder (copies Artist - Title to clipboard, Chosic only pre-fills via Spotify ID)"
+                style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
+              >
+                Chosic ↗
+              </button>
             </div>
-            <p className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Writes ID3v2 tags. Google query uses current field values with quoted exact phrases.</p>
+            <p className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>
+              Writes ID3v2 tags. Google query uses current field values with quoted exact phrases.
+            </p>
           </div>
         )}
 
         {activeTab === 'artwork' && (
-          <div role="tabpanel" id="edit-panel-artwork" aria-labelledby="edit-tab-artwork" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div
+            role="tabpanel"
+            id="edit-panel-artwork"
+            aria-labelledby="edit-tab-artwork"
+            style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
             <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-              <div style={{ width: 160, height: 160, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)', display: 'grid', placeItems: 'center', position: 'relative' }}>
-                {coverRemove ? <span style={{ fontSize: 36, opacity: 0.5 }}>♪</span>
-                  : coverPreview ? <img src={coverPreview} alt="New cover preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : !coverFailed ? <img key={coverKey.current} src={`${coverUrl(track.filePath)}&t=${coverKey.current}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setCoverFailed(true)} />
-                  : null}
-                {coverFailed && !coverPreview && !coverRemove && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 36, opacity: 0.5 }}>♪</span>}
+              <div
+                style={{
+                  width: 160,
+                  height: 160,
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid var(--border-soft)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  position: 'relative',
+                }}
+              >
+                {coverRemove ? (
+                  <span style={{ fontSize: 36, opacity: 0.5 }}>♪</span>
+                ) : coverPreview ? (
+                  <img
+                    src={coverPreview}
+                    alt="New cover preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : !coverFailed ? (
+                  <img
+                    key={coverKey.current}
+                    src={`${coverUrl(track.filePath)}&t=${coverKey.current}`}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={() => setCoverFailed(true)}
+                  />
+                ) : null}
+                {coverFailed && !coverPreview && !coverRemove && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 36,
+                      opacity: 0.5,
+                    }}
+                  >
+                    ♪
+                  </span>
+                )}
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
-                  {coverPreview ? <span style={{ color: '#8ff5b8' }}>New image ready</span> : coverRemove ? <span style={{ color: '#ffb3b8' }}>Will be removed on save</span> : coverFailed ? 'No cover embedded' : 'Current cover'}
+                  {coverPreview ? (
+                    <span style={{ color: '#8ff5b8' }}>New image ready</span>
+                  ) : coverRemove ? (
+                    <span style={{ color: '#ffb3b8' }}>Will be removed on save</span>
+                  ) : coverFailed ? (
+                    'No cover embedded'
+                  ) : (
+                    'Current cover'
+                  )}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>JPEG, PNG, WebP or GIF · max 8 MB · saved to ID3 APIC and used for thumbnails/player.</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>
+                  JPEG, PNG, WebP or GIF · max 8 MB · saved to ID3 APIC and used for
+                  thumbnails/player.
+                </span>
                 {coverError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{coverError}</span>}
-                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleCoverFile(f); e.target.value = ''; }} />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) handleCoverFile(f);
+                    e.target.value = '';
+                  }}
+                />
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <button className="btn btn-primary" style={{ padding: '7px 14px', fontSize: 12, borderRadius: 999 }} onClick={() => fileRef.current?.click()} disabled={saving}>Choose image…</button>
-                  {!coverRemove
-                    ? <button className="btn" style={{ padding: '7px 12px', fontSize: 12, borderRadius: 999 }} onClick={() => { setCoverRemove(true); setCoverPreview(null); setCoverMime(null); setCoverError(''); }} disabled={saving}>Remove</button>
-                    : <button className="btn" style={{ padding: '7px 12px', fontSize: 12, borderRadius: 999 }} onClick={() => { setCoverRemove(false); setCoverFailed(false); coverKey.current += 1; }} disabled={saving}>Undo remove</button>}
-                  {(coverPreview || coverRemove) && <button className="btn" style={{ padding: '7px 12px', fontSize: 12, borderRadius: 999 }} onClick={() => { setCoverPreview(null); setCoverMime(null); setCoverRemove(false); setCoverError(''); setCoverFailed(false); coverKey.current += 1; }} disabled={saving}>Reset</button>}
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: '7px 14px', fontSize: 12, borderRadius: 999 }}
+                    onClick={() => fileRef.current?.click()}
+                    disabled={saving}
+                  >
+                    Choose image…
+                  </button>
+                  {!coverRemove ? (
+                    <button
+                      className="btn"
+                      style={{ padding: '7px 12px', fontSize: 12, borderRadius: 999 }}
+                      onClick={() => {
+                        setCoverRemove(true);
+                        setCoverPreview(null);
+                        setCoverMime(null);
+                        setCoverError('');
+                      }}
+                      disabled={saving}
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      className="btn"
+                      style={{ padding: '7px 12px', fontSize: 12, borderRadius: 999 }}
+                      onClick={() => {
+                        setCoverRemove(false);
+                        setCoverFailed(false);
+                        coverKey.current += 1;
+                      }}
+                      disabled={saving}
+                    >
+                      Undo remove
+                    </button>
+                  )}
+                  {(coverPreview || coverRemove) && (
+                    <button
+                      className="btn"
+                      style={{ padding: '7px 12px', fontSize: 12, borderRadius: 999 }}
+                      onClick={() => {
+                        setCoverPreview(null);
+                        setCoverMime(null);
+                        setCoverRemove(false);
+                        setCoverError('');
+                        setCoverFailed(false);
+                        coverKey.current += 1;
+                      }}
+                      disabled={saving}
+                    >
+                      Reset
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
-            {hasCoverChange && <p style={{ fontSize: 11, color: '#8ff5b8' }}>Change will be applied when you click Save.</p>}
+            {hasCoverChange && (
+              <p style={{ fontSize: 11, color: '#8ff5b8' }}>
+                Change will be applied when you click Save.
+              </p>
+            )}
           </div>
         )}
 
         {activeTab === 'lyrics' && (
-          <div role="tabpanel" id="edit-panel-lyrics" aria-labelledby="edit-tab-lyrics" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {pendingLyricsDraft?.text?.trim() && lyricsPreview.trim() === pendingLyricsDraft.text.trim() && lyricsPreview.trim() !== (lyricsText ?? '').trim() && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.32)', color: '#ffd66b', fontSize: 11, lineHeight: 1.4 }}>
-                <span style={{ fontSize: 13 }}>⚠</span>
-                <span style={{ flex: 1 }}>Unsaved lyrics from player carried over — generated via <b style={{ color: '#fff' }}>{pendingLyricsDraft.source || 'detect'}</b>. Hit <b style={{ color: '#fff' }}>Save</b> to keep them (or edit/discard here).</span>
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>
-                Lyrics {lyricsSource ? `· ${lyricsSource}` : hasLyrics ? '· saved' : ''} {lyricsSaved ? '· ✓ saved' : ''}
+          <div
+            role="tabpanel"
+            id="edit-panel-lyrics"
+            aria-labelledby="edit-tab-lyrics"
+            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+          >
+            {pendingLyricsDraft?.text?.trim() &&
+              lyricsPreview.trim() === pendingLyricsDraft.text.trim() &&
+              lyricsPreview.trim() !== (lyricsText ?? '').trim() && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    background: 'rgba(255,193,7,0.12)',
+                    border: '1px solid rgba(255,193,7,0.32)',
+                    color: '#ffd66b',
+                    fontSize: 11,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>⚠</span>
+                  <span style={{ flex: 1 }}>
+                    Unsaved lyrics from player carried over — generated via{' '}
+                    <b style={{ color: '#fff' }}>{pendingLyricsDraft.source || 'detect'}</b>. Hit{' '}
+                    <b style={{ color: '#fff' }}>Save</b> to keep them (or edit/discard here).
+                  </span>
+                </div>
+              )}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  color: 'var(--muted)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Lyrics {lyricsSource ? `· ${lyricsSource}` : hasLyrics ? '· saved' : ''}{' '}
+                {lyricsSaved ? '· ✓ saved' : ''}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--muted)' }}>{lyricsLoading ? 'loading…' : hasLyrics ? `${lyricsLines} lines${isSynced ? ' · synced' : ''}` : 'no lyrics yet'}</span>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                {lyricsLoading
+                  ? 'loading…'
+                  : hasLyrics
+                    ? `${lyricsLines} lines${isSynced ? ' · synced' : ''}`
+                    : 'no lyrics yet'}
+              </span>
             </div>
             <textarea
               ref={lyricsTextareaRef}
               value={lyricsPreview}
-              onChange={e => { setLyricsPreview(e.target.value); setLyricsSaved(false); setTimeout(updateLyricsSelection, 0); }}
+              onChange={e => {
+                setLyricsPreview(e.target.value);
+                setLyricsSaved(false);
+                setTimeout(updateLyricsSelection, 0);
+              }}
               onSelect={updateLyricsSelection}
               onKeyUp={updateLyricsSelection}
               onMouseUp={updateLyricsSelection}
               placeholder="[00:12.00]Lyric line — or plain lyrics&#10;Select 3–4 lines and use Google lyrics to identify the track."
               rows={10}
-              style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', outline: 'none', minHeight: 160 }}
+              style={{
+                width: '100%',
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: 12,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: 'rgba(255,255,255,0.06)',
+                color: 'var(--text)',
+                resize: 'vertical',
+                outline: 'none',
+                minHeight: 160,
+              }}
             />
             {lyricsDetecting && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }} aria-busy="true" aria-live="polite">
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--border-soft)',
+                }}
+                aria-busy="true"
+                aria-live="polite"
+              >
                 <span className="btn-spinner" aria-hidden />
                 <span style={{ fontSize: 12, color: 'var(--text)' }}>Detecting lyrics…</span>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>LRClib → Whisper (may take 10–30s)</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  LRClib → Whisper (may take 10–30s)
+                </span>
               </div>
             )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button className="btn" onClick={() => detectLyrics('auto')} disabled={lyricsDetecting || saving} aria-busy={lyricsDetecting} style={{ padding: '6px 12px', fontSize: 12, borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{lyricsDetecting ? <><span className="btn-spinner" aria-hidden /><span>Detecting…</span></> : '✨ Detect (auto)'}</button>
-              <button className="btn" onClick={() => detectLyrics('lrclib')} disabled={lyricsDetecting || saving} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>LRClib</button>
-              <button className="btn" onClick={() => detectLyrics('whisper')} disabled={lyricsDetecting || saving} style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}>Whisper</button>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--muted)' }}>
+              <button
+                className="btn"
+                onClick={() => detectLyrics('auto')}
+                disabled={lyricsDetecting || saving}
+                aria-busy={lyricsDetecting}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  borderRadius: 999,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                {lyricsDetecting ? (
+                  <>
+                    <span className="btn-spinner" aria-hidden />
+                    <span>Detecting…</span>
+                  </>
+                ) : (
+                  '✨ Detect (auto)'
+                )}
+              </button>
+              <button
+                className="btn"
+                onClick={() => detectLyrics('lrclib')}
+                disabled={lyricsDetecting || saving}
+                style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
+              >
+                LRClib
+              </button>
+              <button
+                className="btn"
+                onClick={() => detectLyrics('whisper')}
+                disabled={lyricsDetecting || saving}
+                style={{ padding: '6px 10px', fontSize: 12, borderRadius: 999 }}
+              >
+                Whisper
+              </button>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 11,
+                  color: 'var(--muted)',
+                }}
+              >
                 model
                 <select
                   value={whisperModel}
                   onChange={e => setWhisperModel(e.target.value as WhisperModel)}
                   disabled={lyricsDetecting || saving}
-                  style={{ padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 11, outline: 'none' }}
+                  style={{
+                    padding: '5px 8px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'var(--text)',
+                    fontSize: 11,
+                    outline: 'none',
+                  }}
                 >
-                  {WHISPER_MODELS.map(m => <option key={m} value={m}>{m}{m === 'base' ? ' (default)' : ''}</option>)}
+                  {WHISPER_MODELS.map(m => (
+                    <option key={m} value={m}>
+                      {m}
+                      {m === 'base' ? ' (default)' : ''}
+                    </option>
+                  ))}
                 </select>
               </label>
               <span style={{ flex: 1 }} />
-              {lyricsDirty ? <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>• will be saved with Save</span> : <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>No changes</span>}
+              {lyricsDirty ? (
+                <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>
+                  • will be saved with Save
+                </span>
+              ) : (
+                <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>
+                  No changes
+                </span>
+              )}
             </div>
             {/* Identify song from lyrics — uses current selection, stripped of timestamps/metadata */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, minWidth: 120 }}>{lyricsSelection ? 'Selection ready — search Google to identify track.' : 'Select lyrics above to enable search.'}</span>
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                padding: '8px 10px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-soft)',
+              }}
+            >
+              <span style={{ fontSize: 11, color: 'var(--muted)', flex: 1, minWidth: 120 }}>
+                {lyricsSelection
+                  ? 'Selection ready — search Google to identify track.'
+                  : 'Select lyrics above to enable search.'}
+              </span>
               <button
                 className="btn"
                 onClick={handleLyricsGoogle}
                 disabled={!lyricsSelection || lyricsDetecting || saving}
-                title={!lyricsSelection ? 'Select 3–4 lines in the lyrics above first' : 'Copy selection (no timestamps) and open Google to identify the track'}
+                title={
+                  !lyricsSelection
+                    ? 'Select 3–4 lines in the lyrics above first'
+                    : 'Copy selection (no timestamps) and open Google to identify the track'
+                }
                 style={{ padding: '5px 12px', fontSize: 11, borderRadius: 8, flexShrink: 0 }}
               >
                 {lyricsCopied ? '✓ Copied' : 'Google lyrics ↗'}
               </button>
             </div>
             {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
-            <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>Auto tries LRClib (synced) → fallback Whisper {whisperModel} (local, first run downloads model ~{whisperModel === 'tiny' ? 40 : whisperModel === 'base' ? 140 : whisperModel === 'small' ? 460 : whisperModel === 'medium' ? 1500 : 2900} MB). Edits are staged here and saved together with <b>Save</b> (footer) → writes .lrc + USLT.</span>
+            <span style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>
+              Auto tries LRClib (synced) → fallback Whisper {whisperModel} (local, first run
+              downloads model ~
+              {whisperModel === 'tiny'
+                ? 40
+                : whisperModel === 'base'
+                  ? 140
+                  : whisperModel === 'small'
+                    ? 460
+                    : whisperModel === 'medium'
+                      ? 1500
+                      : 2900}{' '}
+              MB). Edits are staged here and saved together with <b>Save</b> (footer) → writes .lrc
+              + USLT.
+            </span>
           </div>
         )}
 
         {activeTab === 'file' && (
-          <div role="tabpanel" id="edit-panel-file" aria-labelledby="edit-tab-file" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
+          <div
+            role="tabpanel"
+            id="edit-panel-file"
+            aria-labelledby="edit-tab-file"
+            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                fontSize: 12,
+                color: 'var(--muted)',
+              }}
+            >
               Filename <span style={{ fontSize: 11, opacity: 0.7 }}>in {dir || '/'}</span>
               <input
                 value={filename}
@@ -636,55 +1304,188 @@ export function EditTrackModal({ track, onClose, onUpdated, setError, playback, 
                   if (filenameError) setFilenameError(validateFilename(e.target.value) ?? '');
                 }}
                 onBlur={() => {
-                  const err = filename.trim() !== getFilename(track.filePath) ? validateFilename(filename) : null;
+                  const err =
+                    filename.trim() !== getFilename(track.filePath)
+                      ? validateFilename(filename)
+                      : null;
                   setFilenameError(err ?? '');
                 }}
                 placeholder="Artist - Title.mp3"
-                style={{ padding: '9px 12px', borderRadius: 12, border: `1px solid ${filenameError ? '#ff6b6b' : 'var(--border)'}`, background: 'rgba(255,255,255,0.06)', color: 'var(--text)', outline: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 12,
+                  border: `1px solid ${filenameError ? '#ff6b6b' : 'var(--border)'}`,
+                  background: 'rgba(255,255,255,0.06)',
+                  color: 'var(--text)',
+                  outline: 'none',
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: 13,
+                }}
               />
-              {filenameError ? <span style={{ color: '#ff6b6b', fontSize: 11 }}>{filenameError}</span> : <span style={{ fontSize: 11, opacity: 0.6 }}>Renames the file on disk. Must end with .mp3 and stay in the same folder.</span>}
+              {filenameError ? (
+                <span style={{ color: '#ff6b6b', fontSize: 11 }}>{filenameError}</span>
+              ) : (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>
+                  Renames the file on disk. Must end with .mp3 and stay in the same folder.
+                </span>
+              )}
             </label>
             {suggestedFilename ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: suggestedFilename === filename ? 'rgba(46,204,113,0.08)' : 'rgba(124,92,255,0.10)', border: `1px solid ${suggestedFilename === filename ? 'rgba(46,204,113,0.22)' : 'rgba(124,92,255,0.22)'}`, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: 'var(--muted)', flex: '1 1 auto', minWidth: 0 }}>
-                  Suggested: <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--text)', wordBreak: 'break-all' }}>{suggestedFilename}</span>
-                  <span style={{ opacity: 0.6 }}> — Artist - Title{year.trim() && /^\d{3,4}$/.test(year.trim()) ? ' (Year)' : ''}{isCover ? ' (cover)' : ''}</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  background:
+                    suggestedFilename === filename
+                      ? 'rgba(46,204,113,0.08)'
+                      : 'rgba(124,92,255,0.10)',
+                  border: `1px solid ${suggestedFilename === filename ? 'rgba(46,204,113,0.22)' : 'rgba(124,92,255,0.22)'}`,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  style={{ fontSize: 11, color: 'var(--muted)', flex: '1 1 auto', minWidth: 0 }}
+                >
+                  Suggested:{' '}
+                  <span
+                    style={{
+                      fontFamily: 'ui-monospace, monospace',
+                      color: 'var(--text)',
+                      wordBreak: 'break-all',
+                    }}
+                  >
+                    {suggestedFilename}
+                  </span>
+                  <span style={{ opacity: 0.6 }}>
+                    {' '}
+                    — Artist - Title{year.trim() && /^\d{3,4}$/.test(year.trim()) ? ' (Year)' : ''}
+                    {isCover ? ' (cover)' : ''}
+                  </span>
                 </span>
                 {suggestedFilename !== filename ? (
                   <button
                     className="btn btn-primary"
                     style={{ padding: '5px 10px', fontSize: 11, borderRadius: 999, flexShrink: 0 }}
-                    onClick={() => { setFilename(suggestedFilename); setFilenameError(''); }}
+                    onClick={() => {
+                      setFilename(suggestedFilename);
+                      setFilenameError('');
+                    }}
                   >
                     ✨ Use suggested
                   </button>
                 ) : (
-                  <span style={{ fontSize: 11, color: '#2ecc71', fontWeight: 600, flexShrink: 0 }}>✓ In use</span>
+                  <span style={{ fontSize: 11, color: '#2ecc71', fontWeight: 600, flexShrink: 0 }}>
+                    ✓ In use
+                  </span>
                 )}
               </div>
             ) : (
-              <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>Set Artist and Title (Details tab) to get a standardized filename suggestion.</span>
+              <span style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>
+                Set Artist and Title (Details tab) to get a standardized filename suggestion.
+              </span>
             )}
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6 }}>Full path</div>
-              <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'var(--text)', wordBreak: 'break-all', opacity: 0.85 }}>{track.filePath}</div>
+            <div
+              style={{
+                padding: '10px 12px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border-soft)',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.3,
+                  marginBottom: 6,
+                }}
+              >
+                Full path
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontFamily: 'ui-monospace, monospace',
+                  color: 'var(--text)',
+                  wordBreak: 'break-all',
+                  opacity: 0.85,
+                }}
+              >
+                {track.filePath}
+              </div>
             </div>
           </div>
         )}
       </div>
 
       {/* Sticky footer — persistent review toggle + single save for all tabs */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-soft)' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 999, border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`, background: reviewed ? 'rgba(46,204,113,0.12)' : 'rgba(255,255,255,0.04)', cursor: 'pointer', flex: '1 1 auto', minWidth: 0 }}>
-          <input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} disabled={saving || lyricsDetecting} style={{ accentColor: '#2ecc71', width: 16, height: 16, flexShrink: 0 }} />
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          marginTop: 16,
+          paddingTop: 12,
+          borderTop: '1px solid var(--border-soft)',
+        }}
+      >
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 12px',
+            borderRadius: 999,
+            border: `1px solid ${reviewed ? 'rgba(46,204,113,0.35)' : 'var(--border)'}`,
+            background: reviewed ? 'rgba(46,204,113,0.12)' : 'rgba(255,255,255,0.04)',
+            cursor: 'pointer',
+            flex: '1 1 auto',
+            minWidth: 0,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={reviewed}
+            onChange={e => setReviewed(e.target.checked)}
+            disabled={saving || lyricsDetecting}
+            style={{ accentColor: '#2ecc71', width: 16, height: 16, flexShrink: 0 }}
+          />
           <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15, minWidth: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: reviewed ? '#8ff5b8' : 'var(--text)', whiteSpace: 'nowrap' }}>{reviewed ? '✓ Reviewed' : 'Mark as reviewed'}</span>
-            <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{reviewed ? 'Hidden when "Hide done" is active.' : "Won't need inspection again."}</span>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: reviewed ? '#8ff5b8' : 'var(--text)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {reviewed ? '✓ Reviewed' : 'Mark as reviewed'}
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--muted)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {reviewed ? 'Hidden when "Hide done" is active.' : "Won't need inspection again."}
+            </span>
           </span>
         </label>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button className="btn" onClick={onClose} disabled={saving || lyricsDetecting}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving || lyricsDetecting}>{saving ? 'Saving…' : reviewed !== !!track.reviewed || lyricsDirty ? 'Save •' : 'Save'}</button>
+          <button className="btn" onClick={onClose} disabled={saving || lyricsDetecting}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || lyricsDetecting}>
+            {saving ? 'Saving…' : reviewed !== !!track.reviewed || lyricsDirty ? 'Save •' : 'Save'}
+          </button>
         </div>
       </div>
     </Modal>

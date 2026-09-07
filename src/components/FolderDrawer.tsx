@@ -26,7 +26,10 @@ export function FolderDrawer({
   onBrowse: () => void;
   onScan: () => void;
   scanning: boolean;
-  onStateImported?: (tracks: import('../types/api.d').Track[], wishlist: import('../types/api.d').WishlistItem[]) => void;
+  onStateImported?: (
+    tracks: import('../types/api.d').Track[],
+    wishlist: import('../types/api.d').WishlistItem[]
+  ) => void;
   setError?: (m: string) => void;
   setSuccess?: (m: string) => void;
 }) {
@@ -100,27 +103,38 @@ export function FolderDrawer({
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-soft)' }}>
           <button
             className="btn"
-            style={{ width: '100%', justifyContent: 'center', background: 'rgba(220,60,60,0.12)', borderColor: 'rgba(220,60,60,0.25)' }}
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              background: 'rgba(220,60,60,0.12)',
+              borderColor: 'rgba(220,60,60,0.25)',
+            }}
             onClick={async () => {
               if (!confirm('Quit Music Library? This will stop the server.')) return;
               try {
                 await api.shutdown();
                 setSuccess?.('Shutting down… you can close this tab.');
                 setTimeout(() => window.close(), 500);
-              } catch (e: any) { setError?.(e.message); }
+              } catch (e: any) {
+                setError?.(e.message);
+              }
             }}
             title="Stop server (same as Quit Music Library helper)"
           >
             ⏻ Quit app
           </button>
-          <p className="muted" style={{ fontSize: 11, marginTop: 6, textAlign: 'center' }}>Stops server on port {typeof window !== 'undefined' ? (window.location.port || '3055') : '3055'}</p>
+          <p className="muted" style={{ fontSize: 11, marginTop: 6, textAlign: 'center' }}>
+            Stops server on port{' '}
+            {typeof window !== 'undefined' ? window.location.port || '3055' : '3055'}
+          </p>
         </div>
 
         {/* App state export/import (non-derived) */}
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-soft)' }}>
           <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>App state</h4>
           <p className="muted" style={{ fontSize: 11, marginBottom: 10, lineHeight: 1.4 }}>
-            Exports folders, reviewed / cover / loudness marks, wishlist and split drafts. File metadata stays on disk.
+            Exports folders, reviewed / cover / loudness marks, wishlist and split drafts. File
+            metadata stays on disk.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
@@ -132,23 +146,36 @@ export function FolderDrawer({
                   const data = await api.exportState();
                   // include local history (client-only)
                   let history: string[] | null = null;
-                  try { const raw = localStorage.getItem('app:playHistory'); if (raw) history = JSON.parse(raw); } catch {}
+                  try {
+                    const raw = localStorage.getItem('app:playHistory');
+                    if (raw) history = JSON.parse(raw);
+                  } catch {}
                   const payload = { ...data, playHistory: history };
-                  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                    type: 'application/json',
+                  });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = `music-library-state-${new Date().toISOString().slice(0,10)}.json`;
+                  a.download = `music-library-state-${new Date().toISOString().slice(0, 10)}.json`;
                   a.click();
                   URL.revokeObjectURL(url);
-                } catch (e: any) { setError?.(e.message); }
-                finally { setBusy(false); }
+                } catch (e: any) {
+                  setError?.(e.message);
+                } finally {
+                  setBusy(false);
+                }
               }}
               title="Download JSON with app state"
             >
               ⤓ Export
             </button>
-            <button className="btn glass-soft" disabled={busy} onClick={() => fileRef.current?.click()} title="Restore from exported JSON">
+            <button
+              className="btn glass-soft"
+              disabled={busy}
+              onClick={() => fileRef.current?.click()}
+              title="Restore from exported JSON"
+            >
               ⤒ Import
             </button>
             <input
@@ -164,20 +191,38 @@ export function FolderDrawer({
                   const text = await f.text();
                   const json = JSON.parse(text);
                   // server part
-                  const res = await api.importState({ folders: json.folders, tracks: json.tracks, wishlist: json.wishlist, splitDrafts: json.splitDrafts, mode: 'merge' });
+                  const res = await api.importState({
+                    folders: json.folders,
+                    tracks: json.tracks,
+                    wishlist: json.wishlist,
+                    splitDrafts: json.splitDrafts,
+                    mode: 'merge',
+                  });
                   // local history restore (merge, dedup, cap 20)
                   if (Array.isArray(json.playHistory)) {
                     try {
-                      const incoming: string[] = json.playHistory.filter((x: any) => typeof x === 'string');
-                      const existing: string[] = JSON.parse(localStorage.getItem('app:playHistory') || '[]');
-                      const merged = [...incoming, ...existing].filter((v,i,a) => a.indexOf(v)===i).slice(0,20);
+                      const incoming: string[] = json.playHistory.filter(
+                        (x: any) => typeof x === 'string'
+                      );
+                      const existing: string[] = JSON.parse(
+                        localStorage.getItem('app:playHistory') || '[]'
+                      );
+                      const merged = [...incoming, ...existing]
+                        .filter((v, i, a) => a.indexOf(v) === i)
+                        .slice(0, 20);
                       localStorage.setItem('app:playHistory', JSON.stringify(merged));
                     } catch {}
                   }
                   onStateImported?.(res.library, res.wishlistItems);
-                  (setSuccess ?? setError)?.(`Imported: ${res.tracks} tracks, ${res.wishlist} wishlist, ${res.splitDrafts} drafts`);
-                } catch (err: any) { setError?.(err.message); }
-                finally { setBusy(false); e.target.value=''; }
+                  (setSuccess ?? setError)?.(
+                    `Imported: ${res.tracks} tracks, ${res.wishlist} wishlist, ${res.splitDrafts} drafts`
+                  );
+                } catch (err: any) {
+                  setError?.(err.message);
+                } finally {
+                  setBusy(false);
+                  e.target.value = '';
+                }
               }}
             />
           </div>

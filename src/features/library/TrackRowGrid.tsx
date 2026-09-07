@@ -21,10 +21,26 @@ type Props = {
   searchQuery?: string;
 };
 
-export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPaused, isActive, onPlay, onSplit, onEdit, onDelete, onToggleReviewed, onSetLoudness, style, coverBust, searchQuery }: Props) {
+export const TrackRowGrid = memo(function TrackRowGrid({
+  track,
+  isPlaying,
+  isPaused,
+  isActive,
+  onPlay,
+  onSplit,
+  onEdit,
+  onDelete,
+  onToggleReviewed,
+  onSetLoudness,
+  style,
+  coverBust,
+  searchQuery,
+}: Props) {
   const { folder, file } = splitFile(track.filePath);
   const [coverFailed, setCoverFailed] = useState(false);
-  useEffect(() => { setCoverFailed(false); }, [track.filePath, coverBust]);
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [track.filePath, coverBust]);
 
   return (
     <div
@@ -67,24 +83,74 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
             type="button"
             className={`thumb thumb-btn ${isActive ? 'thumb-btn-active' : ''}`}
             onClick={onPlay}
-            aria-label={isPlaying ? `Pause ${track.title}` : isPaused ? `Resume ${track.title}` : `Play ${track.title}`}
+            aria-label={
+              isPlaying
+                ? `Pause ${track.title}`
+                : isPaused
+                  ? `Resume ${track.title}`
+                  : `Play ${track.title}`
+            }
             title={isPlaying ? 'Pause' : isPaused ? 'Resume' : 'Play'}
           >
             {!coverFailed ? (
-              <img src={coverUrl(track.filePath, coverBust)} alt="" loading="lazy" onError={() => setCoverFailed(true)} />
+              <img
+                src={coverUrl(track.filePath, coverBust)}
+                alt=""
+                loading="lazy"
+                onError={() => setCoverFailed(true)}
+              />
             ) : null}
             <span className="thumb-fallback" style={{ display: coverFailed ? 'grid' : undefined }}>
               ♪
             </span>
-            <span className="thumb-play-overlay" aria-hidden>{isPlaying ? '⏸' : '▶'}</span>
+            <span className="thumb-play-overlay" aria-hidden>
+              {isPlaying ? '⏸' : '▶'}
+            </span>
           </button>
           <div className="track-main">
             <span className="track-title">
               {searchQuery ? highlightMatch(track.title, searchQuery) : track.title}
-              {track.isCover ? <span className="dup-badge" style={{ background: 'rgba(124,92,255,0.95)', color: '#fff' }}>cover</span> : <span className="dup-badge" style={{ background: 'rgba(255,255,255,0.14)', color: 'var(--muted)', border: '1px solid var(--border-soft)' }}>orig</span>}
+              {track.isCover ? (
+                <span
+                  className="dup-badge"
+                  style={{ background: 'rgba(124,92,255,0.95)', color: '#fff' }}
+                >
+                  cover
+                </span>
+              ) : (
+                <span
+                  className="dup-badge"
+                  style={{
+                    background: 'rgba(255,255,255,0.14)',
+                    color: 'var(--muted)',
+                    border: '1px solid var(--border-soft)',
+                  }}
+                >
+                  orig
+                </span>
+              )}
               {track.duplicateGroupId && <span className="dup-badge">dup</span>}
-              {track.reviewed && <span className="dup-badge" style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f' }}>✓ done</span>}
-              {track.loudness && <span className="dup-badge" style={{ background: track.loudness === 'loud' ? 'rgba(255,77,109,0.18)' : 'rgba(255,193,7,0.18)', color: track.loudness === 'loud' ? '#ff8fa0' : '#ffd08a', border: `1px solid ${track.loudness === 'loud' ? 'rgba(255,77,109,0.3)' : 'rgba(255,193,7,0.3)'}` }}>{track.loudness === 'loud' ? '🔊 loud' : '🔉 normal'}</span>}
+              {track.reviewed && (
+                <span
+                  className="dup-badge"
+                  style={{ background: 'rgba(46,204,113,0.9)', color: '#0a1a0f' }}
+                >
+                  ✓ done
+                </span>
+              )}
+              {track.loudness && (
+                <span
+                  className="dup-badge"
+                  style={{
+                    background:
+                      track.loudness === 'loud' ? 'rgba(255,77,109,0.18)' : 'rgba(255,193,7,0.18)',
+                    color: track.loudness === 'loud' ? '#ff8fa0' : '#ffd08a',
+                    border: `1px solid ${track.loudness === 'loud' ? 'rgba(255,77,109,0.3)' : 'rgba(255,193,7,0.3)'}`,
+                  }}
+                >
+                  {track.loudness === 'loud' ? '🔊 loud' : '🔉 normal'}
+                </span>
+              )}
             </span>
             <span className="track-file" title={track.filePath}>
               <span className="track-file-folder">{folder}/</span>
@@ -102,9 +168,19 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
           className="row-edit-btn"
           title="Edit song"
           aria-label={`Edit ${track.title}`}
-          onClick={e => { e.stopPropagation(); onEdit(); }}
+          onClick={e => {
+            e.stopPropagation();
+            onEdit();
+          }}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
@@ -128,7 +204,15 @@ export const TrackRowGrid = memo(function TrackRowGrid({ track, isPlaying, isPau
       </div>
 
       <div role="gridcell" className="track-row-cell cell-actions">
-        <RowActionsMenu trackTitle={track.title} trackArtist={track.artist} onSplit={onSplit} onEdit={onEdit} onDelete={onDelete} onSetLoudness={onSetLoudness ? v => onSetLoudness(track, v) : undefined} loudness={track.loudness ?? null} />
+        <RowActionsMenu
+          trackTitle={track.title}
+          trackArtist={track.artist}
+          onSplit={onSplit}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onSetLoudness={onSetLoudness ? v => onSetLoudness(track, v) : undefined}
+          loudness={track.loudness ?? null}
+        />
       </div>
     </div>
   );

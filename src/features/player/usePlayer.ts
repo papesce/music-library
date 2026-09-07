@@ -41,7 +41,9 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
       setIsPaused(false);
       setError('');
       audio.play().catch(e => {
-        setError(`Playback failed: ${(e as Error).message} — check file exists and /api/stream is reachable`);
+        setError(
+          `Playback failed: ${(e as Error).message} — check file exists and /api/stream is reachable`
+        );
         setPlayingId(null);
       });
     },
@@ -66,18 +68,21 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
     setCurrentTime(sec);
   }, []);
 
-  const setVolume = useCallback((v: number) => {
-    const clamped = Math.min(1, Math.max(0, v));
-    setVolumeState(clamped);
-    localStorage.setItem('playerVolume', String(clamped));
-    const a = audioRef.current;
-    if (a) a.volume = clamped;
-    if (clamped > 0 && muted) {
-      setMutedState(false);
-      localStorage.setItem('playerMuted', 'false');
-      if (a) a.muted = false;
-    }
-  }, [muted]);
+  const setVolume = useCallback(
+    (v: number) => {
+      const clamped = Math.min(1, Math.max(0, v));
+      setVolumeState(clamped);
+      localStorage.setItem('playerVolume', String(clamped));
+      const a = audioRef.current;
+      if (a) a.volume = clamped;
+      if (clamped > 0 && muted) {
+        setMutedState(false);
+        localStorage.setItem('playerMuted', 'false');
+        if (a) a.muted = false;
+      }
+    },
+    [muted]
+  );
 
   const setMuted = useCallback((m: boolean) => {
     setMutedState(m);
@@ -112,5 +117,21 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
     };
   }, []);
 
-  return { audioRef, playingId, isPaused, playingTrack, handlePlay, handleStop, setPlayingId, setIsPaused, currentTime, duration, seek, volume, muted, setVolume, setMuted };
+  return {
+    audioRef,
+    playingId,
+    isPaused,
+    playingTrack,
+    handlePlay,
+    handleStop,
+    setPlayingId,
+    setIsPaused,
+    currentTime,
+    duration,
+    seek,
+    volume,
+    muted,
+    setVolume,
+    setMuted,
+  };
 }

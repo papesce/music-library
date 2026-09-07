@@ -42,16 +42,23 @@ export function SplitModal({
       try {
         const { draft } = await api.getSplitDraft(track.filePath);
         if (cancelled || !draft) return;
-        const pts = (draft.splitPoints ?? []).map(Number).filter(n => !isNaN(n) && n >= 0).sort((a,b)=>a-b);
+        const pts = (draft.splitPoints ?? [])
+          .map(Number)
+          .filter(n => !isNaN(n) && n >= 0)
+          .sort((a, b) => a - b);
         if (pts.length >= 2) {
           setSplitPoints(pts);
           setSegmentTitles(draft.segmentTitles ?? pts.slice(0, -1).map(() => ''));
           setDraftRestored(true);
         }
-      } catch {}
-      finally { if (!cancelled) setDraftLoaded(true); }
+      } catch {
+      } finally {
+        if (!cancelled) setDraftLoaded(true);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [track.filePath]);
 
   // init points when duration known (only if no draft was restored and draft fetch finished)
@@ -66,8 +73,12 @@ export function SplitModal({
     if (splitPoints.length < 2) return;
     const t = setTimeout(async () => {
       setDraftSaving(true);
-      try { await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles); } catch {}
-      finally { setDraftSaving(false); }
+      try {
+        await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles);
+      } catch {
+      } finally {
+        setDraftSaving(false);
+      }
     }, 600);
     return () => clearTimeout(t);
   }, [splitPoints, segmentTitles, draftLoaded, track.filePath]);
@@ -160,7 +171,9 @@ export function SplitModal({
   };
   const handleClearDraft = async () => {
     if (!confirm('Clear saved split and start over? This removes the persisted draft.')) return;
-    try { await api.deleteSplitDraft(track.filePath); } catch {}
+    try {
+      await api.deleteSplitDraft(track.filePath);
+    } catch {}
     setSegmentTitles([]);
     setSplitPoints(durationMs ? [0, durationMs] : [0, 60000]);
     setDraftRestored(false);
@@ -168,9 +181,12 @@ export function SplitModal({
   };
   const handleExport = async () => {
     if (splitPoints.length < 2) return;
-    const skipArr = [...skipped].sort((a,b)=>a-b);
+    const skipArr = [...skipped].sort((a, b) => a - b);
     const toExportCount = splitPoints.length - 1 - skipArr.length;
-    if (toExportCount <= 0) { setError('All tracks marked as skipped — nothing to export'); return; }
+    if (toExportCount <= 0) {
+      setError('All tracks marked as skipped — nothing to export');
+      return;
+    }
     setExporting(true);
     setError('');
     try {
@@ -293,23 +309,46 @@ export function SplitModal({
             onStepFocus={handleStepFocus}
             libraryTracks={libraryTracks ?? []}
             skipped={skipped}
-            onToggleSkip={(idx) => setSkipped(prev => {
-              const next = new Set(prev);
-              if (next.has(idx)) next.delete(idx);
-              else next.add(idx);
-              return next;
-            })}
+            onToggleSkip={idx =>
+              setSkipped(prev => {
+                const next = new Set(prev);
+                if (next.has(idx)) next.delete(idx);
+                else next.add(idx);
+                return next;
+              })
+            }
             sourceTrack={track}
           />
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginTop: 4, flexShrink: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            marginTop: 4,
+            flexShrink: 0,
+          }}
+        >
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button className="btn" onClick={handleClearDraft} disabled={exporting} title="Delete persisted draft and reset to single segment">
+            <button
+              className="btn"
+              onClick={handleClearDraft}
+              disabled={exporting}
+              title="Delete persisted draft and reset to single segment"
+            >
               ↺ Clear & start over
             </button>
             <span className="muted" style={{ fontSize: 11 }}>
-              {!draftLoaded ? 'Loading draft…' : draftSaving ? 'Saving…' : draftRestored ? 'Draft restored · auto-saved' : 'Auto-saved'}
+              {!draftLoaded
+                ? 'Loading draft…'
+                : draftSaving
+                  ? 'Saving…'
+                  : draftRestored
+                    ? 'Draft restored · auto-saved'
+                    : 'Auto-saved'}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -320,9 +359,15 @@ export function SplitModal({
               className="btn btn-primary"
               onClick={handleExport}
               disabled={exporting || splitPoints.length - 1 - skipped.size < 1}
-              title={skipped.size ? `${skipped.size} skipped — will export ${splitPoints.length - 1 - skipped.size}` : undefined}
+              title={
+                skipped.size
+                  ? `${skipped.size} skipped — will export ${splitPoints.length - 1 - skipped.size}`
+                  : undefined
+              }
             >
-              {exporting ? 'Exporting…' : `Export ${splitPoints.length - 1 - skipped.size} files${skipped.size ? ` (${skipped.size} skipped)` : ''}`}
+              {exporting
+                ? 'Exporting…'
+                : `Export ${splitPoints.length - 1 - skipped.size} files${skipped.size ? ` (${skipped.size} skipped)` : ''}`}
             </button>
           </div>
         </div>

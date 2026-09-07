@@ -17,7 +17,8 @@ export function useWishlist(initial: WishlistItem[] = []) {
   const sortedByPriority = useMemo(() => {
     const order = { High: 0, Medium: 1, Low: 2 };
     return [...wishlist].sort((a, b) => {
-      const pa = order[a.priority], pb = order[b.priority];
+      const pa = order[a.priority],
+        pb = order[b.priority];
       if (pa !== pb) return pa - pb;
       return new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime();
     });
@@ -26,7 +27,9 @@ export function useWishlist(initial: WishlistItem[] = []) {
   const displayed = useMemo(
     () =>
       sortByDate
-        ? [...wishlist].sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
+        ? [...wishlist].sort(
+            (a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()
+          )
         : sortedByPriority,
     [wishlist, sortByDate, sortedByPriority]
   );
@@ -34,7 +37,11 @@ export function useWishlist(initial: WishlistItem[] = []) {
   const add = async (setError: (m: string) => void) => {
     if (!wName.trim()) return;
     try {
-      const item = await api.addWishlistItem({ name: wName.trim(), artist: wArtist.trim() || undefined, priority: wPriority });
+      const item = await api.addWishlistItem({
+        name: wName.trim(),
+        artist: wArtist.trim() || undefined,
+        priority: wPriority,
+      });
       setWishlist(prev => [...prev, item]);
       setWName('');
       setWArtist('');
@@ -52,7 +59,11 @@ export function useWishlist(initial: WishlistItem[] = []) {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    const updated = await api.updateWishlistItem(editingId, { name: editName, artist: editArtist || undefined, priority: editPriority });
+    const updated = await api.updateWishlistItem(editingId, {
+      name: editName,
+      artist: editArtist || undefined,
+      priority: editPriority,
+    });
     setWishlist(prev => prev.map(x => (x.id === editingId ? updated : x)));
     setEditingId(null);
   };
@@ -62,5 +73,29 @@ export function useWishlist(initial: WishlistItem[] = []) {
     setWishlist(prev => prev.filter(x => x.id !== id));
   };
 
-  return { wishlist, setWishlist, wName, setWName, wArtist, setWArtist, wPriority, setWPriority, editingId, setEditingId, editName, setEditName, editArtist, setEditArtist, editPriority, setEditPriority, sortByDate, setSortByDate, displayed, add, startEdit, saveEdit, del };
+  return {
+    wishlist,
+    setWishlist,
+    wName,
+    setWName,
+    wArtist,
+    setWArtist,
+    wPriority,
+    setWPriority,
+    editingId,
+    setEditingId,
+    editName,
+    setEditName,
+    editArtist,
+    setEditArtist,
+    editPriority,
+    setEditPriority,
+    sortByDate,
+    setSortByDate,
+    displayed,
+    add,
+    startEdit,
+    saveEdit,
+    del,
+  };
 }

@@ -60,8 +60,10 @@ export function SegmentList({
       let score = -1;
       if (titleN === q) score = 100;
       else if (combined === q) score = 99;
-      else if (titleN.includes(q) || q.includes(titleN)) score = 80 - Math.abs(titleN.length - q.length) * 0.5;
-      else if (combined.includes(q) || q.includes(combined)) score = 70 - Math.abs(combined.length - q.length) * 0.5;
+      else if (titleN.includes(q) || q.includes(titleN))
+        score = 80 - Math.abs(titleN.length - q.length) * 0.5;
+      else if (combined.includes(q) || q.includes(combined))
+        score = 70 - Math.abs(combined.length - q.length) * 0.5;
       else {
         // token overlap
         const qTokens = new Set(q.split(' ').filter(Boolean));
@@ -78,17 +80,29 @@ export function SegmentList({
 
   const [dismissed, setDismissed] = useState<Map<number, string>>(() => new Map());
   const isDismissed = (i: number, title: string) => dismissed.get(i) === normalize(title);
-  const hasAnyDupes = !isFocused && indices.some(i => {
-    const t = segmentTitles[i] ?? '';
-    return normalize(t).length >= 2 && findDupes(t).length > 0 && !isDismissed(i, t);
-  });
+  const hasAnyDupes =
+    !isFocused &&
+    indices.some(i => {
+      const t = segmentTitles[i] ?? '';
+      return normalize(t).length >= 2 && findDupes(t).length > 0 && !isDismissed(i, t);
+    });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
       {isFocused && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 4,
+          }}
+        >
           <span style={{ fontSize: 13, fontWeight: 700 }}>
-            Track {(focusedIndex as number) + 1} / {trackCount} <span className="muted" style={{ fontWeight: 400 }}>focused</span>
+            Track {(focusedIndex as number) + 1} / {trackCount}{' '}
+            <span className="muted" style={{ fontWeight: 400 }}>
+              focused
+            </span>
           </span>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button
@@ -109,7 +123,11 @@ export function SegmentList({
             >
               Next ▶
             </button>
-            <button className="btn" onClick={onExitFocus} style={{ padding: '6px 10px', fontSize: 12 }}>
+            <button
+              className="btn"
+              onClick={onExitFocus}
+              style={{ padding: '6px 10px', fontSize: 12 }}
+            >
               ← Back to all
             </button>
           </div>
@@ -122,8 +140,35 @@ export function SegmentList({
         </div>
       )}
       {hasAnyDupes && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.30)', fontSize: 11 }}>
-          <span style={{ color: '#ffca28', fontWeight: 600 }}>{indices.filter(i => { const t = segmentTitles[i] ?? ''; return !isDismissed(i, t) && findDupes(t).length > 0; }).length} possible duplicate{indices.filter(i => { const t = segmentTitles[i] ?? ''; return !isDismissed(i, t) && findDupes(t).length > 0; }).length > 1 ? 's' : ''} — not duplicates?</span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            padding: '6px 10px',
+            borderRadius: 10,
+            background: 'rgba(255,193,7,0.12)',
+            border: '1px solid rgba(255,193,7,0.30)',
+            fontSize: 11,
+          }}
+        >
+          <span style={{ color: '#ffca28', fontWeight: 600 }}>
+            {
+              indices.filter(i => {
+                const t = segmentTitles[i] ?? '';
+                return !isDismissed(i, t) && findDupes(t).length > 0;
+              }).length
+            }{' '}
+            possible duplicate
+            {indices.filter(i => {
+              const t = segmentTitles[i] ?? '';
+              return !isDismissed(i, t) && findDupes(t).length > 0;
+            }).length > 1
+              ? 's'
+              : ''}{' '}
+            — not duplicates?
+          </span>
           <button
             className="btn"
             style={{ padding: '4px 10px', fontSize: 11 }}
@@ -162,79 +207,99 @@ export function SegmentList({
             }}
           >
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                minWidth: 28,
-                textAlign: 'center',
-                background: i % 2 === 0 ? 'rgba(124,92,255,0.2)' : 'rgba(0,212,255,0.15)',
-                borderRadius: 6,
-                padding: '4px 0',
-              }}
-            >
-              {i + 1}
-            </span>
-            <span className="muted" style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace' }}>
-              {formatMs(start)} – {formatMs(end)} ({formatMs(end - start)})
-            </span>
-            <input
-              placeholder={`Title for part ${i + 1} (optional)`}
-              value={segmentTitles[i] ?? ''}
-              onChange={e =>
-                setSegmentTitles(prev => {
-                  const n = [...prev];
-                  n[i] = e.target.value;
-                  return n;
-                })
-              }
-              style={{
-                flex: 1,
-                padding: '7px 10px',
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: 'rgba(255,255,255,0.06)',
-                color: 'var(--text)',
-                fontSize: 12,
-              }}
-            />
-            <button className="btn" onClick={() => waveformRef.current?.playFrom(start, end)} title="Play segment" style={{ padding: '6px 10px', fontSize: 12 }}>
-              ▶
-            </button>
-            {!isFocused && (
-              <button className="btn" onClick={() => onFocus?.(i)} title="Focus this track (zoom, edit solo)" style={{ padding: '6px 10px', fontSize: 12 }}>
-                ◎ Focus
-              </button>
-            )}
-            <button className="btn" onClick={() => onRemove(i)} disabled={splitPoints.length <= 2} title="Remove split after this" style={{ padding: '6px 10px', fontSize: 12 }}>
-              ✕
-            </button>
-            <label
-              title={isSkipped ? 'Will be exported again' : 'Skip export — already in library'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 11,
-                cursor: 'pointer',
-                userSelect: 'none',
-                color: isSkipped ? '#ffca28' : 'var(--muted)',
-                border: isSkipped ? '1px solid rgba(255,193,7,0.5)' : '1px solid var(--border-soft)',
-                background: isSkipped ? 'rgba(255,193,7,0.12)' : 'rgba(255,255,255,0.04)',
-                borderRadius: 999,
-                padding: '4px 8px',
-                whiteSpace: 'nowrap',
-              }}
-            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  minWidth: 28,
+                  textAlign: 'center',
+                  background: i % 2 === 0 ? 'rgba(124,92,255,0.2)' : 'rgba(0,212,255,0.15)',
+                  borderRadius: 6,
+                  padding: '4px 0',
+                }}
+              >
+                {i + 1}
+              </span>
+              <span
+                className="muted"
+                style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace' }}
+              >
+                {formatMs(start)} – {formatMs(end)} ({formatMs(end - start)})
+              </span>
               <input
-                type="checkbox"
-                checked={isSkipped}
-                onChange={() => onToggleSkip?.(i)}
-                style={{ accentColor: '#ffca28' }}
+                placeholder={`Title for part ${i + 1} (optional)`}
+                value={segmentTitles[i] ?? ''}
+                onChange={e =>
+                  setSegmentTitles(prev => {
+                    const n = [...prev];
+                    n[i] = e.target.value;
+                    return n;
+                  })
+                }
+                style={{
+                  flex: 1,
+                  padding: '7px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'rgba(255,255,255,0.06)',
+                  color: 'var(--text)',
+                  fontSize: 12,
+                }}
               />
-              {isSkipped ? 'Skipped' : 'Skip'}
-            </label>
+              <button
+                className="btn"
+                onClick={() => waveformRef.current?.playFrom(start, end)}
+                title="Play segment"
+                style={{ padding: '6px 10px', fontSize: 12 }}
+              >
+                ▶
+              </button>
+              {!isFocused && (
+                <button
+                  className="btn"
+                  onClick={() => onFocus?.(i)}
+                  title="Focus this track (zoom, edit solo)"
+                  style={{ padding: '6px 10px', fontSize: 12 }}
+                >
+                  ◎ Focus
+                </button>
+              )}
+              <button
+                className="btn"
+                onClick={() => onRemove(i)}
+                disabled={splitPoints.length <= 2}
+                title="Remove split after this"
+                style={{ padding: '6px 10px', fontSize: 12 }}
+              >
+                ✕
+              </button>
+              <label
+                title={isSkipped ? 'Will be exported again' : 'Skip export — already in library'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  color: isSkipped ? '#ffca28' : 'var(--muted)',
+                  border: isSkipped
+                    ? '1px solid rgba(255,193,7,0.5)'
+                    : '1px solid var(--border-soft)',
+                  background: isSkipped ? 'rgba(255,193,7,0.12)' : 'rgba(255,255,255,0.04)',
+                  borderRadius: 999,
+                  padding: '4px 8px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSkipped}
+                  onChange={() => onToggleSkip?.(i)}
+                  style={{ accentColor: '#ffca28' }}
+                />
+                {isSkipped ? 'Skipped' : 'Skip'}
+              </label>
             </div>
             {dupes.length > 0 && (
               <div
@@ -248,23 +313,55 @@ export function SegmentList({
                   border: '1px solid rgba(255,193,7,0.22)',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#ffca28' }}>
-                    Possible duplicate{ dupes.length > 1 ? 's' : ''} in library:
+                    Possible duplicate{dupes.length > 1 ? 's' : ''} in library:
                   </span>
                   <button
                     className="btn"
                     style={{ padding: '2px 8px', fontSize: 11 }}
-                    onClick={() => setDismissed(prev => { const next = new Map(prev); next.set(i, normalize(title)); return next; })}
+                    onClick={() =>
+                      setDismissed(prev => {
+                        const next = new Map(prev);
+                        next.set(i, normalize(title));
+                        return next;
+                      })
+                    }
                     title="Hide warning for this title"
                   >
                     Not duplicate
                   </button>
                 </div>
                 {dupes.map(d => (
-                  <div key={d.filePath} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 11 }}>
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }} title={`${d.artist} — ${d.title} · ${d.album} · ${d.filePath}`}>
-                      <strong>{d.artist}</strong> — {d.title} <span className="muted">· {d.album}</span>
+                  <div
+                    key={d.filePath}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      alignItems: 'center',
+                      fontSize: 11,
+                    }}
+                  >
+                    <span
+                      style={{
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: 'var(--text)',
+                      }}
+                      title={`${d.artist} — ${d.title} · ${d.album} · ${d.filePath}`}
+                    >
+                      <strong>{d.artist}</strong> — {d.title}{' '}
+                      <span className="muted">· {d.album}</span>
                     </span>
                     <button
                       className="btn"
@@ -286,8 +383,8 @@ export function SegmentList({
       })}
       {isFocused && (
         <p className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-          Focused waveform is zoomed to this track · drag markers or press <strong>S</strong> at cursor to add splits.
-          Esc exits focus.
+          Focused waveform is zoomed to this track · drag markers or press <strong>S</strong> at
+          cursor to add splits. Esc exits focus.
         </p>
       )}
     </div>
