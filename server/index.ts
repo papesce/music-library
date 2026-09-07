@@ -1435,7 +1435,20 @@ const server = createServer(async (req, res) => {
         }
       }
       try {
-        const stat = statSync(resolved);
+        let stat: ReturnType<typeof statSync>;
+        try {
+          stat = statSync(resolved);
+        } catch (e: any) {
+          if (e?.code === 'EPERM' || /EPERM|operation not permitted/i.test(e?.message ?? '')) {
+            console.error(`[stream] EPERM ${resolved}: macOS TCC blocked — grant Files and Folders access to Music Library in System Settings > Privacy & Security`);
+            return json(res, 403, {
+              error: 'macOS blocked access to this file (EPERM). Grant Files and Folders / Full Disk Access to "Music Library" in System Settings > Privacy & Security > Files and Folders (or Privacy > Full Disk Access), then quit and reopen the app.',
+              path: resolved,
+              code: 'EPERM',
+            });
+          }
+          throw e;
+        }
         const range = req.headers.range as string | undefined;
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Accept-Ranges', 'bytes');
@@ -1453,9 +1466,16 @@ const server = createServer(async (req, res) => {
             });
             const stream = createReadStream(resolved, { start, end });
             stream.on('error', (e: any) => {
-              console.error(`[stream] ${resolved}: ${e.message}`);
-              if (!res.headersSent) json(res, 500, { error: e.message });
-              else
+              const isPerm = e?.code === 'EPERM' || /EPERM|operation not permitted/i.test(e?.message ?? '');
+              console.error(`[stream] ${resolved}: ${e.message}${isPerm ? ' — TCC blocked' : ''}`);
+              if (!res.headersSent) {
+                if (isPerm)
+                  json(res, 403, {
+                    error: 'macOS blocked access (EPERM). Grant Files and Folders access to Music Library in System Settings > Privacy & Security, then restart the app.',
+                    code: 'EPERM',
+                  });
+                else json(res, 500, { error: e.message });
+              } else
                 try {
                   res.end();
                 } catch {}
@@ -1466,9 +1486,16 @@ const server = createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Length': stat.size, 'Content-Type': 'audio/mpeg' });
         const stream = createReadStream(resolved);
         stream.on('error', (e: any) => {
-          console.error(`[stream] ${resolved}: ${e.message}`);
-          if (!res.headersSent) json(res, 500, { error: e.message });
-          else
+          const isPerm = e?.code === 'EPERM' || /EPERM|operation not permitted/i.test(e?.message ?? '');
+          console.error(`[stream] ${resolved}: ${e.message}${isPerm ? ' — TCC blocked' : ''}`);
+          if (!res.headersSent) {
+            if (isPerm)
+              json(res, 403, {
+                error: 'macOS blocked access (EPERM). Grant Files and Folders access to Music Library in System Settings > Privacy & Security, then restart the app.',
+                code: 'EPERM',
+              });
+            else json(res, 500, { error: e.message });
+          } else
             try {
               res.end();
             } catch {}

@@ -252,24 +252,7 @@ export default function App() {
           >
             ⚙
           </button>
-          <button
-            className="glass icon-btn"
-            title="Quit app (stops server)"
-            aria-label="Quit app"
-            onClick={async () => {
-              if (!confirm('Quit Music Library? This will stop the server.')) return;
-              try {
-                await api.shutdown();
-                setSuccess('Shutting down… you can close this tab.');
-                setTimeout(() => window.close(), 500);
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-            style={{ fontSize: 16 }}
-          >
-            ⏻
-          </button>
+
         </div>
       </header>
 

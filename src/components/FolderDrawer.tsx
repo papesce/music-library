@@ -99,35 +99,7 @@ export function FolderDrawer({
           </div>
         )}
 
-        {/* Quit */}
-        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-soft)' }}>
-          <button
-            className="btn"
-            style={{
-              width: '100%',
-              justifyContent: 'center',
-              background: 'rgba(220,60,60,0.12)',
-              borderColor: 'rgba(220,60,60,0.25)',
-            }}
-            onClick={async () => {
-              if (!confirm('Quit Music Library? This will stop the server.')) return;
-              try {
-                await api.shutdown();
-                setSuccess?.('Shutting down… you can close this tab.');
-                setTimeout(() => window.close(), 500);
-              } catch (e: any) {
-                setError?.(e.message);
-              }
-            }}
-            title="Stop server (same as Quit Music Library helper)"
-          >
-            ⏻ Quit app
-          </button>
-          <p className="muted" style={{ fontSize: 11, marginTop: 6, textAlign: 'center' }}>
-            Stops server on port{' '}
-            {typeof window !== 'undefined' ? window.location.port || '3055' : '3055'}
-          </p>
-        </div>
+
 
         {/* App state export/import (non-derived) */}
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-soft)' }}>

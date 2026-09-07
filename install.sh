@@ -172,12 +172,19 @@ else
   info "Smoke test passed"
 fi
 
-if [[ "$DESKTOP" -eq 1 || "${CREATE_DESKTOP:-0}" == "1" ]]; then
-  info "Creating desktop icon ..."
+DESKTOP_DEFAULT=1
+if [[ "$DESKTOP" -eq 1 || "${CREATE_DESKTOP:-0}" == "1" ]] || [[ "$DESKTOP_DEFAULT" -eq 1 ]]; then
+  info "Creating desktop icon (self-contained app) ..."
   if [[ -x "$SCRIPT_DIR/scripts/create-desktop-icon.sh" ]]; then
     ARGS=()
     if [[ "$WITH_COMMAND" -eq 1 ]]; then ARGS+=(--with-command); fi
-    "$SCRIPT_DIR/scripts/create-desktop-icon.sh" "${ARGS[@]}" || warn "Failed to create desktop icon"
+    "$SCRIPT_DIR/scripts/create-desktop-icon.sh" ${ARGS[@]+"${ARGS[@]}"} || warn "Failed to create desktop icon"
+    # verify self-contained embedding
+    if [[ -x "$SCRIPT_DIR/out/Music Library.app/Contents/Resources/music-library" ]] && [[ -d "$SCRIPT_DIR/out/Music Library.app/Contents/Resources/dist" ]]; then
+      info "App self-contained OK — binary+dist embedded ($(du -sh "$SCRIPT_DIR/out/Music Library.app" 2>/dev/null | awk '{print $1}'))"
+    else
+      warn "App not self-contained — missing embedded binary/dist (rebuild create-desktop-icon.sh?)"
+    fi
   fi
 fi
 

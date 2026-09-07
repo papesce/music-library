@@ -59,26 +59,48 @@ else
 fi
 
 # 2. Create .app bundle via AppleScript applet (stay-open, like shoplist/Shoplist.app)
-#    This keeps the icon in Dock and enables Cmd+Q / right-click Quit → runs stop.sh
+#    Self-contained: embeds binary+dist into Contents/Resources so /Applications copy is standalone
 APP_BUNDLE="$OUT_DIR/${APP_NAME}.app"
 rm -rf "$APP_BUNDLE"
 
+# Use path-to-me relative launch so app is portable after cp to /Applications
 cat > /tmp/music-library-applet.applescript <<APPLESCRIPT
 on run
-  -- launch server hidden; absolute path embedded at build time (re-run script after moving repo)
-  -- single opener is scripts/launch.sh (waits for health check, opens http://localhost:3055)
-  do shell script quoted form of POSIX path of "${REPO_DIR}/scripts/launch.sh" & " 2>&1 &"
+  set appPath to POSIX path of (path to me)
+  -- prefer embedded launcher, fallback to repo for dev
+  set embeddedLauncher to appPath & "Contents/Resources/launch-embedded.sh"
+  set repoLauncher to "${REPO_DIR}/scripts/launch.sh"
+  try
+    tell application "System Events" to set existsEmbedded to exists file embeddedLauncher
+  on error
+    set existsEmbedded to false
+  end try
+  if existsEmbedded then
+    do shell script quoted form of embeddedLauncher & " 2>&1 &"
+  else
+    do shell script quoted form of repoLauncher & " 2>&1 &"
+  end if
 end run
 on quit
-  -- stop server when app is quit (Cmd+Q or Quit from Dock)
+  -- prefer graceful API shutdown (no repo dependency), fallback to embedded/repo stop.sh
   try
-    do shell script quoted form of POSIX path of "${REPO_DIR}/scripts/stop.sh" & " &> /dev/null"
+    do shell script "curl -sf -X POST http://localhost:3055/api/shutdown >/dev/null 2>&1; curl -sf -X POST http://localhost:3055/api/quit >/dev/null 2>&1; exit 0"
+  end try
+  try
+    set appPath to POSIX path of (path to me)
+    set embeddedStop to appPath & "Contents/Resources/stop-embedded.sh"
+    tell application "System Events" to set existsStop to exists file embeddedStop
+    if existsStop then
+      do shell script quoted form of embeddedStop & " &> /dev/null"
+    else
+      do shell script quoted form of POSIX path of "${REPO_DIR}/scripts/stop.sh" & " &> /dev/null"
+    end if
   end try
   continue quit
 end quit
 on open location f
   run
-end open
+end open location
 on idle
   -- keep app alive so it stays in Dock for Quit; check server health
   return 3600
@@ -102,7 +124,129 @@ osacompile -s -o "$APP_BUNDLE" /tmp/music-library-applet.applescript 2>&1
 # Show startup screen off (like shoplist)
  /usr/libexec/PlistBuddy -c "Set :OSAAppletShowStartupScreen bool false" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :OSAAppletShowStartupScreen bool false" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 
+# Add file-access usage descriptions so macOS TCC prompts when accessing Documents/Downloads/Music
+for key in NSDocumentsFolderUsageDescription NSDesktopFolderUsageDescription NSDownloadsFolderUsageDescription NSMusicFolderUsageDescription; do
+  /usr/libexec/PlistBuddy -c "Delete :$key" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+done
+/usr/libexec/PlistBuddy -c "Add :NSDocumentsFolderUsageDescription string Music Library needs access to your Documents folder to play and manage your music files." "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :NSDesktopFolderUsageDescription string Music Library needs access to your Desktop folder to play and manage your music files." "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :NSDownloadsFolderUsageDescription string Music Library needs access to your Downloads folder to play and manage your music files." "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+# Generic file access (covers external drives / custom music folders)
+for key in NSMusicFolderUsageDescription NSFileProviderDomainUsageDescription; do
+  /usr/libexec/PlistBuddy -c "Delete :$key" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+done
+/usr/libexec/PlistBuddy -c "Add :NSMusicFolderUsageDescription string Music Library needs access to your Music folder to play your library." "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+
 chmod +x "$APP_BUNDLE/Contents/MacOS/applet" 2>/dev/null || true
+
+# Embed binary + dist for self-contained app (so /Applications copy doesn't depend on repo path)
+echo "→ Embedding binary + dist into app bundle (self-contained)..."
+mkdir -p "$APP_BUNDLE/Contents/Resources"
+if [[ -x "$BIN_PATH" ]]; then
+  cp -p "$BIN_PATH" "$APP_BUNDLE/Contents/Resources/music-library" 2>/dev/null || cp "$BIN_PATH" "$APP_BUNDLE/Contents/Resources/music-library"
+  chmod +x "$APP_BUNDLE/Contents/Resources/music-library" 2>/dev/null || true
+  # keep copy in out/ as canonical; app's copy is standalone
+fi
+if [[ -d "$REPO_DIR/dist" ]]; then
+  rm -rf "$APP_BUNDLE/Contents/Resources/dist"
+  cp -R "$REPO_DIR/dist" "$APP_BUNDLE/Contents/Resources/dist" 2>/dev/null || cp -r "$REPO_DIR/dist" "$APP_BUNDLE/Contents/Resources/dist"
+elif [[ -d "$OUT_DIR/dist" ]]; then
+  rm -rf "$APP_BUNDLE/Contents/Resources/dist"
+  cp -R "$OUT_DIR/dist" "$APP_BUNDLE/Contents/Resources/dist" 2>/dev/null || true
+fi
+# Also mirror to out/dist for dev fallback (launch.sh:51 handles it)
+if [[ ! -d "$OUT_DIR/dist" && -d "$REPO_DIR/dist" ]]; then
+  cp -R "$REPO_DIR/dist" "$OUT_DIR/dist" 2>/dev/null || true
+fi
+
+# Create embedded launch/stop scripts (relative, no REPO_DIR dependency)
+cat > "$APP_BUNDLE/Contents/Resources/launch-embedded.sh" <<'LAUNCH_EMB'
+#!/bin/bash
+set -euo pipefail
+# Embedded launcher — portable, no repo path needed
+APP_RES="$(cd "$(dirname "$0")" && pwd)"
+# APP_RES = .../Music Library.app/Contents/Resources
+APP_BUNDLE_DIR="$(cd "$APP_RES/.." && pwd)"
+LOG="/tmp/music-library.log"
+PIDFILE="/tmp/music-library.pid"
+PORT="${PORT:-3055}"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+if [[ -d "$APP_RES/../..//.whisper-venv/bin" ]]; then export PATH="$APP_RES/../..//.whisper-venv/bin:$PATH"; fi
+# also try repo's whisper venv if app was built from repo still present
+REPO_FALLBACK="/Users/papesce/projects/personal/music-library"
+if [[ -d "$REPO_FALLBACK/.whisper-venv/bin" ]]; then export PATH="$REPO_FALLBACK/.whisper-venv/bin:$PATH"; fi
+if [[ -d "$HOME/.whisper-venv/bin" ]]; then export PATH="$HOME/.whisper-venv/bin:$PATH"; fi
+
+exec >>"$LOG" 2>&1
+echo "=== Music Library launch (embedded) $(date) ==="
+echo "APP_RES=$APP_RES PORT=$PORT"
+
+BIN_EMB="$APP_RES/music-library"
+DIST_EMB="$APP_RES/dist"
+# Check quarantine on embedded binary
+if [[ -f "$BIN_EMB" ]] && xattr -p com.apple.quarantine "$BIN_EMB" &>/dev/null; then
+  xattr -d com.apple.quarantine "$BIN_EMB" 2>/dev/null || true
+fi
+if lsof -ti :"$PORT" >/dev/null 2>&1; then
+  if curl -sf "http://127.0.0.1:$PORT/api/config" >/dev/null 2>&1; then
+    echo "Already running on :$PORT — reusing existing server"
+    open "http://localhost:$PORT/" || true
+    exit 0
+  fi
+  echo "Killing stale process on :$PORT"
+  lsof -ti :"$PORT" | xargs kill -9 2>/dev/null || true
+  sleep 0.5
+fi
+if [[ -x "$BIN_EMB" ]]; then
+  echo "Starting via embedded binary: $BIN_EMB"
+  # Data dir: prefer repo data if repo still exists (keeps library), else ~/.music-library/data
+  if [[ -d "$REPO_FALLBACK/data" ]]; then
+    DEFAULT_DATA="$REPO_FALLBACK/data"
+  else
+    DEFAULT_DATA="$HOME/.music-library/data"
+  fi
+  export MUSIC_DATA_DIR="${MUSIC_DATA_DIR:-$DEFAULT_DATA}"
+  mkdir -p "$MUSIC_DATA_DIR" 2>/dev/null || true
+  # Tell server where frontend lives
+  export MUSIC_DIST_DIR="$DIST_EMB"
+  NO_OPEN=1 PORT="$PORT" MUSIC_DATA_DIR="$MUSIC_DATA_DIR" MUSIC_DIST_DIR="$DIST_EMB" nohup "$BIN_EMB" >>"$LOG" 2>&1 &
+else
+  echo "Embedded binary missing: $BIN_EMB — falling back to repo $REPO_FALLBACK/scripts/launch.sh"
+  if [[ -x "$REPO_FALLBACK/scripts/launch.sh" ]]; then
+    exec "$REPO_FALLBACK/scripts/launch.sh"
+  else
+    echo "ERROR: no binary and no repo fallback"
+    osascript -e 'display alert "Music Library" message "Embedded binary missing and repo not found. Reinstall from out/Music Library.app." as critical' || true
+    exit 1
+  fi
+fi
+PID=$!
+echo "$PID" > "$PIDFILE"
+echo "server PID=$PID (pidfile $PIDFILE) PORT=$PORT"
+for i in $(seq 1 20); do
+  if curl -sf "http://127.0.0.1:$PORT/api/config" >/dev/null 2>&1; then
+    echo "Server ready after $i tries"
+    break
+  fi
+  sleep 0.5
+done
+open "http://localhost:$PORT/" || true
+echo "Done."
+LAUNCH_EMB
+chmod +x "$APP_BUNDLE/Contents/Resources/launch-embedded.sh"
+
+cat > "$APP_BUNDLE/Contents/Resources/stop-embedded.sh" <<'STOP_EMB'
+#!/bin/bash
+set -euo pipefail
+PORT="${PORT:-3055}"
+PIDFILE="/tmp/music-library.pid"
+if curl -sf -X POST "http://127.0.0.1:$PORT/api/quit" >/dev/null 2>&1; then sleep 0.8; rm -f "$PIDFILE"; exit 0; fi
+if curl -sf -X POST "http://127.0.0.1:$PORT/api/shutdown" >/dev/null 2>&1; then sleep 0.8; rm -f "$PIDFILE"; exit 0; fi
+if [[ -f "$PIDFILE" ]]; then PID=$(cat "$PIDFILE" 2>/dev/null || true); if [[ -n "${PID:-}" ]] && kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null || true; sleep 0.5; kill -9 "$PID" 2>/dev/null || true; fi; rm -f "$PIDFILE"; fi
+if lsof -ti :"$PORT" >/dev/null 2>&1; then lsof -ti :"$PORT" | xargs kill -9 2>/dev/null || true; sleep 0.5; fi
+pkill -f "music-library" 2>/dev/null || true
+STOP_EMB
+chmod +x "$APP_BUNDLE/Contents/Resources/stop-embedded.sh"
 
 # Icon: use custom icon.png if present, else generate music-note icns via built-in tools
 ICON_ICNS="$APP_BUNDLE/Contents/Resources/AppIcon.icns"
