@@ -1838,7 +1838,7 @@ server.listen(PORT, () => {
   console.log(`[server] listening on http://localhost:${PORT}`);
   if (existsSync(DIST_DIR)) console.log(`[server] serving frontend from ${DIST_DIR}`);
   else console.log(`[server] API only — run "npm run build" to generate ${DIST_DIR} for UI`);
-  // Auto-open browser for single-executable (Bun --compile) unless NO_OPEN=1
+  // Auto-open browser for single-executable (Bun --compile) unless NO_OPEN=1 (launch.sh/.app sets NO_OPEN=1)
   const isCompiled = !!(process as any).isBun || process.execPath.includes('music-library');
   if (isCompiled && process.env.NO_OPEN !== '1' && process.env.NODE_ENV !== 'test') {
     const url = `http://localhost:${PORT}`;

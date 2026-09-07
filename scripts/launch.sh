@@ -61,7 +61,7 @@ fi
 if lsof -ti :"$PORT" >/dev/null 2>&1; then
   if curl -sf "http://127.0.0.1:$PORT/api/config" >/dev/null 2>&1; then
     echo "Already running on :$PORT — reusing existing server"
-    open "http://127.0.0.1:$PORT/" || true
+    open "http://localhost:$PORT/" || true
     exit 0
   fi
   echo "Killing stale process on :$PORT"
@@ -73,7 +73,7 @@ fi
 if [[ -x "$BIN" ]]; then
   echo "Starting via binary: $BIN"
   export MUSIC_DATA_DIR="${MUSIC_DATA_DIR:-$DIR/data}"
-  PORT="$PORT" MUSIC_DATA_DIR="$MUSIC_DATA_DIR" nohup "$BIN" >>"$LOG" 2>&1 &
+  NO_OPEN=1 PORT="$PORT" MUSIC_DATA_DIR="$MUSIC_DATA_DIR" nohup "$BIN" >>"$LOG" 2>&1 &
 else
   if ! command -v node >/dev/null 2>&1; then
     echo "ERROR: node not found and no binary at $BIN"
@@ -90,7 +90,7 @@ else
     npm run build || true
   fi
   export MUSIC_DATA_DIR="${MUSIC_DATA_DIR:-$DIR/data}"
-  PORT="$PORT" nohup node --import tsx server/index.ts >>"$LOG" 2>&1 &
+  NO_OPEN=1 PORT="$PORT" nohup node --import tsx server/index.ts >>"$LOG" 2>&1 &
 fi
 
 PID=$!
@@ -106,5 +106,5 @@ for i in $(seq 1 20); do
   sleep 0.5
 done
 
-open "http://127.0.0.1:$PORT/" || true
+open "http://localhost:$PORT/" || true
 echo "Done."

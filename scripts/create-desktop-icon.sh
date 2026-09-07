@@ -66,9 +66,8 @@ rm -rf "$APP_BUNDLE"
 cat > /tmp/music-library-applet.applescript <<APPLESCRIPT
 on run
   -- launch server hidden; absolute path embedded at build time (re-run script after moving repo)
+  -- single opener is scripts/launch.sh (waits for health check, opens http://localhost:3055)
   do shell script quoted form of POSIX path of "${REPO_DIR}/scripts/launch.sh" & " 2>&1 &"
-  delay 1
-  do shell script "sleep 1.5; open http://127.0.0.1:3055/ &> /dev/null &"
 end run
 on quit
   -- stop server when app is quit (Cmd+Q or Quit from Dock)
