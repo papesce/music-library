@@ -323,15 +323,9 @@ export function SplitModal({
               {track.filePath} · {track.duration ? formatMs(track.duration * 1000) : '—'}
             </p>
           </div>
-          {focusedIndex !== null ? (
-            <button className="btn" onClick={handleExitFocus} style={{ padding: '6px 10px' }} title="Back to all tracks (Esc)">
-              ← Back to all
-            </button>
-          ) : (
-            <button className="btn" onClick={onClose} style={{ padding: '6px 10px' }}>
-              ✕
-            </button>
-          )}
+          <button className="btn" onClick={onClose} style={{ padding: '6px 10px' }} title="Close — draft is auto-saved">
+            ✕
+          </button>
         </div>
 
         {error && (
@@ -458,62 +452,73 @@ export function SplitModal({
           )}
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            marginTop: 4,
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              className="btn"
-              onClick={handleClearDraft}
-              disabled={exporting}
-              title="Delete persisted draft and reset to single segment"
-            >
-              ↺ Clear & start over
+        {focusedIndex !== null ? (
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              justifyContent: 'flex-start',
+              alignItems: 'center',
+              marginTop: 4,
+              flexShrink: 0,
+            }}
+          >
+            <button className="btn" onClick={handleExitFocus} disabled={exporting} title="Back to all tracks (Esc)">
+              ← Back to all
             </button>
-            <span className="muted" style={{ fontSize: 11 }}>
-              {!draftLoaded
-                ? 'Loading draft…'
-                : draftSaving
-                  ? 'Saving…'
-                  : draftRestored
-                    ? 'Draft restored · auto-saved'
-                    : 'Auto-saved'}
-            </span>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {focusedIndex !== null ? (
-              <button className="btn" onClick={handleExitFocus} disabled={exporting} title="Back to all tracks (Esc)">
-                ← Back to all
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              marginTop: 4,
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn"
+                onClick={handleClearDraft}
+                disabled={exporting}
+                title="Delete persisted draft and reset to single segment"
+              >
+                ↺ Clear & start over
               </button>
-            ) : (
+              <span className="muted" style={{ fontSize: 11 }}>
+                {!draftLoaded
+                  ? 'Loading draft…'
+                  : draftSaving
+                    ? 'Saving…'
+                    : draftRestored
+                      ? 'Draft restored · auto-saved'
+                      : 'Auto-saved'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="btn" onClick={onClose} disabled={exporting} title="Close — draft is auto-saved">
                 Close
               </button>
-            )}
-            <button
-              className="btn btn-primary"
-              onClick={handleExport}
-              disabled={exporting || splitPoints.length - 1 - skipped.size < 1}
-              title={
-                skipped.size
-                  ? `${skipped.size} skipped — will export ${splitPoints.length - 1 - skipped.size}`
-                  : undefined
-              }
-            >
-              {exporting
-                ? 'Exporting…'
-                : `Export ${splitPoints.length - 1 - skipped.size} files${skipped.size ? ` (${skipped.size} skipped)` : ''}`}
-            </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleExport}
+                disabled={exporting || splitPoints.length - 1 - skipped.size < 1}
+                title={
+                  skipped.size
+                    ? `${skipped.size} skipped — will export ${splitPoints.length - 1 - skipped.size}`
+                    : undefined
+                }
+              >
+                {exporting
+                  ? 'Exporting…'
+                  : `Export ${splitPoints.length - 1 - skipped.size} files${skipped.size ? ` (${skipped.size} skipped)` : ''}`}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         <p className="muted" style={{ marginTop: 8, fontSize: 11, flexShrink: 0 }}>
           Slices are written next to the original as “{track.title} - part 01.mp3” etc., then appear
           in your library after export (no re-upload).
