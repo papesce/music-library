@@ -192,7 +192,11 @@ export function SplitModal({
   const handleAddSplit = useCallback((posMs: number) => {
     setSplitPoints(prev => [...prev, posMs].sort((a, b) => a - b));
   }, []);
-  const handleEnterFocus = useCallback((idx: number) => setFocusedIndex(idx), []);
+  const handleEnterFocus = useCallback((idx: number) => {
+    setFocusedIndex(idx);
+    const target = splitPoints[idx] ?? 0;
+    setAbsCursorMs(target);
+  }, [splitPoints]);
   const handleExitFocus = useCallback(() => {
     setFocusedIndex(null);
   }, []);
@@ -202,6 +206,9 @@ export function SplitModal({
       const next = focusedIndex + delta;
       if (next < 0 || next >= splitPoints.length - 1) return;
       setFocusedIndex(next);
+      // centralize cursor sync: move to next segment start immediately so highlight + lyrics preview follow
+      const target = splitPoints[next] ?? 0;
+      setAbsCursorMs(target);
     },
     [focusedIndex, splitPoints]
   );
@@ -347,6 +354,7 @@ export function SplitModal({
             focusedIndex={focusedIndex}
             onReadyChange={setWaveReady}
             onExitFocus={handleExitFocus}
+            onStepFocus={handleStepFocus}
             onCursorChange={setAbsCursorMs}
             onWaveStateChange={handleWaveStateChange}
             minSilenceMs={minSilenceMs}

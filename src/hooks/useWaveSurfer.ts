@@ -123,6 +123,7 @@ export function useWaveSurfer({
           const dur = ws.getDuration() || durationMs / 1000 || 1;
           ws.seekTo(startMs / 1000 / dur);
           setCursorMs(startMs);
+          setAutoScroll(true);
           // make segment visible when zoomed — scroll minimap window to start
           try {
             const z = zoom || 1;

@@ -3,6 +3,8 @@ import { useWaveSurfer, type WaveformHandle } from '../../hooks/useWaveSurfer';
 import { useWaveformRegions } from '../../hooks/useWaveformRegions';
 import { useWaveformHotkey } from '../../hooks/useWaveformHotkey';
 import { WaveformMinimap } from './WaveformMinimap';
+import { usePersistedState } from '../../lib/persist';
+import { useSplitSync, getCurrentIndex } from './useSplitSync';
 export type { WaveformHandle };
 interface Props {
   audioUrl: string;
@@ -21,6 +23,7 @@ interface Props {
   onSeekPause?: () => void;
   onExitFocus?: () => void;
   onCursorChange?: (ms: number | null) => void;
+  onStepFocus?: (delta: 1 | -1) => void;
   // silence detect (moved from DetectControls into waveform toolbar)
   minSilenceMs?: number;
   setMinSilenceMs?: (v: number) => void;
@@ -44,6 +47,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     onSeekPause,
     onExitFocus,
     onCursorChange,
+    onStepFocus,
     minSilenceMs,
     setMinSilenceMs,
     threshDb,
@@ -125,6 +129,38 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     ref: innerWaveRef as React.Ref<WaveformHandle>,
     onStateChange: onWaveStateChange,
     onReadyChange,
+  });
+
+  // persist follow toggle if not hard
+  const [persistedFollow] = usePersistedState<boolean>('split:autoScroll', true);
+  useEffect(() => {
+    // restore persisted on mount
+    setAutoScroll(persistedFollow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem('split:autoScroll', JSON.stringify(autoScroll));
+    } catch {}
+  }, [autoScroll]);
+
+  // centralized seek/step/ensureVisible — re-enables follow on any programmatic seek
+  const sync = useSplitSync({
+    splitPoints,
+    durationMs,
+    wsRef: wsRef as unknown as React.RefObject<import('wavesurfer.js').default | null>,
+    containerRef,
+    zoom: zoom || 1,
+    cursorMs: isFocused && cursorMs !== null ? focusStart + cursorMs : cursorMs,
+    setCursorMs: (v: number | null) => {
+      if (v === null) setCursorMs(null);
+      else if (isFocused) setCursorMs(Math.max(0, Math.min(isolatedDuration, v - focusStart)));
+      else setCursorMs(v);
+    },
+    autoScroll,
+    setAutoScroll,
+    onSeekPause,
+    isolated: { focusStart, isolatedDuration, isFocused },
   });
 
   useEffect(() => {
@@ -344,25 +380,12 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
 
   const handleMinimapSeek = useCallback(
     (ms: number) => {
-      const ws = wsRef.current;
-      if (!ws || !ready) return;
-      // minimap is focused-aware: when isolated, ms is already 0..isolatedDuration
-      if (isFocused) {
-        const clamped = Math.max(0, Math.min(isolatedDuration, ms));
-        try {
-          ws.seekTo(clamped / (isolatedDuration || 1));
-          ws.pause();
-        } catch {}
-        setCursorMs(clamped);
-        return;
-      }
-      try {
-        ws.seekTo(ms / (isolatedDuration || 1));
-        ws.pause();
-      } catch {}
-      setCursorMs(ms);
+      if (!ready) return;
+      // minimap is focused-aware: when isolated, ms is 0..isolatedDuration -> convert to global
+      const globalMs = isFocused ? focusStart + ms : ms;
+      sync.seekTo(globalMs, { follow: true });
     },
-    [ready, isFocused, isolatedDuration, setCursorMs]
+    [ready, isFocused, focusStart, sync]
   );
 
   const handleMinimapPan = useCallback(
@@ -373,18 +396,19 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       if (!el) return;
       const z = zoom || 1;
       if (z <= 1) return;
+      // leftMs is in minimap's duration coords (isolated when focused)
+      const globalLeft = isFocused ? focusStart + leftMs : leftMs;
+      // clamp and scroll to globalLeft (sync ensures follow handling)
       const activeTotal = isFocused ? isolatedDuration : durationMs;
       const maxLeft = Math.max(0, activeTotal - Math.round((el.clientWidth / z) * 1000));
-      const clamped = Math.max(0, Math.min(maxLeft, Math.round(leftMs)));
-      const target = (clamped / 1000) * z;
-      // prefer WaveSurfer API (works with shadowRoot scroll container)
+      const clampedLocal = Math.max(0, Math.min(maxLeft, Math.round(leftMs)));
+      const target = (clampedLocal / 1000) * z;
       try {
         if (ws?.setScroll) {
           ws.setScroll(target);
           return;
         }
       } catch {}
-      // shadow fallback
       try {
         const sr = (el as unknown as { shadowRoot?: ShadowRoot }).shadowRoot;
         const sc = sr?.querySelector('.scroll') as HTMLElement | null;
@@ -396,8 +420,10 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       const scrollEl = (el.querySelector('div') as HTMLElement | null) ?? el;
       scrollEl.scrollLeft = target;
       if (scrollEl !== el) el.scrollLeft = target;
+      // pan is user manual scroll; don't re-enable follow - let disable timer handle
+      void globalLeft;
     },
-    [ready, zoom, durationMs, isolatedDuration, isFocused]
+    [ready, zoom, durationMs, isolatedDuration, isFocused, focusStart]
   );
 
   // absolute cursor for minimap playhead (focused cursor is track-relative)
@@ -614,92 +640,53 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {(() => {
           const trackCount = Math.max(0, splitPoints.length - 1);
+          const globalCursor = (() => {
+            if (isFocused) {
+              if (cursorMs !== null) return focusStart + cursorMs;
+              try {
+                return focusStart + Math.round((wsRef.current?.getCurrentTime() ?? 0) * 1000);
+              } catch {
+                return focusStart;
+              }
+            }
+            if (cursorMs !== null) return cursorMs;
+            try {
+              return Math.round((wsRef.current?.getCurrentTime() ?? 0) * 1000);
+            } catch {
+              return splitPoints[0] ?? 0;
+            }
+          })();
+          const curIdx = getCurrentIndex(splitPoints, globalCursor, durationMs);
+          const atFirst = curIdx === 0;
+          const atLast = curIdx === trackCount - 1;
           const multi = trackCount > 1;
           if (multi) {
-            const getGlobalCursor = (): number => {
-              if (isFocused) {
-                if (cursorMs !== null) return focusStart + cursorMs;
-                try {
-                  return focusStart + Math.round((wsRef.current?.getCurrentTime() ?? 0) * 1000);
-                } catch {
-                  return focusStart;
-                }
-              }
-              if (cursorMs !== null) return cursorMs;
-              try {
-                return Math.round((wsRef.current?.getCurrentTime() ?? 0) * 1000);
-              } catch {
-                return splitPoints[0] ?? 0;
-              }
-            };
-            const getCurrentIdx = (): number => {
-              const cur = getGlobalCursor();
-              let idx = splitPoints.findIndex(
-                (_, i) => i < splitPoints.length - 1 && cur >= splitPoints[i]! && cur < splitPoints[i + 1]!
-              );
-              if (idx === -1) {
-                const last = splitPoints[splitPoints.length - 1] ?? durationMs;
-                if (cur >= last) idx = trackCount - 1;
-                else idx = 0;
-              }
-              return Math.max(0, Math.min(trackCount - 1, idx));
-            };
-            const curIdx = getCurrentIdx();
-            const atFirst = curIdx === 0;
-            const atLast = curIdx === trackCount - 1;
-            // if isolated, Prev/Next would require exiting focus - disable to keep UX simple
-            const navDisabled = isFocused;
-            const seekToIdx = (idx: number) => {
-              if (!ready) return;
-              if (isFocused) {
-                onExitFocus?.();
-                return;
-              }
-              const ws = wsRef.current;
-              if (!ws) return;
-              const target = splitPoints[idx] ?? 0;
-              // use actual WaveSurfer duration (decoded buffer) for fraction, fallback to prop duration
-              const wsDurSec = (() => {
-                try {
-                  const d = ws.getDuration();
-                  if (Number.isFinite(d) && d > 0) return d;
-                } catch {}
-                return (durationMs || isolatedDuration || 1) / 1000;
-              })();
-              try {
-                ws.seekTo(Math.min(1, Math.max(0, target / 1000 / wsDurSec)));
-                ws.pause();
-              } catch {}
-              setCursorMs(target);
-              onSeekPause?.();
-            };
             const handlePrev = () => {
-              if (navDisabled) {
-                onExitFocus?.();
+              if (!ready) return;
+              if (isFocused && onStepFocus) {
+                onStepFocus(-1);
                 return;
               }
-              const cur = getGlobalCursor();
-              const segStart = splitPoints[curIdx] ?? 0;
-              // if >700ms inside segment, go to its start, else previous segment
-              const targetIdx = cur - segStart > 700 ? curIdx : Math.max(0, curIdx - 1);
-              seekToIdx(targetIdx);
+              sync.step(-1);
             };
             const handleNext = () => {
-              if (navDisabled) {
-                onExitFocus?.();
+              if (!ready) return;
+              if (isFocused && onStepFocus) {
+                onStepFocus(1);
                 return;
               }
-              const targetIdx = Math.min(trackCount - 1, curIdx + 1);
-              seekToIdx(targetIdx);
+              sync.step(1);
             };
+            const disablePrev = !ready || (!isFocused && atFirst && globalCursor - (splitPoints[curIdx] ?? 0) <= 700);
+            const disableNext = !ready || (!isFocused && atLast);
             return (
               <>
                 <button
                   onClick={handlePrev}
-                  disabled={!ready || (isFocused ? false : atFirst && getGlobalCursor() - (splitPoints[curIdx] ?? 0) <= 700)}
+                  disabled={disablePrev}
                   className="btn"
-                  aria-label={isFocused ? 'Exit focus to navigate' : 'Previous segment'}
-                  title={isFocused ? 'Exit focus to navigate' : 'Previous segment'}
+                  aria-label="Previous segment"
+                  title="Previous segment"
                   style={{ padding: '6px 10px', fontSize: 12 }}
                 >
                   ◀
@@ -722,10 +709,10 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
                 </button>
                 <button
                   onClick={handleNext}
-                  disabled={!ready || (isFocused ? false : atLast)}
+                  disabled={disableNext}
                   className="btn"
-                  aria-label={isFocused ? 'Exit focus to navigate' : 'Next segment'}
-                  title={isFocused ? 'Exit focus to navigate' : 'Next segment'}
+                  aria-label="Next segment"
+                  title="Next segment"
                   style={{ padding: '6px 10px', fontSize: 12 }}
                 >
                   ▶
@@ -737,16 +724,17 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
             <>
               <button
                 onClick={() => {
-                  const ws = wsRef.current;
-                  if (!ws) return;
-                  const cur = ws.getCurrentTime();
-                  const next = Math.max(0, cur - 5);
-                  ws.seekTo(next / ((isolatedDuration || 1) / 1000));
-                  try {
-                    ws.pause();
-                  } catch {}
-                  setCursorMs(Math.round(next * 1000));
-                  onSeekPause?.();
+                  if (!ready) return;
+                  const curGlobal = (() => {
+                    if (cursorMs !== null) return isFocused ? focusStart + cursorMs : cursorMs;
+                    try {
+                      const c = wsRef.current?.getCurrentTime() ?? 0;
+                      return isFocused ? focusStart + Math.round(c * 1000) : Math.round(c * 1000);
+                    } catch {
+                      return isFocused ? focusStart : 0;
+                    }
+                  })();
+                  sync.seekTo(Math.max(0, curGlobal - 5000), { follow: true });
                 }}
                 disabled={!ready}
                 className="btn"
@@ -774,17 +762,17 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
               </button>
               <button
                 onClick={() => {
-                  const ws = wsRef.current;
-                  if (!ws) return;
-                  const dur = (isolatedDuration || 1) / 1000;
-                  const cur = ws.getCurrentTime();
-                  const next = Math.min(dur, cur + 5);
-                  ws.seekTo(Math.min(1, next / dur));
-                  try {
-                    ws.pause();
-                  } catch {}
-                  setCursorMs(Math.round(next * 1000));
-                  onSeekPause?.();
+                  if (!ready) return;
+                  const curGlobal = (() => {
+                    if (cursorMs !== null) return isFocused ? focusStart + cursorMs : cursorMs;
+                    try {
+                      const c = wsRef.current?.getCurrentTime() ?? 0;
+                      return isFocused ? focusStart + Math.round(c * 1000) : Math.round(c * 1000);
+                    } catch {
+                      return isFocused ? focusStart : 0;
+                    }
+                  })();
+                  sync.seekTo(Math.min(durationMs, curGlobal + 5000), { follow: true });
                 }}
                 disabled={!ready}
                 className="btn"
