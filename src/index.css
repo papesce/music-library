@@ -378,6 +378,18 @@ body {
 .track-row.dup:hover {
   background: rgba(255, 193, 7, 0.1);
 }
+.track-row.selected {
+  background: rgba(34, 197, 94, 0.12);
+  outline: 1px solid rgba(34, 197, 94, 0.38);
+  outline-offset: -1px;
+}
+.track-row.selected:hover {
+  background: rgba(34, 197, 94, 0.16);
+}
+.track-row.selected.playing {
+  background: rgba(34, 197, 94, 0.18);
+  outline-color: rgba(34, 197, 94, 0.45);
+}
 .track-row-cell {
   padding: 0 10px;
   font-size: 13px;
@@ -866,6 +878,42 @@ body {
   background: rgba(34, 197, 94, 0.18);
   color: #86efac;
   border: 1px solid rgba(34, 197, 94, 0.35);
+}
+.badge--clickable {
+  cursor: pointer;
+  transition:
+    filter 0.15s,
+    background 0.15s,
+    transform 0.1s;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.badge--clickable:hover {
+  filter: brightness(1.15);
+  background: rgba(34, 197, 94, 0.28);
+}
+.badge--clickable:active {
+  transform: scale(0.97);
+}
+.link-chip {
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+.link-chip:hover {
+  color: #7dd3fc;
+  background: rgba(0, 212, 255, 0.12);
 }
 .row-actions {
   display: flex;

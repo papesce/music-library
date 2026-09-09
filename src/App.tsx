@@ -38,6 +38,7 @@ export default function App() {
   );
   const [nowOpen, setNowOpen] = usePersistedState<boolean>('app:nowOpen', true);
   const [revealId, setRevealId] = useState<string | null>(null);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [coverBust, setCoverBust] = useState<Record<string, number>>({});
   const splitTrack = splitTrackPath
     ? (tracks.find(t => t.filePath === splitTrackPath) ?? null)
@@ -146,6 +147,33 @@ export default function App() {
       setWishlistChecking(false);
     }
   };
+
+  const handleNavigateToTrack = (filePath: string) => {
+    const t = tracks.find(x => x.filePath === filePath);
+    if (!t) {
+      setError('Track no longer in library — hit Revisit');
+      return;
+    }
+    if (lib.hideReviewed && t.reviewed) lib.setHideReviewed(false);
+    if (lib.showDupesOnly) lib.setShowDupesOnly(false);
+    if (lib.loudnessFilter && (t.loudness ?? null) !== lib.loudnessFilter) lib.setLoudnessFilter(null);
+    if (lib.search) lib.setSearch('');
+    setTab('library');
+    setSelectedTrackId(t.id);
+    requestAnimationFrame(() => setRevealId(t.id));
+  };
+
+  // clear selection when track no longer visible/filtered or deleted
+  useEffect(() => {
+    if (selectedTrackId && !tracks.some(t => t.id === selectedTrackId)) {
+      setSelectedTrackId(null);
+    }
+  }, [tracks, selectedTrackId]);
+  useEffect(() => {
+    if (selectedTrackId && !lib.filteredSorted.some(t => t.id === selectedTrackId)) {
+      setSelectedTrackId(null);
+    }
+  }, [lib.filteredSorted, selectedTrackId]);
 
   // initial load
   useEffect(() => {
@@ -372,7 +400,10 @@ export default function App() {
               toggleSort={lib.toggleSort}
               revealId={revealId}
               searchQuery={lib.search}
+              selectedId={selectedTrackId}
+              onSelect={setSelectedTrackId}
               onPlay={t => {
+                setSelectedTrackId(t.id);
                 setRevealId(t.id);
                 player.handlePlay(t);
                 setNowOpen(true);
@@ -419,6 +450,7 @@ export default function App() {
             onDelete={wishlistCtl.del}
             onRevisit={handleRevisit}
             checking={wishlistChecking}
+            onNavigateToTrack={handleNavigateToTrack}
           />
         )}
       </main>

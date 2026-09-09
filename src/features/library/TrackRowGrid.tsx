@@ -10,6 +10,7 @@ type Props = {
   isPlaying: boolean;
   isPaused: boolean;
   isActive: boolean;
+  isSelected?: boolean;
   onPlay: () => void;
   onSplit: () => void;
   onEdit: () => void;
@@ -19,6 +20,7 @@ type Props = {
   style?: React.CSSProperties;
   coverBust?: number;
   searchQuery?: string;
+  onSelect?: () => void;
 };
 
 export const TrackRowGrid = memo(function TrackRowGrid({
@@ -26,6 +28,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({
   isPlaying,
   isPaused,
   isActive,
+  isSelected,
   onPlay,
   onSplit,
   onEdit,
@@ -35,6 +38,7 @@ export const TrackRowGrid = memo(function TrackRowGrid({
   style,
   coverBust,
   searchQuery,
+  onSelect,
 }: Props) {
   const { folder, file } = splitFile(track.filePath);
   const [coverFailed, setCoverFailed] = useState(false);
@@ -45,11 +49,12 @@ export const TrackRowGrid = memo(function TrackRowGrid({
   return (
     <div
       role="row"
-      aria-selected={isActive}
+      aria-selected={isActive || !!isSelected}
       data-track-id={track.id}
       title={track.filePath}
       style={{ ...style, opacity: track.reviewed ? 0.62 : undefined }}
-      className={`track-row ${isActive ? 'playing' : ''} ${track.duplicateGroupId ? 'dup' : ''} ${track.reviewed ? 'reviewed' : ''}`}
+      className={`track-row ${isActive ? 'playing' : ''} ${isSelected ? 'selected' : ''} ${track.duplicateGroupId ? 'dup' : ''} ${track.reviewed ? 'reviewed' : ''}`}
+      onClick={onSelect}
     >
       <div role="gridcell" className="track-row-cell cell-play">
         {onToggleReviewed && (

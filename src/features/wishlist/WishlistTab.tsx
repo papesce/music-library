@@ -24,6 +24,7 @@ export function WishlistTab({
   onDelete,
   onRevisit,
   checking,
+  onNavigateToTrack,
 }: {
   wName: string;
   setWName: (v: string) => void;
@@ -48,6 +49,7 @@ export function WishlistTab({
   onDelete: (id: string) => void;
   onRevisit: () => void;
   checking: boolean;
+  onNavigateToTrack?: (filePath: string) => void;
 }) {
   const foundCount = displayed.filter(it => it.inLibrary).length;
   return (
@@ -170,14 +172,41 @@ export function WishlistTab({
                   </select>
                 ) : (
                   <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {it.inLibrary && <span className="badge found">In Library</span>}
+                    {it.inLibrary && it.matches?.[0] && onNavigateToTrack ? (
+                      <button
+                        className="badge found badge--clickable"
+                        onClick={() => onNavigateToTrack(it.matches![0]!.filePath)}
+                        title={`Go to "${it.matches![0]!.title} — ${it.matches![0]!.artist}" in Library`}
+                        aria-label={`Go to ${it.matches![0]!.title} in library`}
+                      >
+                        In Library
+                      </button>
+                    ) : (
+                      it.inLibrary && <span className="badge found">In Library</span>
+                    )}
                     <span className={`badge ${it.priority}`}>{it.priority}</span>
                   </span>
                 )}
               </div>
               {it.inLibrary && it.matches && it.matches.length > 0 && (
-                <span className="muted" style={{ fontSize: 11, lineHeight: 1.4 }}>
-                  Match: {it.matches.map(m => `${m.title} — ${m.artist}`).join(', ')}
+                <span className="muted" style={{ fontSize: 11, lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  Match:{' '}
+                  {it.matches.map((m, idx) => (
+                    <span key={m.filePath} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {idx > 0 && <span>,</span>}
+                      {onNavigateToTrack ? (
+                        <button
+                          className="link-chip"
+                          onClick={() => onNavigateToTrack(m.filePath)}
+                          title={`Go to "${m.title} — ${m.artist}" in Library`}
+                        >
+                          {m.title} — {m.artist}
+                        </button>
+                      ) : (
+                        <span>{m.title} — {m.artist}</span>
+                      )}
+                    </span>
+                  ))}
                   {it.matchCount !== undefined && it.matchCount > 3 ? ` +${it.matchCount - 3} more` : ''}
                 </span>
               )}

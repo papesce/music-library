@@ -22,6 +22,8 @@ type Props = {
   coverBust?: Record<string, number>;
   revealId?: string | null;
   searchQuery?: string;
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
 };
 
 const ROW_HEIGHT = 64;
@@ -43,6 +45,8 @@ export function TrackList({
   coverBust,
   revealId,
   searchQuery,
+  selectedId,
+  onSelect,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -102,6 +106,7 @@ export function TrackList({
                 isPlaying={playingId === t.id && !isPaused}
                 isPaused={playingId === t.id && isPaused}
                 isActive={playingId === t.id}
+                isSelected={selectedId === t.id}
                 onPlay={() => onPlay(t)}
                 onSplit={() => onSplit(t)}
                 onEdit={() => onEdit(t)}
@@ -110,6 +115,7 @@ export function TrackList({
                 onSetLoudness={onSetLoudness}
                 coverBust={coverBust?.[t.filePath]}
                 searchQuery={searchQuery}
+                onSelect={onSelect ? () => onSelect(t.id) : undefined}
                 style={{
                   position: 'absolute',
                   top: 0,
