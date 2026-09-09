@@ -22,4 +22,7 @@ export type WishlistItem = {
   artist?: string;
   priority: 'High' | 'Medium' | 'Low';
   dateAdded: string;
+  inLibrary?: boolean;
+  matches?: Pick<Track, 'filePath' | 'title' | 'artist' | 'album'>[];
+  matchCount?: number;
 };

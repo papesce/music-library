@@ -19,10 +19,7 @@ export function AudioElement({
       hidden
       preload="metadata"
       style={{ display: 'none' }}
-      onEnded={() => {
-        setPlayingId(null);
-        setIsPaused(false);
-      }}
+      // onEnded handled centrally in usePlayer (supports autoplay pure-random)
       onPause={() => {
         if (playingId) setIsPaused(true);
       }}

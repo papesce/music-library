@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Track } from '../../types/api.d';
 import { streamUrl } from '../../lib/path';
 
-export function usePlayer(tracks: Track[], setError: (m: string) => void) {
+export function usePlayer(
+  tracks: Track[],
+  setError: (m: string) => void,
+  opts?: {
+    autoplay?: boolean;
+    getNextTrack?: () => Track | null;
+  }
+) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -98,12 +105,41 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
     a.muted = muted;
   }, []); // sync initial volume/muted once
 
+  // refs to avoid re-binding audio listeners on every autoplay toggle
+  const autoplayRef = useRef(opts?.autoplay ?? false);
+  const getNextTrackRef = useRef(opts?.getNextTrack ?? null);
+  useEffect(() => {
+    autoplayRef.current = opts?.autoplay ?? false;
+  }, [opts?.autoplay]);
+  useEffect(() => {
+    getNextTrackRef.current = opts?.getNextTrack ?? null;
+  }, [opts?.getNextTrack]);
+
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
     const onTime = () => setCurrentTime(a.currentTime);
     const onDur = () => setDuration(a.duration || 0);
     const onEnded = () => {
+      if (autoplayRef.current && getNextTrackRef.current) {
+        const next = getNextTrackRef.current();
+        if (next) {
+          // play next random directly (avoid clearing state first)
+          const audio = audioRef.current;
+          if (audio) {
+            audio.src = streamUrl(next.filePath);
+            audio.load();
+            setPlayingId(next.id);
+            setIsPaused(false);
+            setError('');
+            audio.play().catch(e => {
+              setError(`Playback failed: ${(e as Error).message}`);
+              setPlayingId(null);
+            });
+          }
+          return;
+        }
+      }
       setPlayingId(null);
       setIsPaused(false);
     };
@@ -115,7 +151,7 @@ export function usePlayer(tracks: Track[], setError: (m: string) => void) {
       a.removeEventListener('loadedmetadata', onDur);
       a.removeEventListener('ended', onEnded);
     };
-  }, []);
+  }, [setError]);
 
   return {
     audioRef,

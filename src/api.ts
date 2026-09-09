@@ -28,6 +28,8 @@ export const api = {
   scanFolder: (folder: string) =>
     req<Track[]>('/api/scan', { method: 'POST', body: JSON.stringify({ folder }) }),
   getWishlist: () => req<WishlistItem[]>('/api/wishlist'),
+  checkWishlist: () => req<WishlistItem[]>('/api/wishlist/check', { method: 'POST' }),
+  getWishlistRaw: () => req<WishlistItem[]>('/api/wishlist?enriched=0'),
   addWishlistItem: (item: { name: string; artist?: string; priority: 'High' | 'Medium' | 'Low' }) =>
     req<WishlistItem>('/api/wishlist', { method: 'POST', body: JSON.stringify(item) }),
   updateWishlistItem: (id: string, patch: Partial<Omit<WishlistItem, 'id'>>) =>

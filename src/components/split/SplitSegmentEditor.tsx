@@ -3,6 +3,7 @@ import { api } from '../../api';
 import { buildGoogleQuery, openGoogle } from '../../lib/googleQuery';
 import { copyThenOpenChosic } from '../../lib/chosic';
 import { LyricsPreview } from '../LyricsPreview';
+import { Field } from '../ui/Field';
 
 export type SegmentMeta = {
   title: string;
@@ -16,40 +17,6 @@ export type SegmentMeta = {
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const;
 type WhisperModel = (typeof WHISPER_MODELS)[number];
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const isUnknown = value.trim().toLowerCase() === 'unknown';
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
-      {label}
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          padding: '7px 10px',
-          borderRadius: 8,
-          border: '1px solid var(--border)',
-          background: 'rgba(255,255,255,0.06)',
-          color: isUnknown ? 'var(--muted)' : 'var(--text)',
-          fontStyle: isUnknown ? 'italic' : 'normal',
-          outline: 'none',
-          fontSize: 12,
-        }}
-      />
-    </label>
-  );
-}
 
 type Tab = 'details' | 'lyrics';
 
@@ -217,12 +184,12 @@ export function SplitSegmentEditor({
 
       {activeTab === 'details' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Field label="Title" value={meta.title} onChange={v => onChange({ ...meta, title: v })} placeholder={`Title for part ${index + 1}`} />
-          <Field label="Artist" value={meta.artist} onChange={v => onChange({ ...meta, artist: v })} placeholder="Artist" />
-          <Field label="Album" value={meta.album} onChange={v => onChange({ ...meta, album: v })} placeholder="Album" />
+          <Field size="compact" label="Title" value={meta.title} onChange={v => onChange({ ...meta, title: v })} placeholder={`Title for part ${index + 1}`} />
+          <Field size="compact" label="Artist" value={meta.artist} onChange={v => onChange({ ...meta, artist: v })} placeholder="Artist" />
+          <Field size="compact" label="Album" value={meta.album} onChange={v => onChange({ ...meta, album: v })} placeholder="Album" />
           <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}><Field label="Genre" value={meta.genre} onChange={v => onChange({ ...meta, genre: v })} placeholder="Genre" /></div>
-            <div style={{ width: 110 }}><Field label="Year" value={meta.year} onChange={v => onChange({ ...meta, year: v })} placeholder="2024" /></div>
+            <div style={{ flex: 1 }}><Field size="compact" label="Genre" value={meta.genre} onChange={v => onChange({ ...meta, genre: v })} placeholder="Genre" /></div>
+            <div style={{ width: 110 }}><Field size="compact" label="Year" value={meta.year} onChange={v => onChange({ ...meta, year: v })} placeholder="2024" /></div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
             <span className="muted" style={{ fontSize: 11, flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQueryForSearch}>{googleQueryForSearch}</span>
@@ -277,7 +244,7 @@ export function SplitSegmentEditor({
                 <span>Preview · synced to waveform</span>
                 <span className="muted">{(currentTimeSec ?? 0).toFixed(1)}s</span>
               </div>
-              <LyricsPreview lrc={meta.lyrics} currentTimeSec={currentTimeSec ?? 0} maxHeight={260} />
+              <LyricsPreview key={meta.lyrics} lrc={meta.lyrics} currentTimeSec={currentTimeSec ?? 0} maxHeight={260} />
             </div>
           ) : (
             <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--border-soft)', borderRadius: 10, background: 'rgba(0,0,0,0.15)' }}>

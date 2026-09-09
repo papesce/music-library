@@ -136,6 +136,71 @@ function fallbackFromFilename(filePath: string) {
     return { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() };
   return { artist: 'Unknown', title: withoutExt.trim() || 'Unknown' };
 }
+function normalizeForMatch(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  const al = a.length, bl = b.length;
+  if (al === 0) return bl;
+  if (bl === 0) return al;
+  const prev = Array.from({ length: bl + 1 }, (_, i) => i);
+  const cur = new Array(bl + 1).fill(0);
+  for (let i = 1; i <= al; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= bl; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost);
+    }
+    for (let j = 0; j <= bl; j++) prev[j] = cur[j]!;
+  }
+  return prev[bl]!;
+}
+function isWishlistMatch(wishlistName: string, trackTitle: string): boolean {
+  const nw = normalizeForMatch(wishlistName);
+  const nt = normalizeForMatch(trackTitle);
+  if (!nw || !nt) return false;
+  if (nt === nw) return true;
+  if (nt.includes(nw) || nw.includes(nt)) return true;
+  // token overlap
+  const wTokens = new Set(nw.split(' '));
+  const tTokens = new Set(nt.split(' '));
+  let inter = 0;
+  for (const tok of wTokens) if (tTokens.has(tok)) inter++;
+  const smaller = Math.min(wTokens.size, tTokens.size);
+  if (smaller >= 2 && inter / smaller >= 0.75) return true;
+  if (smaller >= 1 && wTokens.size <= 2 && tTokens.size <= 4 && inter === wTokens.size) return true;
+  // Levenshtein similarity for typos
+  const maxLen = Math.max(nw.length, nt.length);
+  if (maxLen >= 4) {
+    const dist = levenshtein(nw, nt);
+    if (1 - dist / maxLen >= 0.8) return true;
+  }
+  // compare first 30 chars for long titles with suffix like (Remastered)
+  if (nw.length >= 6 && nt.length >= 6) {
+    const a = nw.slice(0, 30);
+    const b = nt.slice(0, 30);
+    if (a === b) return true;
+  }
+  return false;
+}
+function findWishlistMatches(item: WishlistItem, tracks: Track[]): Track[] {
+  return tracks.filter(t => isWishlistMatch(item.name, t.title));
+}
+function enrichWishlist(items: WishlistItem[], tracks: Track[]) {
+  return items.map(it => {
+    const matches = findWishlistMatches(it, tracks);
+    const top = matches.slice(0, 3).map(t => ({ filePath: t.filePath, title: t.title, artist: t.artist, album: t.album }));
+    return { ...it, inLibrary: matches.length > 0, matches: top, matchCount: matches.length };
+  });
+}
 function normalizeKey(t: Track): string {
   return `${t.artist.trim().toLowerCase()}|${t.title.trim().toLowerCase()}|${t.album.trim().toLowerCase()}`;
 }
@@ -700,7 +765,14 @@ const server = createServer(async (req, res) => {
     }
 
     if (url.pathname === '/api/wishlist' && req.method === 'GET') {
-      return json(res, 200, getWishlist());
+      const enriched = url.searchParams.get('enriched');
+      const items = getWishlist();
+      if (enriched === '0' || enriched === 'false') return json(res, 200, items);
+      return json(res, 200, enrichWishlist(items, getTracks()));
+    }
+    if (url.pathname === '/api/wishlist/check' && req.method === 'POST') {
+      const items = getWishlist();
+      return json(res, 200, enrichWishlist(items, getTracks()));
     }
     if (url.pathname === '/api/wishlist' && req.method === 'POST') {
       const body = await getBody(req);

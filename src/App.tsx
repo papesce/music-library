@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Track } from './types/api.d';
 import { api } from './api';
 import { SplitModal } from './components/split/SplitModal';
@@ -19,6 +19,7 @@ import { PlayHistory } from './features/player/PlayHistory';
 import { useWishlist } from './features/wishlist/useWishlist';
 import { useToast } from './hooks/useToast';
 import { usePersistedState } from './lib/persist';
+import { enrichWishlist } from './lib/wishlistMatch';
 
 type Tab = 'library' | 'wishlist';
 
@@ -50,7 +51,26 @@ export default function App() {
 
   const { toast, error, setError, setSuccess, dismiss } = useToast();
   const foldersCtl = useFolders(setError);
-  const player = usePlayer(tracks, setError);
+  const lib = useLibrary(tracks);
+  const [autoplay, setAutoplay] = usePersistedState<boolean>('player:autoplay', false);
+  const playingIdRef = useRef<string | null>(null);
+  const player = usePlayer(tracks, setError, {
+    autoplay,
+    getNextTrack: () => {
+      const pool = lib.filteredSorted;
+      if (pool.length === 0) return null;
+      if (pool.length === 1) return pool[0]!;
+      const currentId = playingIdRef.current;
+      let pick: Track;
+      do {
+        pick = pool[Math.floor(Math.random() * pool.length)]!;
+      } while (pick.id === currentId && pool.length > 1);
+      return pick;
+    },
+  });
+  useEffect(() => {
+    playingIdRef.current = player.playingId;
+  }, [player.playingId]);
   const history = usePlayHistory(tracks);
 
   // record history when a track actually starts playing (not on pause toggle)
@@ -81,8 +101,51 @@ export default function App() {
     }
   }, [splitTrackPath]);
 
-  const lib = useLibrary(tracks);
   const wishlistCtl = useWishlist();
+  const [wishlistChecking, setWishlistChecking] = useState(false);
+
+  const enrichedWishlist = useMemo(() => {
+    const hasEnriched = wishlistCtl.wishlist.some(w => w.inLibrary !== undefined);
+    if (hasEnriched) return wishlistCtl.wishlist;
+    if (wishlistCtl.wishlist.length === 0 || tracks.length === 0) return wishlistCtl.wishlist;
+    return enrichWishlist(wishlistCtl.wishlist, tracks);
+  }, [wishlistCtl.wishlist, tracks]);
+
+  const displayedEnriched = useMemo(() => {
+    const order = { High: 0, Medium: 1, Low: 2 } as const;
+    const sortedByPriority = [...enrichedWishlist].sort((a, b) => {
+      const pa = order[a.priority], pb = order[b.priority];
+      if (pa !== pb) return pa - pb;
+      return new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime();
+    });
+    if (wishlistCtl.sortByDate) {
+      return [...enrichedWishlist].sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
+    }
+    return sortedByPriority;
+  }, [enrichedWishlist, wishlistCtl.sortByDate]);
+
+  const handleRevisit = async () => {
+    setWishlistChecking(true);
+    setError('');
+    try {
+      const checked = await api.checkWishlist();
+      wishlistCtl.setWishlist(checked);
+      const found = checked.filter(w => w.inLibrary).length;
+      setSuccess(found > 0 ? `${found} of ${checked.length} already in library` : `No matches — ${checked.length} wishlist items not in library`);
+    } catch (e) {
+      // fallback to local enrich if endpoint unavailable
+      try {
+        const local = enrichWishlist(wishlistCtl.wishlist, tracks);
+        wishlistCtl.setWishlist(local);
+        const found = local.filter(w => w.inLibrary).length;
+        setSuccess(found > 0 ? `${found} of ${local.length} already in library (local check)` : `No matches — ${local.length} wishlist items not in library`);
+      } catch {
+        setError((e as Error).message);
+      }
+    } finally {
+      setWishlistChecking(false);
+    }
+  };
 
   // initial load
   useEffect(() => {
@@ -110,7 +173,12 @@ export default function App() {
     setError('');
     setScanning(true);
     try {
-      setTracks(await api.scanFolders(foldersCtl.folders));
+      const scanned = await api.scanFolders(foldersCtl.folders);
+      setTracks(scanned);
+      try {
+        const checked = await api.checkWishlist();
+        wishlistCtl.setWishlist(checked);
+      } catch {}
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -336,7 +404,7 @@ export default function App() {
             setWPriority={wishlistCtl.setWPriority}
             sortByDate={wishlistCtl.sortByDate}
             setSortByDate={wishlistCtl.setSortByDate}
-            displayed={wishlistCtl.displayed}
+            displayed={displayedEnriched}
             onAdd={() => wishlistCtl.add(setError)}
             editingId={wishlistCtl.editingId}
             setEditingId={wishlistCtl.setEditingId}
@@ -349,6 +417,8 @@ export default function App() {
             onStartEdit={wishlistCtl.startEdit}
             onSaveEdit={wishlistCtl.saveEdit}
             onDelete={wishlistCtl.del}
+            onRevisit={handleRevisit}
+            checking={wishlistChecking}
           />
         )}
       </main>
@@ -444,6 +514,8 @@ export default function App() {
         onVolumeChange={player.setVolume}
         onMutedChange={player.setMuted}
         onPlayRandom={playRandom}
+        autoplay={autoplay}
+        onToggleAutoplay={() => setAutoplay(v => !v)}
         onPreviewChange={setPendingLyrics}
         onToggleReviewed={
           player.playingTrack ? () => toggleReviewed(player.playingTrack!) : undefined

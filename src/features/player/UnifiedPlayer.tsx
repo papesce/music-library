@@ -26,6 +26,8 @@ type Props = {
   onVolumeChange: (v: number) => void;
   onMutedChange: (m: boolean) => void;
   onPlayRandom?: () => void;
+  autoplay?: boolean;
+  onToggleAutoplay?: () => void;
   onPreviewChange?: (draft: { path: string; text: string; source: string } | null) => void;
   onToggleReviewed?: () => void;
 };
@@ -57,20 +59,76 @@ function VolumeControl({
   onMutedChange: (m: boolean) => void;
   size?: 'compact' | 'full';
 }) {
-  const icon = muted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊';
+  const isMuted = muted || volume === 0;
+  const pct = Math.round((muted ? 0 : volume) * 100);
+  // macOS-native style: filled speaker (SF Symbols-like) + stroke waves, renders crisp on Retina without emoji font variance
+  const SpeakerIcon = (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      style={{ display: 'block' }}
+    >
+      <path d="M11 5 L6 9 H2.5 C2.22 9 2 9.22 2 9.5 V14.5 C2 14.78 2.22 15 2.5 15 H6 L11 19 Z" fill="currentColor" stroke="none" />
+      {isMuted ? (
+        <>
+          {/* keyboard-style slash: white with dark outline so visible over filled speaker — matches image */}
+          <line x1="2.5" y1="19.5" x2="21.2" y2="3.8" stroke="rgba(0,0,0,0.85)" strokeWidth="4.2" strokeLinecap="round" />
+          <line x1="2.5" y1="19.5" x2="21.2" y2="3.8" stroke="#fff" strokeWidth="2.1" />
+          {/* hide waves when muted — slash crosses speaker like keyboard F10 / image */}
+        </>
+      ) : volume < 0.5 ? (
+        <path d="M14.8 8.8 A5 5 0 0 1 14.8 15.2" fill="none" />
+      ) : (
+        <>
+          <path d="M14.8 8.8 A5 5 0 0 1 14.8 15.2" fill="none" />
+          <path d="M17.8 6.5 A9 9 0 0 1 17.8 17.5" fill="none" />
+        </>
+      )}
+    </svg>
+  );
   return (
     <span
-      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
       onClick={e => e.stopPropagation()}
     >
       <button
         className="btn"
         onClick={() => onMutedChange(!muted)}
-        title={muted ? 'Unmute' : 'Mute'}
-        aria-label={muted ? 'Unmute' : 'Mute'}
-        style={{ padding: '6px 8px', minWidth: 32 }}
+        title={isMuted ? `Unmute (${pct}%)` : `Mute (${pct}%)`}
+        aria-label={isMuted ? 'Unmute' : 'Mute'}
+        aria-pressed={isMuted}
+        style={{
+          padding: '6px 8px',
+          minWidth: 34,
+          height: 30,
+          borderRadius: 999,
+          border: `1px solid ${isMuted ? 'rgba(255,77,109,0.35)' : 'var(--border)'}`,
+          background: isMuted ? 'rgba(255,77,109,0.14)' : 'rgba(255,255,255,0.06)',
+          color: isMuted ? '#ff8fa0' : undefined,
+          transition: 'all 0.18s ease',
+          display: 'grid',
+          placeItems: 'center',
+          position: 'relative',
+        }}
       >
-        {icon}
+        <span
+          style={{
+            display: 'grid',
+            placeItems: 'center',
+            transition: 'transform 0.18s ease',
+            transform: isMuted ? 'scale(1.05)' : 'scale(1)',
+          }}
+          aria-hidden
+        >
+          {SpeakerIcon}
+        </span>
       </button>
       <input
         type="range"
@@ -80,13 +138,31 @@ function VolumeControl({
         value={muted ? 0 : volume}
         onChange={e => onVolumeChange(Number(e.target.value))}
         aria-label="Volume"
-        title={`Volume ${Math.round((muted ? 0 : volume) * 100)}%`}
+        title={`Volume ${pct}%${isMuted ? ' — muted' : ''}`}
         style={{
           width: size === 'compact' ? 70 : 100,
-          accentColor: 'var(--accent)',
+          accentColor: isMuted ? '#ff6b8a' : 'var(--accent)',
           cursor: 'pointer',
+          opacity: isMuted ? 0.55 : 1,
+          transition: 'opacity 0.18s ease, accent-color 0.18s ease',
         }}
       />
+      {size === 'full' && (
+        <span
+          className="muted"
+          style={{
+            fontSize: 11,
+            minWidth: 34,
+            textAlign: 'right',
+            fontVariantNumeric: 'tabular-nums',
+            opacity: isMuted ? 0.7 : 1,
+            color: isMuted ? '#ff8fa0' : undefined,
+          }}
+          aria-hidden
+        >
+          {pct}%
+        </span>
+      )}
     </span>
   );
 }
@@ -110,6 +186,8 @@ export function UnifiedPlayer({
   onVolumeChange,
   onMutedChange,
   onPlayRandom,
+  autoplay,
+  onToggleAutoplay,
   onToggleReviewed,
   // kept for backwards compat — no longer used (detect removed from player)
   onPreviewChange: _onPreviewChange,
@@ -193,6 +271,20 @@ export function UnifiedPlayer({
               ✓ done
             </span>
           ) : null}
+          {track.loudness ? (
+            <span
+              className="dup-badge dup-badge--sm"
+              style={{
+                background: track.loudness === 'loud' ? 'rgba(255,77,109,0.18)' : 'rgba(255,193,7,0.18)',
+                color: track.loudness === 'loud' ? '#ff8fa0' : '#ffd08a',
+                border: `1px solid ${track.loudness === 'loud' ? 'rgba(255,77,109,0.3)' : 'rgba(255,193,7,0.3)'}`,
+                flexShrink: 0,
+                marginLeft: 0,
+              }}
+            >
+              {track.loudness === 'loud' ? '🔊 loud' : '🔉 normal'}
+            </span>
+          ) : null}
         </b>
         <span>
           {track.artist} · {track.album}
@@ -244,6 +336,23 @@ export function UnifiedPlayer({
             style={{ padding: '6px 10px' }}
           >
             🔀
+          </button>
+        )}
+        {onToggleAutoplay && (
+          <button
+            className="btn"
+            onClick={onToggleAutoplay}
+            aria-label={autoplay ? 'Disable autoplay' : 'Enable autoplay'}
+            title={autoplay ? 'Autoplay on — continues with random track after each song' : 'Autoplay off'}
+            aria-pressed={autoplay}
+            style={{
+              padding: '6px 10px',
+              background: autoplay ? 'rgba(124,92,255,0.18)' : undefined,
+              borderColor: autoplay ? 'rgba(124,92,255,0.45)' : undefined,
+              color: autoplay ? '#c4b5ff' : undefined,
+            }}
+          >
+            ∞
           </button>
         )}
         <button className="play-btn" onClick={onToggle} aria-label={isPaused ? 'Play' : 'Pause'}>
@@ -311,11 +420,25 @@ export function UnifiedPlayer({
                   ✓ done
                 </span>
               ) : null}
+              {track.loudness ? (
+                <span
+                  className="dup-badge"
+                  style={{
+                    background: track.loudness === 'loud' ? 'rgba(255,77,109,0.18)' : 'rgba(255,193,7,0.18)',
+                    color: track.loudness === 'loud' ? '#ff8fa0' : '#ffd08a',
+                    border: `1px solid ${track.loudness === 'loud' ? 'rgba(255,77,109,0.3)' : 'rgba(255,193,7,0.3)'}`,
+                    verticalAlign: 'middle',
+                    marginLeft: 6,
+                  }}
+                >
+                  {track.loudness === 'loud' ? '🔊 loud' : '🔉 normal'}
+                </span>
+              ) : null}
             </b>
             <span className="muted">
               {track.artist} · {track.album} {track.year ? `· ${track.year}` : ''}{' '}
               {hasSynced ? '· synced' : ''} {track.isCover ? '· cover' : '· orig'}{' '}
-              {track.reviewed ? '· done' : ''}
+              {track.reviewed ? '· done' : ''} {track.loudness ? `· ${track.loudness}` : ''}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -346,6 +469,23 @@ export function UnifiedPlayer({
                 🔀 Random
               </button>
             )}
+            {onToggleAutoplay && (
+              <button
+                className="btn"
+                onClick={onToggleAutoplay}
+                aria-label={autoplay ? 'Disable autoplay' : 'Enable autoplay'}
+                title={autoplay ? 'Autoplay on — continues with random track after each song' : 'Autoplay off'}
+                aria-pressed={autoplay}
+                style={{
+                  padding: '6px 12px',
+                  background: autoplay ? 'rgba(124,92,255,0.18)' : undefined,
+                  borderColor: autoplay ? 'rgba(124,92,255,0.45)' : undefined,
+                  color: autoplay ? '#c4b5ff' : undefined,
+                }}
+              >
+                ∞ Autoplay
+              </button>
+            )}
             {onEdit && (
               <button
                 className="btn"
@@ -365,14 +505,6 @@ export function UnifiedPlayer({
               style={{ padding: '6px 10px' }}
             >
               ⌄
-            </button>
-            <button
-              className="btn"
-              onClick={onStop}
-              aria-label="Close player"
-              style={{ padding: '6px 10px' }}
-            >
-              ✕
             </button>
           </div>
         </div>

@@ -22,6 +22,8 @@ export function WishlistTab({
   onStartEdit,
   onSaveEdit,
   onDelete,
+  onRevisit,
+  checking,
 }: {
   wName: string;
   setWName: (v: string) => void;
@@ -44,7 +46,10 @@ export function WishlistTab({
   onStartEdit: (it: WishlistItem) => void;
   onSaveEdit: () => void;
   onDelete: (id: string) => void;
+  onRevisit: () => void;
+  checking: boolean;
 }) {
+  const foundCount = displayed.filter(it => it.inLibrary).length;
   return (
     <>
       <div className="glass form-pill">
@@ -74,6 +79,9 @@ export function WishlistTab({
         <button className="btn btn-primary" onClick={onAdd}>
           Add
         </button>
+        <button className="btn" onClick={onRevisit} disabled={checking} title="Re-check wishlist against library (fuzzy, name only)">
+          {checking ? 'Checking…' : 'Revisit'}
+        </button>
         <div className="glass segmented" style={{ marginLeft: 'auto' }}>
           <button className={!sortByDate ? 'active' : ''} onClick={() => setSortByDate(false)}>
             By priority
@@ -84,7 +92,7 @@ export function WishlistTab({
         </div>
       </div>
       <p className="muted" style={{ marginBottom: 12 }}>
-        {displayed.length} items · Sorted by {sortByDate ? 'newest first' : 'priority → date'}
+        {displayed.length} items{foundCount > 0 ? ` · ${foundCount} already in library` : ''} · Sorted by {sortByDate ? 'newest first' : 'priority → date'}
       </p>
       {displayed.length === 0 ? (
         <div className="empty glass">
@@ -93,7 +101,7 @@ export function WishlistTab({
       ) : (
         <div className="wishlist-grid">
           {displayed.map(it => (
-            <div key={it.id} className={`glass wish-card ${it.priority}`}>
+            <div key={it.id} className={`glass wish-card ${it.priority} ${it.inLibrary ? 'found' : ''}`}>
               <div className="wish-top">
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {editingId === it.id ? (
@@ -161,9 +169,18 @@ export function WishlistTab({
                     <option>Low</option>
                   </select>
                 ) : (
-                  <span className={`badge ${it.priority}`}>{it.priority}</span>
+                  <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {it.inLibrary && <span className="badge found">In Library</span>}
+                    <span className={`badge ${it.priority}`}>{it.priority}</span>
+                  </span>
                 )}
               </div>
+              {it.inLibrary && it.matches && it.matches.length > 0 && (
+                <span className="muted" style={{ fontSize: 11, lineHeight: 1.4 }}>
+                  Match: {it.matches.map(m => `${m.title} — ${m.artist}`).join(', ')}
+                  {it.matchCount !== undefined && it.matchCount > 3 ? ` +${it.matchCount - 3} more` : ''}
+                </span>
+              )}
               <span className="muted" style={{ fontSize: 12 }}>
                 {new Date(it.dateAdded).toLocaleDateString()}
               </span>

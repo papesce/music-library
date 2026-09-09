@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Track } from '../../types/api.d';
 import { Modal } from '../../components/ui/Modal';
+import { Field } from '../../components/ui/Field';
 import { api } from '../../api';
 import { coverUrl } from '../../lib/path';
 import { buildGoogleQuery, openGoogle } from '../../lib/googleQuery';
@@ -14,62 +15,6 @@ type Tab = 'details' | 'artwork' | 'lyrics' | 'file';
 const TAB_ORDER: Tab[] = ['details', 'artwork', 'lyrics', 'file'];
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const;
 type WhisperModel = (typeof WHISPER_MODELS)[number];
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  inputMode,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
-}) {
-  const isUnknown = value.trim().toLowerCase() === 'unknown';
-  return (
-    <label
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        fontSize: 12,
-        color: 'var(--muted)',
-      }}
-    >
-      {label}
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onFocus={e => {
-          if (isUnknown) {
-            const t = e.target as HTMLInputElement;
-            requestAnimationFrame(() => t.select());
-          }
-        }}
-        onMouseUp={e => {
-          if (isUnknown) e.preventDefault();
-        }}
-        onClick={e => {
-          if (isUnknown) (e.target as HTMLInputElement).select();
-        }}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        style={{
-          padding: '9px 12px',
-          borderRadius: 12,
-          border: '1px solid var(--border)',
-          background: 'rgba(255,255,255,0.06)',
-          color: isUnknown ? 'var(--muted)' : 'var(--text)',
-          fontStyle: isUnknown ? 'italic' : 'normal',
-          outline: 'none',
-        }}
-      />
-    </label>
-  );
-}
 
 export function EditTrackModal({
   track,
@@ -1172,7 +1117,7 @@ export function EditTrackModal({
                   <span>Preview {playback?.isActive ? '· synced to playback' : '· static'}</span>
                   {playback?.isActive && <span className="muted">{(playback.currentTime ?? 0).toFixed(1)}s</span>}
                 </div>
-                <LyricsPreview lrc={lyricsPreview} currentTimeSec={playback?.isActive ? (playback.currentTime ?? 0) : 0} maxHeight={260} />
+                <LyricsPreview key={lyricsPreview} lrc={lyricsPreview} currentTimeSec={playback?.isActive ? (playback.currentTime ?? 0) : 0} maxHeight={260} />
               </div>
             ) : (
               <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--border-soft)', borderRadius: 10, background: 'rgba(0,0,0,0.15)' }}>
