@@ -14,6 +14,7 @@ import { UnifiedPlayer } from './features/player/UnifiedPlayer';
 import { useFolders } from './features/settings/useFolders';
 import { useLibrary } from './features/library/useLibrary';
 import { usePlayer } from './features/player/usePlayer';
+import { useBassBoost } from './features/player/useBassBoost';
 import { usePlayHistory } from './features/player/usePlayHistory';
 import { PlayHistory } from './features/player/PlayHistory';
 import { useWishlist } from './features/wishlist/useWishlist';
@@ -69,6 +70,26 @@ export default function App() {
       return pick;
     },
   });
+  const bass = useBassBoost(player.audioRef);
+  // per-track bass sync: when playing track changes, load its saved boost into WebAudio graph
+  const perTrackBassDb = player.playingTrack?.bassBoost ?? 0;
+  useEffect(() => {
+    if (player.playingTrack) {
+      bass.applyGain(perTrackBassDb);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.playingTrack?.id, perTrackBassDb]);
+  const handleBassChange = async (v: number) => {
+    bass.applyGain(v);
+    const t = player.playingTrack;
+    if (!t) return;
+    try {
+      const updated = await api.setBassBoost(t.filePath, v === 0 ? null : v);
+      setTracks(prev => prev.map(x => (x.filePath === updated.filePath ? updated : x)));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   useEffect(() => {
     playingIdRef.current = player.playingId;
   }, [player.playingId]);
@@ -552,6 +573,10 @@ export default function App() {
         onToggleReviewed={
           player.playingTrack ? () => toggleReviewed(player.playingTrack!) : undefined
         }
+        bassDb={perTrackBassDb}
+        onBassChange={handleBassChange}
+        isBassPreviewOn={bass.isPreviewOn}
+        onToggleBassPreview={bass.togglePreview}
       />
 
       {splitTrack && (

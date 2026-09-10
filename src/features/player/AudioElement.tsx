@@ -18,6 +18,7 @@ export function AudioElement({
       ref={audioRef}
       hidden
       preload="metadata"
+      crossOrigin="anonymous"
       style={{ display: 'none' }}
       // onEnded handled centrally in usePlayer (supports autoplay pure-random)
       onPause={() => {

@@ -30,6 +30,10 @@ type Props = {
   onToggleAutoplay?: () => void;
   onPreviewChange?: (draft: { path: string; text: string; source: string } | null) => void;
   onToggleReviewed?: () => void;
+  bassDb?: number;
+  onBassChange?: (v: number) => void;
+  isBassPreviewOn?: boolean;
+  onToggleBassPreview?: () => void;
 };
 
 function LyricsView({
@@ -167,6 +171,99 @@ function VolumeControl({
   );
 }
 
+function BassControl({
+  bassDb,
+  isPreviewOn,
+  onBassChange,
+  onTogglePreview,
+  size = 'compact',
+}: {
+  bassDb: number;
+  isPreviewOn: boolean;
+  onBassChange: (v: number) => void;
+  onTogglePreview: () => void;
+  size?: 'compact' | 'full';
+}) {
+  const [draft, setDraft] = useState(bassDb);
+  const [dragging, setDragging] = useState(false);
+  const commitTimer = useState(() => ({ current: null as ReturnType<typeof setTimeout> | null }))[0];
+  useEffect(() => { if (!dragging) setDraft(bassDb); }, [bassDb, dragging]);
+  useEffect(() => { return () => { if (commitTimer.current) clearTimeout(commitTimer.current); }; }, []);
+  const active = draft > 0;
+  const previewActive = active && isPreviewOn;
+  const displayDb = dragging ? draft : bassDb;
+  const displayActive = displayDb > 0;
+  const displayPreview = displayActive && isPreviewOn;
+  const commit = (v: number) => {
+    setDragging(false);
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = null;
+    onBassChange(v);
+  };
+  const handlePointerDown = () => setDragging(true);
+  const handlePointerUp = () => {
+    if (dragging) commit(draft);
+  };
+  const handleChange = (v: number) => {
+    setDraft(v);
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(() => {
+      if (dragging) commit(v);
+    }, 400);
+  };
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: size === 'compact' ? 6 : 8 }} onClick={e => e.stopPropagation()}>
+      <button
+        className="btn"
+        onClick={onTogglePreview}
+        disabled={!displayActive}
+        title={!displayActive ? 'Raise bass to enable preview' : displayPreview ? `Bass +${displayDb}dB — click to hear original` : `Original — click to hear bass +${displayDb}dB`}
+        aria-label={displayPreview ? 'Preview bass off' : 'Preview bass on'}
+        aria-pressed={displayPreview}
+        style={{
+          padding: size === 'compact' ? '5px 8px' : '6px 10px',
+          borderRadius: 999,
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.02em',
+          border: `1px solid ${displayPreview ? 'rgba(124,92,255,0.45)' : displayActive ? 'rgba(255,255,255,0.16)' : 'var(--border-soft)'}`,
+          background: displayPreview ? 'rgba(124,92,255,0.22)' : displayActive ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+          color: displayPreview ? '#c4b5ff' : displayActive ? 'var(--text)' : 'var(--muted)',
+          opacity: !displayActive ? 0.6 : 1,
+          cursor: !displayActive ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {displayPreview ? `♬ +${displayDb}dB` : displayActive ? '♬ Preview' : '♬ Off'}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={15}
+        step={1}
+        value={dragging ? draft : bassDb}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onChange={e => handleChange(Number(e.target.value))}
+        onKeyUp={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') commit(draft); }}
+        onBlur={() => { if (dragging) commit(draft); }}
+        aria-label="Bass boost"
+        title={`Bass boost ${dragging ? draft : bassDb}dB — drag then release to apply`}
+        style={{
+          width: size === 'compact' ? 64 : 86,
+          accentColor: displayPreview ? 'var(--accent)' : displayActive ? 'rgba(124,92,255,0.55)' : 'rgba(255,255,255,0.25)',
+          cursor: 'pointer',
+        }}
+      />
+      {size === 'full' && (
+        <span className="muted" style={{ fontSize: 11, minWidth: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: displayPreview ? '#c4b5ff' : dragging ? '#c4b5ff' : undefined }}>
+          +{dragging ? draft : bassDb}dB
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function UnifiedPlayer({
   track,
   isPaused,
@@ -191,6 +288,10 @@ export function UnifiedPlayer({
   onToggleReviewed,
   // kept for backwards compat — no longer used (detect removed from player)
   onPreviewChange: _onPreviewChange,
+  bassDb = 0,
+  onBassChange,
+  isBassPreviewOn = false,
+  onToggleBassPreview,
 }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
@@ -307,6 +408,9 @@ export function UnifiedPlayer({
           onMutedChange={onMutedChange}
           size="compact"
         />
+        {onBassChange && onToggleBassPreview && (
+          <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onTogglePreview={onToggleBassPreview} size="compact" />
+        )}
         <span className="muted" style={{ fontSize: 11, minWidth: 36, textAlign: 'right' }}>
           {formatDuration(Math.floor(currentTime))} /{' '}
           {formatDuration(Math.floor(duration || track.duration || 0))}
@@ -600,7 +704,7 @@ export function UnifiedPlayer({
               {formatDuration(Math.floor(duration || track.duration || 0))}
             </span>
           </div>
-          <div className="now-controls" style={{ alignItems: 'center' }}>
+          <div className="now-controls" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <button
               className="play-btn"
               onClick={onToggle}
@@ -618,6 +722,9 @@ export function UnifiedPlayer({
               onMutedChange={onMutedChange}
               size="full"
             />
+            {onBassChange && onToggleBassPreview && (
+              <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onTogglePreview={onToggleBassPreview} size="full" />
+            )}
           </div>
         </div>
       </div>

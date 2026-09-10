@@ -50,6 +50,7 @@ import {
   setTrackReviewed,
   setTrackIsCover,
   setTrackLoudness,
+  setTrackBassBoost,
   getSplitDraft,
   setSplitDraft,
   deleteSplitDraft,
@@ -79,6 +80,7 @@ type Track = {
   reviewedAt?: string;
   isCover?: boolean;
   loudness?: Loudness | null;
+  bassBoost?: number | null;
 };
 type WishlistItem = {
   id: string;
@@ -252,6 +254,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         reviewedAt: prev?.reviewedAt,
         isCover: prev?.isCover ?? false,
         loudness: prev?.loudness ?? null,
+        bassBoost: prev?.bassBoost ?? null,
       });
     } catch {
       const fb = fallbackFromFilename(filePath);
@@ -267,6 +270,7 @@ async function scanFolders(folders: string[]): Promise<Track[]> {
         reviewedAt: prev?.reviewedAt,
         isCover: prev?.isCover ?? false,
         loudness: prev?.loudness ?? null,
+        bassBoost: prev?.bassBoost ?? null,
       });
     }
   }
@@ -1109,6 +1113,26 @@ const server = createServer(async (req, res) => {
       return json(res, 200, updated);
     }
 
+    if (url.pathname === '/api/tracks/bass' && req.method === 'PUT') {
+      const body = await getBody(req);
+      const filePath: string | undefined = body.path || body.filePath || (url.searchParams.get('path') ?? undefined);
+      if (!filePath) return json(res, 400, { error: 'path required' });
+      const raw = body.bassBoost ?? body.bass ?? body.value;
+      let bassBoost: number | null = null;
+      if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+        const n = Math.round(Number(raw));
+        if (!Number.isFinite(n) || n < 0 || n > 15) return json(res, 400, { error: 'bassBoost must be 0-15 or null' });
+        bassBoost = n;
+        if (bassBoost === 0) bassBoost = null;
+      }
+      const resolved = resolve(filePath);
+      const existing = getTrackByPath(resolved) || getTrackByPath(filePath);
+      if (!existing) return json(res, 404, { error: 'track not found' });
+      const updated = setTrackBassBoost(resolved, bassBoost);
+      if (!updated) return json(res, 500, { error: 'failed to update bassBoost' });
+      return json(res, 200, updated);
+    }
+
     // ——— App state export/import (non-derived: reviewed/isCover/loudness, wishlist, folders, split drafts) ———
     if (url.pathname === '/api/state/export' && req.method === 'GET') {
       const tracks = getTracks().map(t => ({
@@ -1117,6 +1141,7 @@ const server = createServer(async (req, res) => {
         reviewedAt: t.reviewedAt ?? null,
         isCover: !!t.isCover,
         loudness: t.loudness ?? null,
+        bassBoost: t.bassBoost ?? null,
       }));
       const wishlist = getWishlist();
       const folders = getFolders();
@@ -1141,6 +1166,7 @@ const server = createServer(async (req, res) => {
             reviewedAt?: string | null;
             isCover?: boolean;
             loudness?: string | null;
+            bassBoost?: number | null;
           }[]
         | undefined = Array.isArray(body.tracks) ? body.tracks : undefined;
       const wishlist:
@@ -1178,9 +1204,14 @@ const server = createServer(async (req, res) => {
             if (lv === 'quiet') lv = 'normal';
             if (lv === null || ['normal', 'loud'].includes(lv)) patch.loudness = lv as any;
           }
+          if (t.bassBoost === null || (t.bassBoost !== undefined && Number.isFinite(Number(t.bassBoost)))) {
+            const n = t.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(t.bassBoost))));
+            (patch as any).bassBoost = n;
+          }
           if (Object.keys(patch).length) {
             // use granular setters to preserve reviewedAt semantics
             if ('loudness' in patch) setTrackLoudness(t.filePath, patch.loudness);
+            if ('bassBoost' in (patch as any)) setTrackBassBoost(t.filePath, (patch as any).bassBoost);
             if ('isCover' in patch) setTrackIsCover(t.filePath, patch.isCover);
             if ('reviewed' in patch) setTrackReviewed(t.filePath, patch.reviewed);
             updatedTracks++;

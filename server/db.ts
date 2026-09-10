@@ -18,6 +18,7 @@ export type Track = {
   reviewedAt?: string;
   isCover?: boolean;
   loudness?: Loudness | null;
+  bassBoost?: number | null;
 };
 export type WishlistItem = {
   id: string;
@@ -80,7 +81,8 @@ function initSchema(database: DatabaseSync) {
       reviewed INTEGER DEFAULT 0,
       reviewedAt TEXT,
       isCover INTEGER DEFAULT 0,
-      loudness TEXT
+      loudness TEXT,
+      bassBoost INTEGER DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS wishlist (
       id TEXT PRIMARY KEY,
@@ -224,6 +226,7 @@ function ensureTrackMigrations(d: DatabaseSync) {
     ['reviewedAt', 'ALTER TABLE tracks ADD COLUMN reviewedAt TEXT'],
     ['isCover', 'ALTER TABLE tracks ADD COLUMN isCover INTEGER DEFAULT 0'],
     ['loudness', 'ALTER TABLE tracks ADD COLUMN loudness TEXT'],
+    ['bassBoost', 'ALTER TABLE tracks ADD COLUMN bassBoost INTEGER DEFAULT 0'],
   ] as const) {
     try {
       d.prepare(`SELECT ${col} FROM tracks LIMIT 1`).get();
@@ -247,6 +250,8 @@ export function getTracks(): Track[] {
     let loud: Loudness | null = (r.loudness as Loudness | null) ?? null;
     if ((loud as any) === 'quiet') loud = 'normal';
     if (loud !== null && loud !== 'normal' && loud !== 'loud') loud = null;
+    const bbRaw = r.bassBoost;
+    const bb = bbRaw == null ? null : Math.min(15, Math.max(0, Math.round(Number(bbRaw))));
     return {
       id: r.id,
       filePath: r.filePath,
@@ -262,6 +267,7 @@ export function getTracks(): Track[] {
       reviewedAt: r.reviewedAt ?? undefined,
       isCover: !!r.isCover,
       loudness: loud,
+      bassBoost: bb,
     };
   });
 }
@@ -273,7 +279,7 @@ export function setTracks(tracks: Track[]) {
   try {
     d.prepare('DELETE FROM tracks').run();
     const stmt = d.prepare(
-      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt, isCover, loudness) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tracks (id, filePath, title, artist, album, genre, year, duration, duplicateGroupId, hasCover, reviewed, reviewedAt, isCover, loudness, bassBoost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     for (const t of tracks) {
       stmt.run(
@@ -290,7 +296,8 @@ export function setTracks(tracks: Track[]) {
         t.reviewed ? 1 : 0,
         t.reviewedAt ?? null,
         t.isCover ? 1 : 0,
-        t.loudness ?? null
+        t.loudness ?? null,
+        t.bassBoost ?? null
       );
     }
     d.exec('COMMIT');
@@ -380,7 +387,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
   if (!existing) return null;
   const merged = { ...existing, ...patch, filePath: existing.filePath, id: existing.id };
   d.prepare(
-    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ?, isCover = ?, loudness = ? WHERE filePath = ?'
+    'UPDATE tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, duration = ?, duplicateGroupId = ?, hasCover = ?, reviewed = ?, reviewedAt = ?, isCover = ?, loudness = ?, bassBoost = ? WHERE filePath = ?'
   ).run(
     merged.title,
     merged.artist,
@@ -394,6 +401,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     merged.reviewedAt ?? null,
     merged.isCover ? 1 : 0,
     merged.loudness ?? null,
+    merged.bassBoost ?? null,
     existing.filePath
   );
   const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
@@ -413,6 +421,7 @@ export function updateTrackByPath(filePath: string, patch: Partial<Track>): Trac
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
     loudness: (row.loudness as Loudness | null) ?? null,
+    bassBoost: row.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row.bassBoost)))),
   };
 }
 
@@ -451,6 +460,7 @@ export function setTrackIsCover(filePath: string, isCover: boolean): Track | nul
     reviewedAt: row2.reviewedAt ?? undefined,
     isCover: !!row2.isCover,
     loudness: (row2.loudness as Loudness | null) ?? null,
+    bassBoost: row2.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row2.bassBoost)))),
   };
 }
 
@@ -491,6 +501,7 @@ export function setTrackReviewed(filePath: string, reviewed: boolean): Track | n
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
     loudness: (row.loudness as Loudness | null) ?? null,
+    bassBoost: row.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row.bassBoost)))),
   };
 }
 
@@ -523,6 +534,43 @@ export function getTrackByPath(filePath: string): Track | null {
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
     loudness: (row.loudness as Loudness | null) ?? null,
+    bassBoost: row.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row.bassBoost)))),
+  };
+}
+
+export function setTrackBassBoost(filePath: string, bassBoost: number | null): Track | null {
+  const d = getDb();
+  ensureTrackMigrations(d);
+  const resolved = resolve(filePath);
+  const existing =
+    (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(resolved, resolved) as any) ||
+    (filePath !== resolved ? (d.prepare('SELECT * FROM tracks WHERE filePath = ? OR id = ?').get(filePath, filePath) as any) : null);
+  if (!existing) return null;
+  let v: number | null = null;
+  if (bassBoost != null) {
+    const n = Math.round(Number(bassBoost));
+    if (!Number.isFinite(n) || n < 0 || n > 15) throw new Error('invalid bassBoost 0-15');
+    v = n;
+  }
+  d.prepare('UPDATE tracks SET bassBoost = ? WHERE filePath = ?').run(v, existing.filePath);
+  const row = d.prepare('SELECT * FROM tracks WHERE filePath = ?').get(existing.filePath) as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    filePath: row.filePath,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    genre: row.genre,
+    year: row.year ?? undefined,
+    duration: row.duration ?? undefined,
+    duplicateGroupId: row.duplicateGroupId ?? undefined,
+    hasCover: !!row.hasCover,
+    reviewed: !!row.reviewed,
+    reviewedAt: row.reviewedAt ?? undefined,
+    isCover: !!row.isCover,
+    loudness: (row.loudness as Loudness | null) ?? null,
+    bassBoost: row.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row.bassBoost)))),
   };
 }
 
@@ -637,6 +685,7 @@ export function renameTrackPath(oldPath: string, newPath: string): Track | null 
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
     loudness: (row.loudness as Loudness | null) ?? null,
+    bassBoost: row.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row.bassBoost)))),
   };
 }
 
@@ -724,5 +773,6 @@ export function setTrackLoudness(filePath: string, loudness: Loudness | null): T
     reviewedAt: row.reviewedAt ?? undefined,
     isCover: !!row.isCover,
     loudness: (row.loudness as Loudness | null) ?? null,
+    bassBoost: row.bassBoost == null ? null : Math.min(15, Math.max(0, Math.round(Number(row.bassBoost)))),
   };
 }

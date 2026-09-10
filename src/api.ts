@@ -68,6 +68,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path: filePath, loudness }),
     }),
+  setBassBoost: (filePath: string, bassBoost: number | null) =>
+    req<Track>('/api/tracks/bass', {
+      method: 'PUT',
+      body: JSON.stringify({ path: filePath, bassBoost }),
+    }),
   detectSplit: (filePath: string, minSilenceMs = 700, silenceThreshDb = -50) =>
     req<{ path: string; split_points_ms: number[]; duration_ms: number }>('/api/split/detect', {
       method: 'POST',

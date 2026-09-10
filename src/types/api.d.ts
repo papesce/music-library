@@ -15,6 +15,7 @@ export type Track = {
   reviewedAt?: string;
   isCover?: boolean;
   loudness?: Loudness | null;
+  bassBoost?: number | null;
 };
 export type WishlistItem = {
   id: string;
