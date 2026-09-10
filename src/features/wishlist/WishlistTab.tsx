@@ -1,4 +1,5 @@
 import type { WishlistItem } from '../../types/api.d';
+import { copyThenOpenChosic } from '../../lib/chosic';
 
 export function WishlistTab({
   wName,
@@ -246,6 +247,14 @@ export function WishlistTab({
                       style={{ padding: '6px 12px' }}
                     >
                       Delete
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() => void copyThenOpenChosic(it.name, it.artist ?? undefined)}
+                      title="Find similar on Chosic (copies 'Artist - Title' to clipboard)"
+                      style={{ padding: '6px 12px' }}
+                    >
+                      ♪ Similar
                     </button>
                   </>
                 )}
