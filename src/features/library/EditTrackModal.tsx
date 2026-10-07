@@ -1134,6 +1134,8 @@ export function EditTrackModal({
                   borderRadius: 10,
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid var(--border-soft)',
+                  width: '100%',
+                  minWidth: 0,
                 }}
                 aria-busy="true"
                 aria-live="polite"
@@ -1146,7 +1148,16 @@ export function EditTrackModal({
               </div>
             )}
             {lyricsMode === 'edit' && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  width: '100%',
+                  minWidth: 0,
+                }}
+              >
                 <button
                   className="btn"
                   onClick={() => detectLyrics('auto')}
@@ -1161,14 +1172,7 @@ export function EditTrackModal({
                     gap: 6,
                   }}
                 >
-                  {lyricsDetecting ? (
-                    <>
-                      <span className="btn-spinner" aria-hidden />
-                      <span>Detecting…</span>
-                    </>
-                  ) : (
-                    '✨ Detect (auto)'
-                  )}
+                  ✨ Detect (auto)
                 </button>
                 <button
                   className="btn"
@@ -1218,7 +1222,7 @@ export function EditTrackModal({
                     ))}
                   </select>
                 </label>
-                <span style={{ flex: 1 }} />
+                <span style={{ flex: '1 1 12px' }} />
                 {lyricsDirty ? (
                   <span style={{ fontSize: 11, color: '#8ff5b8', fontWeight: 600 }}>
                     • will be saved with Save

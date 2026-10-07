@@ -213,6 +213,8 @@ export function SegmentList({
               opacity: isSkipped ? 0.55 : 1,
               border: isSkipped ? '1px dashed rgba(255,193,7,0.5)' : undefined,
               cursor: !isFocused ? 'pointer' : undefined,
+              position: 'relative',
+              zIndex: openMenu === i ? 1 : undefined,
             }}
           >
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
@@ -330,6 +332,20 @@ export function SegmentList({
                   fontSize: 12,
                 }}
               />
+              {!isFocused && (
+                <button
+                  className="segment-row-focus-trigger"
+                  onClick={e => {
+                    e.stopPropagation();
+                    onFocus?.(i);
+                  }}
+                  title="Focus track"
+                  aria-label={`Focus track ${i + 1}`}
+                >
+                  <span aria-hidden="true">◎</span>
+                  <span>Focus</span>
+                </button>
+              )}
               <div className="segment-row-menu" style={{ position: 'relative', flexShrink: 0 }}>
                 <button
                   className="segment-row-menu-trigger"
@@ -349,7 +365,6 @@ export function SegmentList({
                     className="glass segment-row-menu-dropdown"
                     role="menu"
                     onClick={e => e.stopPropagation()}
-                    onMouseLeave={() => setOpenMenu(null)}
                   >
                     <button
                       role="menuitem"
@@ -363,18 +378,6 @@ export function SegmentList({
                     >
                       ✕ Remove split
                     </button>
-                    {!isFocused && (
-                      <button
-                        role="menuitem"
-                        className="row-menu-item"
-                        onClick={() => {
-                          setOpenMenu(null);
-                          onFocus?.(i);
-                        }}
-                      >
-                        ◎ Focus track
-                      </button>
-                    )}
                   </div>
                 )}
               </div>

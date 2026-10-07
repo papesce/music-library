@@ -79,9 +79,19 @@ export function TrackList({
       <div className="glass track-list">
         <TrackListHeader sortKey={sortKey} sortDir={sortDir} toggleSort={toggleSort} />
         <div className="empty" style={{ border: 'none', margin: 16 }}>
-          <b>{showDupesOnly ? 'No duplicates' : 'No tracks yet'}</b>
+          <b>
+            {showDupesOnly
+              ? 'No duplicates'
+              : searchQuery?.trim()
+                ? 'No songs found'
+                : 'No tracks yet'}
+          </b>
           <span>
-            {showDupesOnly ? 'Your library is clean.' : 'Add a folder in settings and hit Scan.'}
+            {showDupesOnly
+              ? 'Your library is clean.'
+              : searchQuery?.trim()
+                ? 'Try a different title, artist, or search term.'
+                : 'Add a folder in settings and hit Scan.'}
           </span>
         </div>
       </div>

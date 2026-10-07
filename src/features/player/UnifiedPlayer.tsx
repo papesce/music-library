@@ -304,6 +304,7 @@ export function UnifiedPlayer({
   const pct = duration ? (currentTime / duration) * 100 : 0;
   const hasSynced = !!(synced && synced.length);
 
+
   // collapsed bar (always visible when track exists)
   const collapsed = (
     <div
@@ -639,11 +640,7 @@ export function UnifiedPlayer({
           <div className="unified-lyrics-pane">
             <div className="unified-lyrics-header">
               <span>Lyrics</span>
-              {hasSynced && (
-                <span className="muted" style={{ fontSize: 11 }}>
-                  synced
-                </span>
-              )}
+              {hasSynced && <span className="muted" style={{ fontSize: 11 }}>synced</span>}
             </div>
             <div className="unified-lyrics-body">
               {lyrics ? (
