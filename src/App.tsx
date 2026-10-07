@@ -577,6 +577,9 @@ export default function App() {
         onBassChange={handleBassChange}
         isBassPreviewOn={bass.isPreviewOn}
         onToggleBassPreview={bass.togglePreview}
+        bassMeter={bass.meter}
+        bassHeadroom={bass.headroom}
+        onBassHeadroomChange={bass.setHeadroomCompensation}
       />
 
       {splitTrack && (

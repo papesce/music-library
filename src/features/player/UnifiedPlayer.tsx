@@ -6,6 +6,7 @@ import { useLyrics } from './useLyrics';
 import { ArtworkLightbox } from '../../components/ui/ArtworkLightbox';
 import { PlayerActionsMenu } from './PlayerActionsMenu';
 import { LyricsPreview } from '../../components/LyricsPreview';
+import type { BassMeter } from './useBassBoost';
 
 type Props = {
   track: Track | null;
@@ -34,6 +35,9 @@ type Props = {
   onBassChange?: (v: number) => void;
   isBassPreviewOn?: boolean;
   onToggleBassPreview?: () => void;
+  bassMeter?: BassMeter;
+  bassHeadroom?: boolean;
+  onBassHeadroomChange?: (enabled: boolean) => void;
 };
 
 function LyricsView({
@@ -177,12 +181,18 @@ function BassControl({
   onBassChange,
   onTogglePreview,
   size = 'compact',
+  meter,
+  headroom,
+  onHeadroomChange,
 }: {
   bassDb: number;
   isPreviewOn: boolean;
   onBassChange: (v: number) => void;
   onTogglePreview: () => void;
   size?: 'compact' | 'full';
+  meter?: BassMeter;
+  headroom?: boolean;
+  onHeadroomChange?: (enabled: boolean) => void;
 }) {
   const [draft, setDraft] = useState(bassDb);
   const [dragging, setDragging] = useState(false);
@@ -194,6 +204,7 @@ function BassControl({
   const displayDb = dragging ? draft : bassDb;
   const displayActive = displayDb > 0;
   const displayPreview = displayActive && isPreviewOn;
+  const meterBands = meter?.bands ?? Array(24).fill(0);
   const commit = (v: number) => {
     setDragging(false);
     if (commitTimer.current) clearTimeout(commitTimer.current);
@@ -260,6 +271,23 @@ function BassControl({
           +{dragging ? draft : bassDb}dB
         </span>
       )}
+      {size === 'full' && meter && (
+        <span className="bass-analyzer" aria-label={`Bass analyzer, output peak ${meter.peakDb.toFixed(1)} decibels`}>
+          <span className="bass-analyzer-spectrum" aria-hidden="true">
+            {meterBands.map((level, i) => <i key={i} style={{ height: `${Math.max(3, level * 28)}px` }} />)}
+          </span>
+          <span className={`bass-analyzer-peak${meter.clipping ? ' is-clipping' : ''}`}>
+            <span>{meter.clipping ? 'CLIP' : `${meter.peakDb.toFixed(0)} dBFS`}</span>
+            <span className="bass-analyzer-scale"><i style={{ width: `${Math.max(0, Math.min(100, (meter.peakDb + 36) / 36 * 100))}%` }} /></span>
+          </span>
+          {onHeadroomChange && (
+            <label className="bass-headroom-toggle" title="Lower output by the boost amount to preserve headroom">
+              <input type="checkbox" checked={headroom ?? true} onChange={e => onHeadroomChange(e.target.checked)} />
+              Headroom
+            </label>
+          )}
+        </span>
+      )}
     </span>
   );
 }
@@ -292,6 +320,9 @@ export function UnifiedPlayer({
   onBassChange,
   isBassPreviewOn = false,
   onToggleBassPreview,
+  bassMeter,
+  bassHeadroom,
+  onBassHeadroomChange,
 }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
@@ -720,7 +751,7 @@ export function UnifiedPlayer({
               size="full"
             />
             {onBassChange && onToggleBassPreview && (
-              <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onTogglePreview={onToggleBassPreview} size="full" />
+              <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onTogglePreview={onToggleBassPreview} size="full" meter={bassMeter} headroom={bassHeadroom} onHeadroomChange={onBassHeadroomChange} />
             )}
           </div>
         </div>

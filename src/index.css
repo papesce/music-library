@@ -1802,6 +1802,70 @@ body {
   justify-content: center;
   gap: 12px;
 }
+.bass-analyzer {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.bass-analyzer-spectrum {
+  width: 82px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.bass-analyzer-spectrum i {
+  flex: 1;
+  min-height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(0deg, #45d6bd, #b4ef73);
+  transition: height 70ms linear;
+}
+.bass-analyzer-peak {
+  width: 64px;
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.bass-analyzer-peak.is-clipping {
+  color: #ff7186;
+  font-weight: 800;
+  animation: bass-clip-flash 0.45s steps(2, end) infinite;
+}
+.bass-analyzer-scale {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.bass-analyzer-scale i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #45d6bd, #ffd166 82%, #ff526b);
+  transition: width 80ms linear;
+}
+.bass-headroom-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.bass-headroom-toggle input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+@keyframes bass-clip-flash {
+  to { opacity: 0.45; }
+}
 .seek-fill {
   display: none;
 }
