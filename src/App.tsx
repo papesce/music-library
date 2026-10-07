@@ -72,7 +72,7 @@ export default function App() {
   });
   const bass = useBassBoost(player.audioRef);
   // per-track bass sync: when playing track changes, load its saved boost into WebAudio graph
-  const perTrackBassDb = player.playingTrack?.bassBoost ?? 0;
+  const perTrackBassDb = Math.min(6, Math.max(0, player.playingTrack?.bassBoost ?? 0));
   useEffect(() => {
     if (player.playingTrack) {
       bass.applyGain(perTrackBassDb);
@@ -575,11 +575,12 @@ export default function App() {
         }
         bassDb={perTrackBassDb}
         onBassChange={handleBassChange}
+        onBassPreview={bass.applyGain}
         isBassPreviewOn={bass.isPreviewOn}
         onToggleBassPreview={bass.togglePreview}
         bassMeter={bass.meter}
-        bassHeadroom={bass.headroom}
-        onBassHeadroomChange={bass.setHeadroomCompensation}
+        subBassDb={bass.subBassDb}
+        onSubBassChange={bass.setSubBassDb}
       />
 
       {splitTrack && (

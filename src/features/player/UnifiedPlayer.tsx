@@ -33,11 +33,12 @@ type Props = {
   onToggleReviewed?: () => void;
   bassDb?: number;
   onBassChange?: (v: number) => void;
+  onBassPreview?: (v: number) => void;
   isBassPreviewOn?: boolean;
   onToggleBassPreview?: () => void;
   bassMeter?: BassMeter;
-  bassHeadroom?: boolean;
-  onBassHeadroomChange?: (enabled: boolean) => void;
+  subBassDb?: number;
+  onSubBassChange?: (value: number) => void;
 };
 
 function LyricsView({
@@ -52,6 +53,101 @@ function LyricsView({
   // keep hook-based synced but render via shared component (lrc string form)
   const lrc = synced?.length ? synced.map(s => `[${String(Math.floor(s.ms/60000)).padStart(2,'0')}:${String(Math.floor((s.ms%60000)/1000)).padStart(2,'0')}.${String(Math.floor((s.ms%1000)/10)).padStart(2,'0')}]${s.text}`).join('\n') : lyrics;
   return <LyricsPreview lrc={lrc} currentTimeSec={currentTime} />;
+}
+
+function BassResponseChart({ meter }: { meter: BassMeter }) {
+  const left = 43;
+  const right = 622;
+  const top = 19;
+  const bottom = 143;
+  const xAt = (index: number) => left + (index / Math.max(1, meter.spectrumDb.length - 1)) * (right - left);
+  const spectrumY = (db: number) => top + ((0 - Math.max(-90, Math.min(0, db))) / 90) * (bottom - top);
+  const responseY = (db: number) => top + ((8 - Math.max(-12, Math.min(8, db))) / 20) * (bottom - top);
+  const spectrumPoints = meter.spectrumDb.map((db, i) => `${xAt(i).toFixed(1)},${spectrumY(db).toFixed(1)}`).join(' ');
+  const spectrumArea = `${left},${bottom} ${spectrumPoints} ${right},${bottom}`;
+  const combinedPoints = meter.combinedDb.map((db, i) => `${xAt(i).toFixed(1)},${spectrumY(db).toFixed(1)}`).join(' ');
+  const responsePoints = meter.responseDb.map((db, i) => `${xAt(i).toFixed(1)},${responseY(db).toFixed(1)}`).join(' ');
+  const ticks = [
+    { label: '20', ratio: 0 }, { label: '50', ratio: Math.log10(50 / 20) / 3 },
+    { label: '100', ratio: Math.log10(100 / 20) / 3 }, { label: '200', ratio: Math.log10(200 / 20) / 3 },
+    { label: '500', ratio: Math.log10(500 / 20) / 3 }, { label: '1k', ratio: Math.log10(1000 / 20) / 3 },
+    { label: '5k', ratio: Math.log10(5000 / 20) / 3 }, { label: '20k', ratio: 1 },
+  ];
+  const zeroY = responseY(0);
+  const bassEndX = left + (Math.log10(150 / 20) / 3) * (right - left);
+  return (
+    <section className={`bass-response-chart${meter.clipping ? ' is-clipping' : ''}`} aria-label="Song spectrum and bass EQ response">
+      <div className="bass-response-heading">
+        <div className="bass-response-title">
+          <b>Song spectrum &amp; EQ effect</b>
+        <span><i className="bass-legend-spectrum" /> Original <i className="bass-legend-response" /> EQ <i className="bass-legend-combined" /> Combined</span>
+        </div>
+        <div className="bass-chart-status">
+          {meter.clipping && (
+            <strong className="bass-clip-badge" role="status" title="The signal reached full scale before the limiter, which is catching the peak">CLIP RISK · limiter active</strong>
+          )}
+        </div>
+      </div>
+      <svg viewBox="0 0 640 174" role="img" aria-label={`Log-frequency chart from 20 hertz to 20 kilohertz. It shows the original song spectrum, the bass EQ response, and the predicted combined spectrum.${meter.clipping ? ' The limiter is catching peaks that reached full scale before it.' : ''}`}>
+        <text x={left} y="11" className="bass-chart-axis-caption">Song level · dBFS</text>
+        <text x={right} y="11" textAnchor="end" className="bass-chart-axis-caption">EQ change · dB</text>
+        {meter.clipping && <rect x={left} y={top} width={bassEndX - left} height={bottom - top} className="bass-chart-clip-zone" />}
+        {[-90, -60, -30, 0].map(db => {
+          const y = spectrumY(db);
+          return <g key={db}><line x1={left} x2={right} y1={y} y2={y} className="bass-chart-grid" /><text x={left - 5} y={y + 3} textAnchor="end" className="bass-chart-tick">{db}</text></g>;
+        })}
+        {ticks.map(tick => {
+          const x = left + tick.ratio * (right - left);
+          return <g key={tick.label}><line x1={x} x2={x} y1={top} y2={bottom} className="bass-chart-grid bass-chart-grid-vertical" /><text x={x} y="161" textAnchor="middle" className="bass-chart-tick">{tick.label}</text></g>;
+        })}
+        {[-10, -5, 0, 5].map(db => <text key={`eq-${db}`} x={right + 3} y={responseY(db) + 3} className="bass-chart-tick">{db > 0 ? `+${db}` : db}</text>)}
+        <line x1={left} x2={right} y1={zeroY} y2={zeroY} className="bass-chart-zero" />
+        <polygon points={spectrumArea} className="bass-chart-spectrum-area" />
+        <polyline points={spectrumPoints} className="bass-chart-spectrum-line" />
+        <polyline points={combinedPoints} className="bass-chart-combined-line" />
+        <polyline points={responsePoints} className="bass-chart-response-line" />
+      </svg>
+    </section>
+  );
+}
+
+function PeakHistoryChart({ meter, currentTime }: { meter: BassMeter; currentTime: number }) {
+  const widthLeft = 43;
+  const widthRight = 622;
+  const top = 12;
+  const bottom = 88;
+  const end = Math.max(currentTime, meter.history[meter.history.length - 1]?.timeSec ?? 0);
+  const start = Math.max(0, end - 30);
+  const xAt = (timeSec: number) => widthRight - ((end - timeSec) / 30) * (widthRight - widthLeft);
+  const yAt = (db: number) => top + ((0 - Math.max(-36, Math.min(0, db))) / 36) * (bottom - top);
+  const points = meter.history.filter(point => point.timeSec >= start && point.timeSec <= end);
+  const peakPath = points.map(point => `${xAt(point.timeSec).toFixed(1)},${yAt(point.peakDb).toFixed(1)}`).join(' ');
+  const levelPath = points.map(point => `${xAt(point.timeSec).toFixed(1)},${yAt(point.levelDb).toFixed(1)}`).join(' ');
+  const ticks = [0, 10, 20, 30];
+  return (
+    <section className="bass-history-chart" aria-label="Last 30 seconds of playback level and peak history">
+      <div className="bass-history-heading">
+        <b>Playback history · last 30 seconds</b>
+        <span><i className="bass-history-level-legend" /> Level <i className="bass-history-peak-legend" /> Peak</span>
+      </div>
+      {points.length < 2 ? (
+        <div className="bass-history-empty">Play this section to build its peak history.</div>
+      ) : (
+        <svg viewBox="0 0 640 112" role="img" aria-label="Pre-limiter short-term level and sample peaks over the last 30 seconds. The red dashed line marks digital full scale.">
+          {[-30, -20, -10].map(db => <g key={db}><line x1={widthLeft} x2={widthRight} y1={yAt(db)} y2={yAt(db)} className="bass-history-grid" /><text x={widthLeft - 5} y={yAt(db) + 3} textAnchor="end" className="bass-chart-tick">{db}</text></g>)}
+          <line x1={widthLeft} x2={widthRight} y1={yAt(0)} y2={yAt(0)} className="bass-history-clip-line" />
+          <text x={widthLeft - 5} y={yAt(0) + 3} textAnchor="end" className="bass-chart-tick">0</text>
+          {ticks.map(secondsAgo => {
+            const x = widthRight - (secondsAgo / 30) * (widthRight - widthLeft);
+            return <g key={secondsAgo}><line x1={x} x2={x} y1={top} y2={bottom} className="bass-history-grid bass-history-grid-vertical" /><text x={x} y="105" textAnchor="middle" className="bass-chart-tick">{secondsAgo === 0 ? 'now' : `−${secondsAgo}s`}</text></g>;
+          })}
+          <polyline points={levelPath} className="bass-history-level-line" />
+          <polyline points={peakPath} className="bass-history-peak-line" />
+          {points.filter(point => point.clipping).map((point, index) => <circle key={`${point.timeSec}-${index}`} cx={xAt(point.timeSec)} cy={yAt(point.peakDb)} r="2.5" className="bass-history-clip-point" />)}
+        </svg>
+      )}
+    </section>
+  );
 }
 
 function VolumeControl({
@@ -181,30 +277,28 @@ function BassControl({
   onBassChange,
   onTogglePreview,
   size = 'compact',
-  meter,
-  headroom,
-  onHeadroomChange,
+  subBassDb = 0,
+  onSubBassChange,
+  onBassPreview,
 }: {
   bassDb: number;
   isPreviewOn: boolean;
   onBassChange: (v: number) => void;
   onTogglePreview: () => void;
   size?: 'compact' | 'full';
-  meter?: BassMeter;
-  headroom?: boolean;
-  onHeadroomChange?: (enabled: boolean) => void;
+  subBassDb?: number;
+  onSubBassChange?: (value: number) => void;
+  onBassPreview?: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(bassDb);
   const [dragging, setDragging] = useState(false);
   const commitTimer = useState(() => ({ current: null as ReturnType<typeof setTimeout> | null }))[0];
   useEffect(() => { if (!dragging) setDraft(bassDb); }, [bassDb, dragging]);
   useEffect(() => { return () => { if (commitTimer.current) clearTimeout(commitTimer.current); }; }, []);
-  const active = draft > 0;
-  const previewActive = active && isPreviewOn;
   const displayDb = dragging ? draft : bassDb;
-  const displayActive = displayDb > 0;
+  const displayActive = displayDb > 0 || subBassDb > 0;
   const displayPreview = displayActive && isPreviewOn;
-  const meterBands = meter?.bands ?? Array(24).fill(0);
+  const totalBoostDb = displayDb + subBassDb;
   const commit = (v: number) => {
     setDragging(false);
     if (commitTimer.current) clearTimeout(commitTimer.current);
@@ -217,6 +311,7 @@ function BassControl({
   };
   const handleChange = (v: number) => {
     setDraft(v);
+    onBassPreview?.(v);
     if (commitTimer.current) clearTimeout(commitTimer.current);
     commitTimer.current = setTimeout(() => {
       if (dragging) commit(v);
@@ -228,7 +323,7 @@ function BassControl({
         className="btn"
         onClick={onTogglePreview}
         disabled={!displayActive}
-        title={!displayActive ? 'Raise bass to enable preview' : displayPreview ? `Bass +${displayDb}dB — click to hear original` : `Original — click to hear bass +${displayDb}dB`}
+        title={!displayActive ? 'Raise bass to enable preview' : displayPreview ? `Bass +${totalBoostDb}dB — click to hear original` : `Original — click to hear bass +${totalBoostDb}dB`}
         aria-label={displayPreview ? 'Preview bass off' : 'Preview bass on'}
         aria-pressed={displayPreview}
         style={{
@@ -245,48 +340,41 @@ function BassControl({
           whiteSpace: 'nowrap',
         }}
       >
-        {displayPreview ? `♬ +${displayDb}dB` : displayActive ? '♬ Preview' : '♬ Off'}
+        {displayPreview ? `♬ +${totalBoostDb}dB` : displayActive ? '♬ Preview' : '♬ Off'}
       </button>
-      <input
-        type="range"
-        min={0}
-        max={15}
-        step={1}
-        value={dragging ? draft : bassDb}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onChange={e => handleChange(Number(e.target.value))}
-        onKeyUp={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') commit(draft); }}
-        onBlur={() => { if (dragging) commit(draft); }}
-        aria-label="Bass boost"
-        title={`Bass boost ${dragging ? draft : bassDb}dB — drag then release to apply`}
-        style={{
-          width: size === 'compact' ? 64 : 86,
-          accentColor: displayPreview ? 'var(--accent)' : displayActive ? 'rgba(124,92,255,0.55)' : 'rgba(255,255,255,0.25)',
-          cursor: 'pointer',
-        }}
-      />
+      <span className={size === 'full' ? 'bass-band-control' : undefined}>
+        {size === 'full' && <label>Low shelf · 110 Hz</label>}
+        <input
+          type="range"
+          min={0}
+          max={6}
+          step={1}
+          value={dragging ? draft : bassDb}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onChange={e => handleChange(Number(e.target.value))}
+          onKeyUp={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') commit(draft); }}
+          onBlur={() => { if (dragging) commit(draft); }}
+          aria-label="Low shelf boost"
+          title={`Low shelf ${dragging ? draft : bassDb} dB — drag then release to apply`}
+          style={{
+            width: size === 'compact' ? 64 : 86,
+            accentColor: displayPreview ? 'var(--accent)' : displayActive ? 'rgba(124,92,255,0.55)' : 'rgba(255,255,255,0.25)',
+            cursor: 'pointer',
+          }}
+        />
+        {size === 'full' && <b>+{dragging ? draft : bassDb} dB</b>}
+      </span>
       {size === 'full' && (
-        <span className="muted" style={{ fontSize: 11, minWidth: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: displayPreview ? '#c4b5ff' : dragging ? '#c4b5ff' : undefined }}>
-          +{dragging ? draft : bassDb}dB
-        </span>
-      )}
-      {size === 'full' && meter && (
-        <span className="bass-analyzer" aria-label={`Bass analyzer, output peak ${meter.peakDb.toFixed(1)} decibels`}>
-          <span className="bass-analyzer-spectrum" aria-hidden="true">
-            {meterBands.map((level, i) => <i key={i} style={{ height: `${Math.max(3, level * 28)}px` }} />)}
-          </span>
-          <span className={`bass-analyzer-peak${meter.clipping ? ' is-clipping' : ''}`}>
-            <span>{meter.clipping ? 'CLIP' : `${meter.peakDb.toFixed(0)} dBFS`}</span>
-            <span className="bass-analyzer-scale"><i style={{ width: `${Math.max(0, Math.min(100, (meter.peakDb + 36) / 36 * 100))}%` }} /></span>
-          </span>
-          {onHeadroomChange && (
-            <label className="bass-headroom-toggle" title="Lower output by the boost amount to preserve headroom">
-              <input type="checkbox" checked={headroom ?? true} onChange={e => onHeadroomChange(e.target.checked)} />
-              Headroom
-            </label>
+        <>
+          {onSubBassChange && (
+            <span className="bass-band-control">
+              <label htmlFor="sub-bass-boost">Sub bass · 48 Hz</label>
+              <input id="sub-bass-boost" type="range" min={0} max={6} step={1} value={subBassDb} onChange={e => onSubBassChange(Number(e.target.value))} aria-label="Sub bass boost" />
+              <b>+{subBassDb} dB</b>
+            </span>
           )}
-        </span>
+        </>
       )}
     </span>
   );
@@ -321,11 +409,13 @@ export function UnifiedPlayer({
   isBassPreviewOn = false,
   onToggleBassPreview,
   bassMeter,
-  bassHeadroom,
-  onBassHeadroomChange,
+  subBassDb = 0,
+  onSubBassChange,
+  onBassPreview,
 }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
+  const [bassGraphsOpen, setBassGraphsOpen] = useState(true);
   const { lyrics, synced } = useLyrics(track?.filePath ?? null);
 
   useEffect(() => setArtFailed(false), [track?.filePath, coverBust]);
@@ -441,7 +531,7 @@ export function UnifiedPlayer({
           size="compact"
         />
         {onBassChange && onToggleBassPreview && (
-          <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onTogglePreview={onToggleBassPreview} size="compact" />
+          <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onBassPreview={onBassPreview} onTogglePreview={onToggleBassPreview} size="compact" subBassDb={subBassDb} onSubBassChange={onSubBassChange} />
         )}
         <span className="muted" style={{ fontSize: 11, minWidth: 36, textAlign: 'right' }}>
           {formatDuration(Math.floor(currentTime))} /{' '}
@@ -751,10 +841,29 @@ export function UnifiedPlayer({
               size="full"
             />
             {onBassChange && onToggleBassPreview && (
-              <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onTogglePreview={onToggleBassPreview} size="full" meter={bassMeter} headroom={bassHeadroom} onHeadroomChange={onBassHeadroomChange} />
+              <BassControl bassDb={bassDb!} isPreviewOn={isBassPreviewOn!} onBassChange={onBassChange} onBassPreview={onBassPreview} onTogglePreview={onToggleBassPreview} size="full" subBassDb={subBassDb} onSubBassChange={onSubBassChange} />
             )}
           </div>
         </div>
+        {bassMeter && (
+          <section className={`bass-graphs${bassGraphsOpen ? '' : ' is-collapsed'}`} aria-label="Bass analysis graphs">
+            <button
+              className="bass-graphs-toggle"
+              type="button"
+              aria-expanded={bassGraphsOpen}
+              onClick={() => setBassGraphsOpen(open => !open)}
+            >
+              <span><b>Bass analysis</b><small>Spectrum, EQ effect &amp; playback peaks</small></span>
+              <span className="bass-graphs-chevron" aria-hidden="true">{bassGraphsOpen ? '▾' : '▸'}</span>
+            </button>
+            {bassGraphsOpen && (
+              <div className="bass-graphs-content">
+                <BassResponseChart meter={bassMeter} />
+                <PeakHistoryChart meter={bassMeter} currentTime={currentTime} />
+              </div>
+            )}
+          </section>
+        )}
       </div>
 
       {collapsed}
