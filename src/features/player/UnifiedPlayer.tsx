@@ -415,7 +415,7 @@ export function UnifiedPlayer({
 }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
-  const [bassGraphsOpen, setBassGraphsOpen] = useState(true);
+  const [bassGraphsOpen, setBassGraphsOpen] = useState(false);
   const { lyrics, synced } = useLyrics(track?.filePath ?? null);
 
   useEffect(() => setArtFailed(false), [track?.filePath, coverBust]);
@@ -615,7 +615,7 @@ export function UnifiedPlayer({
   return (
     <div className="unified-player-wrap">
       <div className="drawer-backdrop" onClick={onCollapse} style={{ zIndex: 45 }} />
-      <div className="glass unified-expanded">
+      <div className={`glass unified-expanded${bassGraphsOpen ? ' has-bass-graphs-open' : ''}`}>
         <div className="now-header">
           <div className="now-header-meta">
             <b>

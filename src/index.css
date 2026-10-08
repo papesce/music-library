@@ -1485,9 +1485,19 @@ body {
   display: grid;
   grid-template-columns: 340px 1fr;
   gap: 16px;
-  flex: 1;
+  flex: 0 1 auto;
+  height: min(52vh, 500px);
   min-height: 0;
   overflow: hidden;
+}
+.unified-expanded.has-bass-graphs-open .unified-expanded-body {
+  height: min(30vh, 280px);
+}
+.unified-expanded.has-bass-graphs-open .unified-artwork {
+  width: auto;
+  height: 100%;
+  aspect-ratio: 1;
+  max-width: 100%;
 }
 .unified-artwork {
   width: 100%;
@@ -1548,14 +1558,22 @@ body {
   }
   .unified-expanded-body {
     grid-template-columns: 1fr;
-    overflow: auto;
+    grid-template-rows: min(25vh, 200px) minmax(0, 1fr);
+    height: min(58vh, 500px);
+    overflow: hidden;
+  }
+  .unified-expanded.has-bass-graphs-open .unified-expanded-body {
+    grid-template-rows: min(14vh, 110px) minmax(0, 1fr);
+    height: min(26vh, 220px);
   }
   .unified-artwork {
-    max-width: 320px;
+    width: auto;
+    height: 100%;
+    aspect-ratio: 1;
     margin: 0 auto;
   }
   .unified-lyrics-pane {
-    min-height: 260px;
+    min-height: 0;
   }
 }
 
