@@ -99,6 +99,8 @@ export const api = {
         splitPoints: number[];
         segmentTitles: string[];
         segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[];
+        skippedIndices?: number[];
+        dismissedDuplicateTitles?: (string | null)[];
         updatedAt: string;
       } | null;
     }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`),
@@ -106,7 +108,9 @@ export const api = {
     filePath: string,
     splitPoints: number[],
     segmentTitles: string[],
-    segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[]
+    segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[],
+    skippedIndices?: number[],
+    dismissedDuplicateTitles?: (string | null)[]
   ) =>
     req<{
       draft: {
@@ -114,11 +118,13 @@ export const api = {
         splitPoints: number[];
         segmentTitles: string[];
         segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[];
+        skippedIndices?: number[];
+        dismissedDuplicateTitles?: (string | null)[];
         updatedAt: string;
       };
     }>('/api/split/draft', {
       method: 'PUT',
-      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles, segments }),
+      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles, segments, skippedIndices, dismissedDuplicateTitles }),
     }),
   deleteSplitDraft: (filePath: string) =>
     req<{ ok: boolean }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`, {

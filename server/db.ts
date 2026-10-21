@@ -115,6 +115,8 @@ function initSchema(database: DatabaseSync) {
     if (!cols.some(c => c.name === 'segments')) {
       database.exec(`ALTER TABLE split_drafts ADD COLUMN segments TEXT`);
     }
+    if (!cols.some(c => c.name === 'skippedIndices')) database.exec(`ALTER TABLE split_drafts ADD COLUMN skippedIndices TEXT`);
+    if (!cols.some(c => c.name === 'dismissedDuplicateTitles')) database.exec(`ALTER TABLE split_drafts ADD COLUMN dismissedDuplicateTitles TEXT`);
   } catch {}
 }
 
@@ -589,6 +591,8 @@ export type SplitDraft = {
   splitPoints: number[];
   segmentTitles: string[];
   segments?: SegmentDraft[];
+  skippedIndices?: number[];
+  dismissedDuplicateTitles?: (string | null)[];
   updatedAt: string;
 };
 
@@ -610,6 +614,8 @@ export function getSplitDraft(filePath: string): SplitDraft | null {
       splitPoints: JSON.parse(row.splitPoints),
       segmentTitles: JSON.parse(row.segmentTitles),
       segments,
+      skippedIndices: row.skippedIndices ? JSON.parse(row.skippedIndices) : undefined,
+      dismissedDuplicateTitles: row.dismissedDuplicateTitles ? JSON.parse(row.dismissedDuplicateTitles) : undefined,
       updatedAt: row.updatedAt,
     };
   } catch {
@@ -621,17 +627,19 @@ export function setSplitDraft(
   filePath: string,
   splitPoints: number[],
   segmentTitles: string[],
-  segments?: SegmentDraft[]
+  segments?: SegmentDraft[],
+  skippedIndices?: number[],
+  dismissedDuplicateTitles?: (string | null)[]
 ): SplitDraft {
   const d = getDb();
   const resolved = resolve(filePath);
   const now = new Date().toISOString();
   d.prepare(
-    `INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, segments, updatedAt)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(filePath) DO UPDATE SET splitPoints=excluded.splitPoints, segmentTitles=excluded.segmentTitles, segments=excluded.segments, updatedAt=excluded.updatedAt`
-  ).run(resolved, JSON.stringify(splitPoints), JSON.stringify(segmentTitles), segments ? JSON.stringify(segments) : null, now);
-  return { filePath: resolved, splitPoints, segmentTitles, segments, updatedAt: now };
+    `INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, segments, skippedIndices, dismissedDuplicateTitles, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(filePath) DO UPDATE SET splitPoints=excluded.splitPoints, segmentTitles=excluded.segmentTitles, segments=excluded.segments, skippedIndices=excluded.skippedIndices, dismissedDuplicateTitles=excluded.dismissedDuplicateTitles, updatedAt=excluded.updatedAt`
+  ).run(resolved, JSON.stringify(splitPoints), JSON.stringify(segmentTitles), segments ? JSON.stringify(segments) : null, JSON.stringify(skippedIndices ?? []), JSON.stringify(dismissedDuplicateTitles ?? []), now);
+  return { filePath: resolved, splitPoints, segmentTitles, segments, skippedIndices, dismissedDuplicateTitles, updatedAt: now };
 }
 
 export function deleteSplitDraft(filePath: string): boolean {
@@ -706,6 +714,8 @@ export function getAllSplitDrafts(): SplitDraft[] {
       splitPoints: JSON.parse(r.splitPoints),
       segmentTitles: JSON.parse(r.segmentTitles),
       segments,
+      skippedIndices: r.skippedIndices ? JSON.parse(r.skippedIndices) : undefined,
+      dismissedDuplicateTitles: r.dismissedDuplicateTitles ? JSON.parse(r.dismissedDuplicateTitles) : undefined,
       updatedAt: r.updatedAt,
     };
   });
@@ -717,7 +727,7 @@ export function setAllSplitDrafts(drafts: SplitDraft[]) {
   try {
     d.prepare('DELETE FROM split_drafts').run();
     const stmt = d.prepare(
-      'INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, segments, updatedAt) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO split_drafts (filePath, splitPoints, segmentTitles, segments, skippedIndices, dismissedDuplicateTitles, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     for (const dr of drafts)
       stmt.run(
@@ -725,6 +735,8 @@ export function setAllSplitDrafts(drafts: SplitDraft[]) {
         JSON.stringify(dr.splitPoints),
         JSON.stringify(dr.segmentTitles),
         dr.segments ? JSON.stringify(dr.segments) : null,
+        JSON.stringify(dr.skippedIndices ?? []),
+        JSON.stringify(dr.dismissedDuplicateTitles ?? []),
         dr.updatedAt
       );
     d.exec('COMMIT');

@@ -58,6 +58,7 @@ import {
   getAllSplitDrafts,
   setAllSplitDrafts,
   clearWishlist,
+  type SegmentDraft,
 } from './db.js';
 const execFileAsync = promisify(execFile);
 
@@ -1173,7 +1174,15 @@ const server = createServer(async (req, res) => {
         | { id: string; name: string; artist?: string; priority?: string; dateAdded?: string }[]
         | undefined = Array.isArray(body.wishlist) ? body.wishlist : undefined;
       const splitDrafts:
-        | { filePath: string; splitPoints: number[]; segmentTitles: string[]; updatedAt?: string }[]
+        | {
+            filePath: string;
+            splitPoints: number[];
+            segmentTitles: string[];
+            segments?: SegmentDraft[];
+            skippedIndices?: number[];
+            dismissedDuplicateTitles?: (string | null)[];
+            updatedAt?: string;
+          }[]
         | undefined = Array.isArray(body.splitDrafts) ? body.splitDrafts : undefined;
       let updatedTracks = 0,
         updatedWishlist = 0;
@@ -1258,7 +1267,7 @@ const server = createServer(async (req, res) => {
           for (const d of splitDrafts) {
             if (!d.filePath) continue;
             try {
-              setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? []);
+              setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? [], d.segments, d.skippedIndices, d.dismissedDuplicateTitles);
             } catch {}
           }
         }
@@ -2021,7 +2030,9 @@ const server = createServer(async (req, res) => {
           };
         });
       }
-      const draft = setSplitDraft(resolved, sorted, titles, segments);
+      const skippedIndices = Array.isArray(body.skippedIndices) ? body.skippedIndices.map(Number).filter((n: number) => Number.isInteger(n) && n >= 0) : [];
+      const dismissedDuplicateTitles = Array.isArray(body.dismissedDuplicateTitles) ? body.dismissedDuplicateTitles.map((s: unknown) => s == null ? null : String(s)) : [];
+      const draft = setSplitDraft(resolved, sorted, titles, segments, skippedIndices, dismissedDuplicateTitles);
       return json(res, 200, { draft });
     }
     if (url.pathname === '/api/split/draft' && req.method === 'DELETE') {

@@ -22,6 +22,8 @@ type Props = {
   activeIndex?: number | null;
   isPlaying?: boolean;
   cursorMs?: number | null;
+  dismissedDuplicateTitles?: (string | null)[];
+  onDismissDuplicate?: (idx: number, normalizedTitle: string) => void;
 };
 
 export function SegmentList({
@@ -42,6 +44,8 @@ export function SegmentList({
   activeIndex = null,
   isPlaying = false,
   cursorMs = null,
+  dismissedDuplicateTitles = [],
+  onDismissDuplicate,
 }: Props) {
   const isFocused = focusedIndex !== null;
   const trackCount = splitPoints.length - 1;
@@ -87,8 +91,7 @@ export function SegmentList({
     return candidates.slice(0, 3).map(c => c.t);
   };
 
-  const [dismissed, setDismissed] = useState<Map<number, string>>(() => new Map());
-  const isDismissed = (i: number, title: string) => dismissed.get(i) === normalize(title);
+  const isDismissed = (i: number, title: string) => dismissedDuplicateTitles[i] === normalize(title);
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   useEffect(() => {
     if (openMenu === null) return;
@@ -172,12 +175,10 @@ export function SegmentList({
             className="btn"
             style={{ padding: '4px 10px', fontSize: 11 }}
             onClick={() => {
-              const next = new Map(dismissed);
               for (const idx of indices) {
                 const t = segmentTitles[idx] ?? '';
-                if (findDupes(t).length > 0) next.set(idx, normalize(t));
+                if (findDupes(t).length > 0) onDismissDuplicate?.(idx, normalize(t));
               }
-              setDismissed(next);
             }}
           >
             Confirm none are duplicates
@@ -408,13 +409,7 @@ export function SegmentList({
                   <button
                     className="btn"
                     style={{ padding: '2px 8px', fontSize: 11 }}
-                    onClick={() =>
-                      setDismissed(prev => {
-                        const next = new Map(prev);
-                        next.set(i, normalize(title));
-                        return next;
-                      })
-                    }
+                    onClick={() => onDismissDuplicate?.(i, normalize(title))}
                     title="Hide warning for this title"
                   >
                     Not duplicate
