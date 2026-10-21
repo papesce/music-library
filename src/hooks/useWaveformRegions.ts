@@ -82,8 +82,10 @@ export function useWaveformRegions({
       });
       bandRegionIds.current.add(r.id);
       r.on('click', () => {
-        (ws as unknown as { _regionClickBlocked?: boolean })._regionClickBlocked = true;
-        onRegionClick?.(i);
+        if (splitPoints.length > 2) {
+          (ws as unknown as { _regionClickBlocked?: boolean })._regionClickBlocked = true;
+          onRegionClick?.(i);
+        }
       });
     });
     boundaries.forEach(ptMs => {

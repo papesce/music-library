@@ -17,14 +17,85 @@ type Props = {
   libraryTracks?: Track[];
   skipped?: Set<number>;
   onToggleSkip?: (idx: number) => void;
+  onSetReviewed?: (idx: number, reviewed: boolean) => void;
   sourceTrack?: Track | null;
   playingIndex?: number | null;
   activeIndex?: number | null;
   isPlaying?: boolean;
   cursorMs?: number | null;
   dismissedDuplicateTitles?: (string | null)[];
-  onDismissDuplicate?: (idx: number, normalizedTitle: string) => void;
 };
+
+export const normalizeSegmentTitle = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+export function findDuplicateTracks(query: string, libraryTracks: Track[], sourceTrack: Track | null): Track[] {
+  const q = normalizeSegmentTitle(query);
+  if (q.length < 2) return [];
+  const sourcePath = sourceTrack?.filePath ? String(sourceTrack.filePath) : '';
+  const candidates: { t: Track; score: number }[] = [];
+  for (const t of libraryTracks) {
+    if (sourcePath && t.filePath === sourcePath) continue;
+    const titleN = normalizeSegmentTitle(t.title);
+    const artistN = normalizeSegmentTitle(t.artist);
+    const combined = `${artistN} ${titleN}`;
+    let score = -1;
+    if (titleN === q) score = 100;
+    else if (combined === q) score = 99;
+    else if (titleN.includes(q) || q.includes(titleN)) score = 80 - Math.abs(titleN.length - q.length) * 0.5;
+    else if (combined.includes(q) || q.includes(combined)) score = 70 - Math.abs(combined.length - q.length) * 0.5;
+    else {
+      const qTokens = new Set(q.split(' ').filter(Boolean));
+      const tTokens = new Set(titleN.split(' ').filter(Boolean));
+      let overlap = 0;
+      for (const token of qTokens) if (tTokens.has(token)) overlap++;
+      if (overlap >= 2 || (overlap >= 1 && q.length >= 5)) score = 50 + overlap * 10;
+    }
+    if (score >= 0) candidates.push({ t, score });
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.slice(0, 3).map(candidate => candidate.t);
+}
+
+export function FocusedDuplicateReview({
+  index, title, libraryTracks, sourceTrack, skipped, dismissed, onToggleSkip, onDismiss, onUndo, onSetReviewed,
+}: {
+  index: number; title: string; libraryTracks: Track[]; sourceTrack: Track;
+  skipped: boolean; dismissed: boolean; onToggleSkip: () => void; onDismiss: () => void; onUndo: () => void;
+  onSetReviewed: (reviewed: boolean) => void;
+}) {
+  const dupes = skipped || dismissed ? [] : findDuplicateTracks(title, libraryTracks, sourceTrack);
+  const reviewed = skipped || dismissed;
+  return (
+    <div className="glass-soft" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 10, flexShrink: 0 }}>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+        <input type="checkbox" checked={!skipped} onChange={onToggleSkip} style={{ accentColor: 'var(--accent)' }} />
+        Export track {index + 1}
+      </label>
+      <span style={{ width: 1, height: 22, background: 'var(--border-soft)', flexShrink: 0 }} />
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+        <input type="checkbox" checked={dismissed} onChange={e => onSetReviewed(e.target.checked)} style={{ accentColor: '#22c55e' }} />
+        Reviewed
+      </label>
+      <span style={{ width: 1, height: 22, background: 'var(--border-soft)', flexShrink: 0 }} />
+      {reviewed ? (
+        <>
+          <span className="muted" style={{ fontSize: 11 }}>{skipped ? 'Skipped from export' : 'Marked not a duplicate'}</span>
+          <button className="btn" onClick={onUndo} style={{ padding: '4px 9px', fontSize: 11 }}>Undo review</button>
+        </>
+      ) : dupes.length ? (
+        <>
+          <span style={{ color: '#ffca28', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            Possible duplicate{dupes.length > 1 ? 's' : ''}:
+          </span>
+          <span className="muted" style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }} title={dupes.map(d => `${d.artist} — ${d.title} · ${d.album}`).join('\n')}>
+            {dupes.map(d => `${d.artist} — ${d.title}`).join(' · ')}
+          </span>
+          <button className="btn" onClick={onDismiss} style={{ padding: '4px 9px', fontSize: 11, whiteSpace: 'nowrap' }}>Not a duplicate</button>
+        </>
+      ) : <span className="muted" style={{ fontSize: 11 }}>No possible duplicates found</span>}
+    </div>
+  );
+}
 
 export function SegmentList({
   splitPoints,
@@ -39,59 +110,19 @@ export function SegmentList({
   libraryTracks = [],
   skipped = new Set<number>(),
   onToggleSkip,
+  onSetReviewed,
   sourceTrack = null,
   playingIndex = null,
   activeIndex = null,
   isPlaying = false,
   cursorMs = null,
   dismissedDuplicateTitles = [],
-  onDismissDuplicate,
 }: Props) {
   const isFocused = focusedIndex !== null;
   const trackCount = splitPoints.length - 1;
   const indices = isFocused ? [focusedIndex as number] : splitPoints.slice(0, -1).map((_, i) => i);
 
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-
-  const findDupes = (query: string): Track[] => {
-    const q = normalize(query);
-    if (q.length < 2) return [];
-    // exclude the source file itself
-    const sourcePath = sourceTrack?.filePath ? String(sourceTrack.filePath) : '';
-    const candidates: { t: Track; score: number }[] = [];
-    for (const t of libraryTracks) {
-      if (sourcePath && t.filePath === sourcePath) continue;
-      const titleN = normalize(t.title);
-      const artistN = normalize(t.artist);
-      const combined = `${artistN} ${titleN}`;
-      let score = -1;
-      if (titleN === q) score = 100;
-      else if (combined === q) score = 99;
-      else if (titleN.includes(q) || q.includes(titleN))
-        score = 80 - Math.abs(titleN.length - q.length) * 0.5;
-      else if (combined.includes(q) || q.includes(combined))
-        score = 70 - Math.abs(combined.length - q.length) * 0.5;
-      else {
-        // token overlap
-        const qTokens = new Set(q.split(' ').filter(Boolean));
-        const tTokens = new Set(titleN.split(' ').filter(Boolean));
-        let overlap = 0;
-        for (const tok of qTokens) if (tTokens.has(tok)) overlap++;
-        if (overlap >= 2 || (overlap >= 1 && q.length >= 5)) score = 50 + overlap * 10;
-      }
-      if (score >= 0) candidates.push({ t, score });
-    }
-    candidates.sort((a, b) => b.score - a.score);
-    return candidates.slice(0, 3).map(c => c.t);
-  };
-
-  const isDismissed = (i: number, title: string) => dismissedDuplicateTitles[i] === normalize(title);
+  const isDismissed = (i: number, title: string) => dismissedDuplicateTitles[i] === normalizeSegmentTitle(title);
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   useEffect(() => {
     if (openMenu === null) return;
@@ -109,12 +140,11 @@ export function SegmentList({
       document.removeEventListener('keydown', esc);
     };
   }, [openMenu]);
-  const hasAnyDupes =
-    !isFocused &&
-    indices.some(i => {
+  const unresolvedDuplicateCount = indices.filter(i => {
       const t = segmentTitles[i] ?? '';
-      return normalize(t).length >= 2 && findDupes(t).length > 0 && !isDismissed(i, t);
-    });
+      return !skipped.has(i) && !isDismissed(i, t) && normalizeSegmentTitle(t).length >= 2 && findDuplicateTracks(t, libraryTracks, sourceTrack).length > 0;
+  }).length;
+  const hasAnyDupes = !isFocused && unresolvedDuplicateCount > 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -156,33 +186,12 @@ export function SegmentList({
           }}
         >
           <span style={{ color: '#ffca28', fontWeight: 600 }}>
-            {
-              indices.filter(i => {
-                const t = segmentTitles[i] ?? '';
-                return !isDismissed(i, t) && findDupes(t).length > 0;
-              }).length
-            }{' '}
+            {unresolvedDuplicateCount}{' '}
             possible duplicate
-            {indices.filter(i => {
-              const t = segmentTitles[i] ?? '';
-              return !isDismissed(i, t) && findDupes(t).length > 0;
-            }).length > 1
-              ? 's'
-              : ''}{' '}
+            {unresolvedDuplicateCount > 1 ? 's' : ''}{' '}
             — not duplicates?
           </span>
-          <button
-            className="btn"
-            style={{ padding: '4px 10px', fontSize: 11 }}
-            onClick={() => {
-              for (const idx of indices) {
-                const t = segmentTitles[idx] ?? '';
-                if (findDupes(t).length > 0) onDismissDuplicate?.(idx, normalize(t));
-              }
-            }}
-          >
-            Confirm none are duplicates
-          </button>
+          <span className="muted">Open Focus to review</span>
         </div>
       )}
       {indices.map(i => {
@@ -192,8 +201,9 @@ export function SegmentList({
         const isActive = playingIndex === i && isPlaying;
         const isCursor = activeIndex === i;
         const title = segmentTitles[i] ?? '';
-        const rawDupes = findDupes(title);
-        const dupes = isDismissed(i, title) ? [] : rawDupes;
+        const rawDupes = findDuplicateTracks(title, libraryTracks, sourceTrack);
+        const isReviewed = skipped.has(i) || isDismissed(i, title);
+        const dupes = isReviewed ? [] : rawDupes;
         return (
           <div
             key={i}
@@ -305,6 +315,24 @@ export function SegmentList({
               >
                 {i + 1}
               </span>
+              {!isFocused && (
+                <input
+                  type="checkbox"
+                  checked={isDismissed(i, title)}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => onSetReviewed?.(i, e.target.checked)}
+                  title={isDismissed(i, title) ? 'Reviewed · click to unmark' : 'Mark as reviewed'}
+                  aria-label={isDismissed(i, title) ? `Unmark track ${i + 1} as reviewed` : `Mark track ${i + 1} as reviewed`}
+                  style={{
+                    width: 16,
+                    height: 16,
+                    marginLeft: -4,
+                    accentColor: '#22c55e',
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                  }}
+                />
+              )}
               <span
                 className="muted"
                 style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', flexShrink: 0 }}
@@ -406,14 +434,7 @@ export function SegmentList({
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#ffca28' }}>
                     Possible duplicate{dupes.length > 1 ? 's' : ''} in library:
                   </span>
-                  <button
-                    className="btn"
-                    style={{ padding: '2px 8px', fontSize: 11 }}
-                    onClick={() => onDismissDuplicate?.(i, normalize(title))}
-                    title="Hide warning for this title"
-                  >
-                    Not duplicate
-                  </button>
+                  {!isFocused && <span className="muted" style={{ fontSize: 10 }}>Open Focus to review</span>}
                 </div>
                 {dupes.map(d => (
                   <div
@@ -450,9 +471,6 @@ export function SegmentList({
                   </div>
                 ))}
               </div>
-            )}
-            {isSkipped && dupes.length === 0 && (
-              <span style={{ fontSize: 11, color: '#ffca28' }}>Will be skipped on export</span>
             )}
           </div>
         );

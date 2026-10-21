@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Track } from '../../types/api';
 import { Waveform, type WaveformHandle } from './Waveform';
-import { SegmentList } from './SegmentList';
+import { FocusedDuplicateReview, normalizeSegmentTitle, SegmentList } from './SegmentList';
 import { SplitSegmentEditor, type SegmentMeta } from './SplitSegmentEditor';
 import { api } from '../../api';
 import { formatMs } from '../../lib/format';
@@ -361,8 +361,9 @@ export function SplitModal({
         className="glass modal"
         style={{
           zIndex: 71,
-          width: 'min(920px, calc(100% - 24px))',
-          maxHeight: '90vh',
+          width: focusedIndex !== null ? 'min(1120px, calc(100% - 24px))' : 'min(920px, calc(100% - 24px))',
+          height: focusedIndex !== null ? 'min(900px, calc(100dvh - 32px))' : undefined,
+          maxHeight: 'calc(100dvh - 32px)',
           overflow: 'hidden',
           padding: 20,
           display: 'flex',
@@ -392,9 +393,10 @@ export function SplitModal({
               {track.filePath} · {track.duration ? formatMs(track.duration * 1000) : '—'}
             </p>
           </div>
-          <button className="btn" onClick={handleClose} style={{ padding: '6px 10px' }} title="Close — draft is auto-saved">
-            ✕
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {focusedIndex !== null && <button className="btn" onClick={handleExitFocus} disabled={exporting}>← Back to all</button>}
+            <button className="btn" onClick={handleClose} style={{ padding: '6px 10px' }} title="Close — draft is auto-saved">✕</button>
+          </div>
         </div>
 
         {error && (
@@ -435,7 +437,7 @@ export function SplitModal({
           />
         </div>
 
-        <div
+        {focusedIndex === null ? <div
           style={{
             flex: 1,
             overflow: 'auto',
@@ -474,12 +476,11 @@ export function SplitModal({
                 libraryTracks={libraryTracks ?? []}
                 skipped={skipped}
                 dismissedDuplicateTitles={dismissedDuplicateTitles}
-                onDismissDuplicate={(idx, title) => {
-                  const next = [...dismissedDuplicateTitles];
-                  next[idx] = title;
-                  setDismissedDuplicateTitles(next);
-                  writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: next });
-                  console.info('[split-draft] duplicate dismissed', { filePath: track.filePath, segmentIndex: idx, title });
+                onSetReviewed={(idx, reviewed) => {
+                  const nextDismissed = [...dismissedDuplicateTitles];
+                  nextDismissed[idx] = reviewed ? normalizeSegmentTitle(segmentTitles[idx] ?? '') : null;
+                  setDismissedDuplicateTitles(nextDismissed);
+                  writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: nextDismissed });
                 }}
                 onToggleSkip={idx => {
                   const next = new Set(skipped);
@@ -497,54 +498,74 @@ export function SplitModal({
               />
             );
           })()}
-          {focusedIndex !== null && segmentMetas[focusedIndex] && (
-            <div style={{ marginTop: 12 }}>
-              <SplitSegmentEditor
-                index={focusedIndex}
-                meta={segmentMetas[focusedIndex]!}
-                sourceFilePath={track.filePath}
-                startMs={splitPoints[focusedIndex] ?? 0}
-                endMs={splitPoints[focusedIndex + 1] ?? durationMs}
-                currentTimeSec={(() => {
-                  const s = splitPoints[focusedIndex] ?? 0;
-                  const e = splitPoints[focusedIndex + 1] ?? durationMs;
-                  if (absCursorMs == null) return 0;
-                  return Math.max(0, Math.min(e - s, absCursorMs - s)) / 1000;
-                })()}
-                onChange={next => {
-                  setSegmentMetas(prev => {
-                    const copy = [...prev];
-                    copy[focusedIndex] = next;
-                    return copy;
-                  });
-                  // keep simple title list in sync
-                  setSegmentTitles(prev => {
-                    const copy = [...prev];
-                    copy[focusedIndex] = next.title;
-                    return copy;
-                  });
-                }}
-              />
-            </div>
-          )}
         </div>
-
-        {focusedIndex !== null ? (
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              justifyContent: 'flex-start',
-              alignItems: 'center',
-              marginTop: 4,
-              flexShrink: 0,
+        : focusedIndex !== null && segmentMetas[focusedIndex] && <div style={{ flex: 1, minHeight: 0, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <FocusedDuplicateReview
+            index={focusedIndex}
+            title={segmentTitles[focusedIndex] ?? ''}
+            libraryTracks={libraryTracks ?? []}
+            sourceTrack={track}
+            skipped={skipped.has(focusedIndex)}
+            dismissed={dismissedDuplicateTitles[focusedIndex] === normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '')}
+            onToggleSkip={() => {
+              const next = new Set(skipped);
+              if (next.has(focusedIndex)) next.delete(focusedIndex);
+              else next.add(focusedIndex);
+              setSkipped(next);
+              writeSplitChoices(track.filePath, { skippedIndices: [...next], dismissedDuplicateTitles });
             }}
-          >
-            <button className="btn" onClick={handleExitFocus} disabled={exporting} title="Back to all tracks (Esc)">
-              ← Back to all
-            </button>
+            onDismiss={() => {
+              const next = [...dismissedDuplicateTitles];
+              next[focusedIndex] = normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '');
+              setDismissedDuplicateTitles(next);
+              writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: next });
+            }}
+            onSetReviewed={reviewed => {
+              const next = [...dismissedDuplicateTitles];
+              next[focusedIndex] = reviewed ? normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '') : null;
+              setDismissedDuplicateTitles(next);
+              writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: next });
+            }}
+            onUndo={() => {
+              const nextSkipped = new Set(skipped);
+              nextSkipped.delete(focusedIndex);
+              const nextDismissed = [...dismissedDuplicateTitles];
+              nextDismissed[focusedIndex] = null;
+              setSkipped(nextSkipped);
+              setDismissedDuplicateTitles(nextDismissed);
+              writeSplitChoices(track.filePath, { skippedIndices: [...nextSkipped], dismissedDuplicateTitles: nextDismissed });
+            }}
+          />
+          <div style={{ flex: 1, minHeight: 0 }}>
+          <SplitSegmentEditor
+            index={focusedIndex}
+            meta={segmentMetas[focusedIndex]!}
+            sourceFilePath={track.filePath}
+            startMs={splitPoints[focusedIndex] ?? 0}
+            endMs={splitPoints[focusedIndex + 1] ?? durationMs}
+            currentTimeSec={(() => {
+              const s = splitPoints[focusedIndex] ?? 0;
+              const e = splitPoints[focusedIndex + 1] ?? durationMs;
+              if (absCursorMs == null) return 0;
+              return Math.max(0, Math.min(e - s, absCursorMs - s)) / 1000;
+            })()}
+            onChange={next => {
+              setSegmentMetas(prev => {
+                const copy = [...prev];
+                copy[focusedIndex] = next;
+                return copy;
+              });
+              setSegmentTitles(prev => {
+                const copy = [...prev];
+                copy[focusedIndex] = next.title;
+                return copy;
+              });
+            }}
+          />
           </div>
-        ) : (
+        </div>}
+
+        {focusedIndex === null && (
           <div
             style={{
               display: 'flex',
@@ -596,10 +617,10 @@ export function SplitModal({
             </div>
           </div>
         )}
-        <p className="muted" style={{ marginTop: 8, fontSize: 11, flexShrink: 0 }}>
+        {focusedIndex === null && <p className="muted" style={{ marginTop: 8, fontSize: 11, flexShrink: 0 }}>
           Slices are written next to the original as “{track.title} - part 01.mp3” etc., then appear
           in your library after export (no re-upload).
-        </p>
+        </p>}
       </div>
     </>
   );

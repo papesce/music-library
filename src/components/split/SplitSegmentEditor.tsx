@@ -18,8 +18,6 @@ export type SegmentMeta = {
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const;
 type WhisperModel = (typeof WHISPER_MODELS)[number];
 
-type Tab = 'details' | 'lyrics';
-
 export function SplitSegmentEditor({
   index,
   meta,
@@ -39,7 +37,6 @@ export function SplitSegmentEditor({
   currentTimeSec?: number;
   onLyricsChange?: (lyrics: string, source: string) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<Tab>('details');
   const [lyricsDetecting, setLyricsDetecting] = useState(false);
   const [lyricsError, setLyricsError] = useState('');
   const [lyricsCopied, setLyricsCopied] = useState(false);
@@ -135,55 +132,18 @@ export function SplitSegmentEditor({
     }
   };
 
-  const detailsDirty = [meta.title, meta.artist, meta.album, meta.genre, meta.year].some(v => v.trim() !== '');
   const lyricsLines = meta.lyrics ? meta.lyrics.split('\n').length : 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)', minHeight: 0, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700 }}>Editing segment {index + 1}</span>
         <span className="muted" style={{ fontSize: 11 }}>Draft — applied on export</span>
       </div>
 
-      {/* Tab bar — mirrors EditTrackModal */}
-      <div role="tablist" aria-label="Segment sections" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)' }}>
-        {(['details', 'lyrics'] as Tab[]).map(t => {
-          const isActive = activeTab === t;
-          const badge = t === 'details' ? (detailsDirty ? '•' : undefined) : t === 'lyrics' ? (meta.lyrics ? String(lyricsLines) : undefined) : undefined;
-          return (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => setActiveTab(t)}
-              style={{
-                flex: 1,
-                padding: '6px 10px',
-                borderRadius: 999,
-                border: 'none',
-                background: isActive ? 'rgba(255,255,255,0.95)' : 'transparent',
-                color: isActive ? '#0a0a14' : 'var(--muted)',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-              }}
-            >
-              {t === 'details' ? 'Details' : 'Lyrics'}
-              {badge && badge !== '•' && (
-                <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 999, background: 'rgba(0,0,0,0.08)' }}>{badge}</span>
-              )}
-              {badge === '•' && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: '#2ecc71' }} />}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === 'details' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="split-editor-columns">
+        <section style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, minHeight: 0, overflow: 'auto', paddingRight: 4 }}>
+          <div className="split-editor-section-heading">Details</div>
           <Field size="compact" label="Title" value={meta.title} onChange={v => onChange({ ...meta, title: v })} placeholder={`Title for part ${index + 1}`} />
           <Field size="compact" label="Artist" value={meta.artist} onChange={v => onChange({ ...meta, artist: v })} placeholder="Artist" />
           <Field size="compact" label="Album" value={meta.album} onChange={v => onChange({ ...meta, album: v })} placeholder="Album" />
@@ -197,20 +157,12 @@ export function SplitSegmentEditor({
             <button className="btn" onClick={() => openGoogle(googleQueryForSearch)} style={{ padding: '4px 8px', fontSize: 11 }}>Google ↗</button>
             <button className="btn" onClick={() => void copyThenOpenChosic(meta.title, meta.artist)} style={{ padding: '4px 8px', fontSize: 11 }}>Chosic ↗</button>
           </div>
-        </div>
-      )}
+        </section>
 
-      {activeTab === 'lyrics' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.3, color: 'var(--muted)', textTransform: 'uppercase' }}>Lyrics {meta.lyricsSource ? `· ${meta.lyricsSource}` : ''}</span>
-            <span className="muted" style={{ fontSize: 11 }}>{meta.lyrics ? `${lyricsLines} lines` : 'no lyrics'}</span>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Lyrics mode"
-            style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)', width: 'fit-content' }}
-          >
+        <section style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, minHeight: 0 }}>
+          <div className="split-editor-section-heading">
+            <span>Lyrics {meta.lyricsSource ? `· ${meta.lyricsSource}` : ''}</span>
+            <div role="tablist" aria-label="Lyrics mode" style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-soft)' }}>
             {(['edit', 'preview'] as const).map(m => {
               const active = lyricsMode === m;
               return (
@@ -219,13 +171,16 @@ export function SplitSegmentEditor({
                   role="tab"
                   aria-selected={active}
                   onClick={() => setLyricsMode(m)}
-                  style={{ padding: '4px 12px', borderRadius: 999, border: 'none', background: active ? 'rgba(255,255,255,0.95)' : 'transparent', color: active ? '#0a0a14' : 'var(--muted)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ padding: '4px 10px', borderRadius: 999, border: 'none', background: active ? 'rgba(255,255,255,0.95)' : 'transparent', color: active ? '#0a0a14' : 'var(--muted)', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
                 >
                   {m === 'edit' ? 'Edit' : 'Preview'}
                 </button>
               );
             })}
+            </div>
+            <span className="muted" style={{ fontSize: 10, marginLeft: 'auto' }}>{meta.lyrics ? `${lyricsLines} lines` : 'no lyrics'}</span>
           </div>
+          <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: -2 }}>Lyrics text</label>
           {lyricsMode === 'edit' ? (
             <textarea
               ref={textareaRef}
@@ -236,7 +191,7 @@ export function SplitSegmentEditor({
               onMouseUp={updateSelection}
               placeholder="[00:12.00]Lyric line — edit before export, will be written as .lrc + USLT"
               rows={8}
-              style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'vertical', minHeight: 120 }}
+              style={{ width: '100%', flex: 1, minHeight: 80, boxSizing: 'border-box', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', resize: 'none' }}
             />
           ) : meta.lyrics.trim() ? (
             <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border-soft)', background: 'rgba(0,0,0,0.25)' }}>
@@ -267,8 +222,8 @@ export function SplitSegmentEditor({
           )}
           {lyricsError && <span style={{ fontSize: 11, color: '#ff6b6b' }}>{lyricsError}</span>}
           <span className="muted" style={{ fontSize: 10, lineHeight: 1.3 }}>Lyrics are stored per-segment draft and written on export as <code>.lrc</code> next to the sliced file + USLT. Whisper is slice-aware {Number.isFinite(startMs) ? `(${Math.round((startMs as number)/1000)}s→${Math.round((endMs as number)/1000)}s)` : ''}.</span>
-        </div>
-      )}
+        </section>
+      </div>
     </div>
   );
 }
