@@ -244,6 +244,9 @@ export function useWaveSurfer({
     if (!containerRef.current) return;
     setPlaying(false);
     setReady(false);
+    // A new audio URL creates a fresh renderer at fit width. Keep the scale
+    // state used by the minimap in sync with that renderer.
+    setZoom(1);
     onReadyChange?.(false);
     setCursorMs(null);
     stopAtRef.current = null;
@@ -261,6 +264,12 @@ export function useWaveSurfer({
       autoCenter: false,
       plugins: [regions],
     } as any);
+    const containerEl = containerRef.current as HTMLElement | null;
+    const setWaveformCursor = () => {
+      try {
+        ws.getWrapper().style.cursor = 'pointer';
+      } catch {}
+    };
     setError(null);
     setLoadingPct(5);
     ws.on('loading', (pct: number) => {
@@ -271,6 +280,7 @@ export function useWaveSurfer({
       setError(err instanceof Error ? err.message : String(err));
     });
     ws.on('ready', () => {
+      setWaveformCursor();
       setLoadingPct(100);
       setReady(true);
       onReadyChange?.(true);
@@ -308,19 +318,43 @@ export function useWaveSurfer({
     });
     ws.on('audioprocess', onAudioProcess);
     ws.on('timeupdate', onAudioProcess);
-    const containerEl = containerRef.current as HTMLElement | null;
-    const onPointerDown = (e: PointerEvent) => {
-      (ws as unknown as { _pointerDownTarget?: EventTarget | null })._pointerDownTarget = e.target;
+    setWaveformCursor();
+    let interactionPath: EventTarget[] = [];
+    let clearInteractionPathTimer: number | null = null;
+    const onClickCapture = (e: MouseEvent) => {
+      interactionPath = e.composedPath();
+      console.debug('[split-waveform] click capture', {
+        path: interactionPath.map(node =>
+          node instanceof HTMLElement ? `${node.tagName.toLowerCase()}${node.className ? `.${String(node.className).replaceAll(' ', '.')}` : ''}` : String(node)
+        ),
+      });
+      if (clearInteractionPathTimer !== null) clearTimeout(clearInteractionPathTimer);
+      // WaveSurfer emits interaction synchronously while this click bubbles
+      // through its wrapper. Clear the snapshot after dispatch if it did not.
+      clearInteractionPathTimer = window.setTimeout(() => {
+        interactionPath = [];
+        clearInteractionPathTimer = null;
+      }, 0);
     };
-    containerEl?.addEventListener('pointerdown', onPointerDown);
+    containerEl?.addEventListener('click', onClickCapture, true);
     ws.on('interaction', (newTimeSec: number) => {
-      if ((ws as unknown as { _regionClickBlocked?: boolean })._regionClickBlocked) {
-        (ws as unknown as { _regionClickBlocked?: boolean })._regionClickBlocked = false;
-        return;
+      const path = interactionPath;
+      interactionPath = [];
+      if (clearInteractionPathTimer !== null) {
+        clearTimeout(clearInteractionPathTimer);
+        clearInteractionPathTimer = null;
       }
-      const target = (ws as unknown as { _pointerDownTarget?: EventTarget | null })
-        ._pointerDownTarget as HTMLElement | null;
-      if (target?.closest?.('[data-marker="true"]')) return;
+      console.debug('[split-waveform] wavesurfer interaction', {
+        timeMs: Math.round(newTimeSec * 1000),
+        durationMs: Math.round(ws.getDuration() * 1000),
+        pointerPath: path.map(node =>
+          node instanceof HTMLElement ? `${node.tagName.toLowerCase()}${node.className ? `.${String(node.className).replaceAll(' ', '.')}` : ''}` : String(node)
+        ),
+      });
+      // Segment regions are navigation targets in the full waveform. They should
+      // not also trigger WaveSurfer's generic seek interaction. In isolated mode
+      // there is just one visual region, so clicking it should seek normally.
+      if (path.some(node => node instanceof HTMLElement && node.matches('[data-segment-region="true"], [data-marker="true"]'))) return;
       const ms = Math.round(newTimeSec * 1000);
       try {
         ws.seekTo(newTimeSec / (ws.getDuration() || 1));
@@ -333,7 +367,8 @@ export function useWaveSurfer({
     });
     wsRef.current = ws;
     return () => {
-      containerEl?.removeEventListener('pointerdown', onPointerDown);
+      if (clearInteractionPathTimer !== null) clearTimeout(clearInteractionPathTimer);
+      containerEl?.removeEventListener('click', onClickCapture, true);
       ws.destroy();
       setPlaying(false);
       setReady(false);

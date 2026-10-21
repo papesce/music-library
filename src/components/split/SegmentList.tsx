@@ -4,6 +4,10 @@ import type { WaveformHandle } from '../../hooks/useWaveSurfer';
 import type { Track } from '../../types/api';
 import { CircularPlayButton } from '../ui/CircularPlayButton';
 
+const REVIEW_GREEN = '#22c55e';
+const REVIEW_SHADOW = `5px 7px 18px -6px rgba(34,197,94,0.42), inset 0 1px 0 rgba(255,255,255,0.10)`;
+const REVIEW_BORDER = '1px solid rgba(255,255,255,0.08)';
+
 type Props = {
   splitPoints: number[];
   segmentTitles: string[];
@@ -24,6 +28,7 @@ type Props = {
   isPlaying?: boolean;
   cursorMs?: number | null;
   dismissedDuplicateTitles?: (string | null)[];
+  reviewedIndices?: Set<number>;
 };
 
 export const normalizeSegmentTitle = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -57,29 +62,28 @@ export function findDuplicateTracks(query: string, libraryTracks: Track[], sourc
 }
 
 export function FocusedDuplicateReview({
-  index, title, libraryTracks, sourceTrack, skipped, dismissed, onToggleSkip, onDismiss, onUndo, onSetReviewed,
+  index, title, libraryTracks, sourceTrack, skipped, reviewed, onToggleSkip, onDismiss, onUndo, onSetReviewed,
 }: {
   index: number; title: string; libraryTracks: Track[]; sourceTrack: Track;
-  skipped: boolean; dismissed: boolean; onToggleSkip: () => void; onDismiss: () => void; onUndo: () => void;
+  skipped: boolean; reviewed: boolean; onToggleSkip: () => void; onDismiss: () => void; onUndo: () => void;
   onSetReviewed: (reviewed: boolean) => void;
 }) {
-  const dupes = skipped || dismissed ? [] : findDuplicateTracks(title, libraryTracks, sourceTrack);
-  const reviewed = skipped || dismissed;
+  const dupes = reviewed ? [] : findDuplicateTracks(title, libraryTracks, sourceTrack);
   return (
-    <div className="glass-soft" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 10, flexShrink: 0 }}>
+    <div className="glass-soft" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 10, flexShrink: 0, boxShadow: reviewed ? REVIEW_SHADOW : undefined, border: reviewed ? REVIEW_BORDER : undefined }}>
       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, whiteSpace: 'nowrap', cursor: 'pointer' }}>
         <input type="checkbox" checked={!skipped} onChange={onToggleSkip} style={{ accentColor: 'var(--accent)' }} />
         Export track {index + 1}
       </label>
       <span style={{ width: 1, height: 22, background: 'var(--border-soft)', flexShrink: 0 }} />
       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-        <input type="checkbox" checked={dismissed} onChange={e => onSetReviewed(e.target.checked)} style={{ accentColor: '#22c55e' }} />
+        <input type="checkbox" checked={reviewed} onChange={e => onSetReviewed(e.target.checked)} style={{ accentColor: REVIEW_GREEN }} />
         Reviewed
       </label>
       <span style={{ width: 1, height: 22, background: 'var(--border-soft)', flexShrink: 0 }} />
       {reviewed ? (
         <>
-          <span className="muted" style={{ fontSize: 11 }}>{skipped ? 'Skipped from export' : 'Marked not a duplicate'}</span>
+          <span className="muted" style={{ fontSize: 11 }}>Ready</span>
           <button className="btn" onClick={onUndo} style={{ padding: '4px 9px', fontSize: 11 }}>Undo review</button>
         </>
       ) : dupes.length ? (
@@ -117,12 +121,13 @@ export function SegmentList({
   isPlaying = false,
   cursorMs = null,
   dismissedDuplicateTitles = [],
+  reviewedIndices = new Set<number>(),
 }: Props) {
   const isFocused = focusedIndex !== null;
   const trackCount = splitPoints.length - 1;
   const indices = isFocused ? [focusedIndex as number] : splitPoints.slice(0, -1).map((_, i) => i);
 
-  const isDismissed = (i: number, title: string) => dismissedDuplicateTitles[i] === normalizeSegmentTitle(title);
+  const isDismissed = (i: number, title: string) => reviewedIndices.has(i) || dismissedDuplicateTitles[i] === normalizeSegmentTitle(title);
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   useEffect(() => {
     if (openMenu === null) return;
@@ -142,7 +147,7 @@ export function SegmentList({
   }, [openMenu]);
   const unresolvedDuplicateCount = indices.filter(i => {
       const t = segmentTitles[i] ?? '';
-      return !skipped.has(i) && !isDismissed(i, t) && normalizeSegmentTitle(t).length >= 2 && findDuplicateTracks(t, libraryTracks, sourceTrack).length > 0;
+      return !isDismissed(i, t) && normalizeSegmentTitle(t).length >= 2 && findDuplicateTracks(t, libraryTracks, sourceTrack).length > 0;
   }).length;
   const hasAnyDupes = !isFocused && unresolvedDuplicateCount > 0;
 
@@ -202,12 +207,14 @@ export function SegmentList({
         const isCursor = activeIndex === i;
         const title = segmentTitles[i] ?? '';
         const rawDupes = findDuplicateTracks(title, libraryTracks, sourceTrack);
-        const isReviewed = skipped.has(i) || isDismissed(i, title);
-        const dupes = isReviewed ? [] : rawDupes;
+        const isMarkedReviewed = isDismissed(i, title);
+        const isReadyForReview = reviewedIndices.has(i) || isMarkedReviewed;
+        const dupes = isMarkedReviewed ? [] : rawDupes;
+        const needsDecision = !isMarkedReviewed && rawDupes.length > 0;
         return (
           <div
             key={i}
-            className={`glass-soft segment-row${isSkipped ? ' segment-row--skipped' : ''}${isCursor ? ' segment-row--playing' : ''}${isActive ? ' is-active' : ''}`}
+            className={`glass-soft segment-row${isSkipped ? ' segment-row--skipped' : ''}${needsDecision ? ' segment-row--needs-decision' : ''}${isCursor ? ' segment-row--playing' : ''}${isActive ? ' is-active' : ''}`}
             onClick={e => {
               if (isFocused) return;
               const target = e.target as HTMLElement;
@@ -221,8 +228,20 @@ export function SegmentList({
               gap: 6,
               padding: '10px 12px',
               borderRadius: 12,
-              opacity: isSkipped ? 0.55 : 1,
-              border: isSkipped ? '1px dashed rgba(255,193,7,0.5)' : undefined,
+              opacity: isSkipped && !needsDecision ? 0.55 : 1,
+              background: needsDecision ? 'rgba(245,158,11,0.07)' : undefined,
+              border: needsDecision
+                ? '1px solid rgba(245,158,11,0.34)'
+                : isReadyForReview
+                  ? REVIEW_BORDER
+                  : isSkipped
+                  ? '1px dashed rgba(255,193,7,0.5)'
+                  : undefined,
+              boxShadow: isReadyForReview
+                ? REVIEW_SHADOW
+                : needsDecision
+                  ? 'inset 3px 0 0 rgba(245,158,11,0.72)'
+                  : undefined,
               cursor: !isFocused ? 'pointer' : undefined,
               position: 'relative',
               zIndex: openMenu === i ? 1 : undefined,
@@ -318,7 +337,7 @@ export function SegmentList({
               {!isFocused && (
                 <input
                   type="checkbox"
-                  checked={isDismissed(i, title)}
+                  checked={reviewedIndices.has(i) || isDismissed(i, title)}
                   onClick={e => e.stopPropagation()}
                   onChange={e => onSetReviewed?.(i, e.target.checked)}
                   title={isDismissed(i, title) ? 'Reviewed · click to unmark' : 'Mark as reviewed'}
@@ -327,7 +346,7 @@ export function SegmentList({
                     width: 16,
                     height: 16,
                     marginLeft: -4,
-                    accentColor: '#22c55e',
+                    accentColor: REVIEW_GREEN,
                     flexShrink: 0,
                     cursor: 'pointer',
                   }}

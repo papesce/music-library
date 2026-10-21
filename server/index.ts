@@ -1181,6 +1181,7 @@ const server = createServer(async (req, res) => {
             segments?: SegmentDraft[];
             skippedIndices?: number[];
             dismissedDuplicateTitles?: (string | null)[];
+            reviewedIndices?: number[];
             updatedAt?: string;
           }[]
         | undefined = Array.isArray(body.splitDrafts) ? body.splitDrafts : undefined;
@@ -1267,7 +1268,7 @@ const server = createServer(async (req, res) => {
           for (const d of splitDrafts) {
             if (!d.filePath) continue;
             try {
-              setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? [], d.segments, d.skippedIndices, d.dismissedDuplicateTitles);
+              setSplitDraft(d.filePath, d.splitPoints ?? [], d.segmentTitles ?? [], d.segments, d.skippedIndices, d.dismissedDuplicateTitles, d.reviewedIndices);
             } catch {}
           }
         }
@@ -1876,7 +1877,7 @@ const server = createServer(async (req, res) => {
         }
         // optionally write ID3 tags if provided
         const meta = metas[i];
-        if (meta && (meta.title || meta.artist || meta.album)) {
+        if (meta && (meta.title || meta.artist || meta.album || meta.year || meta.genre || meta.isCover)) {
           try {
             const NodeID3: any = (await import('node-id3')).default;
             const tags: any = {};
@@ -1898,6 +1899,11 @@ const server = createServer(async (req, res) => {
                 };
             } catch {}
             NodeID3.update(tags, outPath);
+          } catch {}
+        }
+        if (meta?.isCover) {
+          try {
+            setTrackIsCover(outPath, true);
           } catch {}
         }
         created.push(outPath);
@@ -2012,6 +2018,7 @@ const server = createServer(async (req, res) => {
             album: s.album ? String(s.album) : undefined,
             genre: s.genre ? String(s.genre) : undefined,
             year: s.year ? String(s.year) : undefined,
+            isCover: Boolean(s.isCover),
             lyrics: s.lyrics ? String(s.lyrics) : undefined,
             lyricsSource: s.lyricsSource ? String(s.lyricsSource) : undefined,
           };
@@ -2025,6 +2032,7 @@ const server = createServer(async (req, res) => {
             album: s.album ? String(s.album) : undefined,
             genre: s.genre ? String(s.genre) : undefined,
             year: s.year ? String(s.year) : undefined,
+            isCover: Boolean(s.isCover),
             lyrics: s.lyrics ? String(s.lyrics) : undefined,
             lyricsSource: s.lyricsSource ? String(s.lyricsSource) : undefined,
           };
@@ -2032,7 +2040,8 @@ const server = createServer(async (req, res) => {
       }
       const skippedIndices = Array.isArray(body.skippedIndices) ? body.skippedIndices.map(Number).filter((n: number) => Number.isInteger(n) && n >= 0) : [];
       const dismissedDuplicateTitles = Array.isArray(body.dismissedDuplicateTitles) ? body.dismissedDuplicateTitles.map((s: unknown) => s == null ? null : String(s)) : [];
-      const draft = setSplitDraft(resolved, sorted, titles, segments, skippedIndices, dismissedDuplicateTitles);
+      const reviewedIndices = Array.isArray(body.reviewedIndices) ? body.reviewedIndices.map(Number).filter((n: number) => Number.isInteger(n) && n >= 0 && n < sorted.length - 1) : [];
+      const draft = setSplitDraft(resolved, sorted, titles, segments, skippedIndices, dismissedDuplicateTitles, reviewedIndices);
       return json(res, 200, { draft });
     }
     if (url.pathname === '/api/split/draft' && req.method === 'DELETE') {

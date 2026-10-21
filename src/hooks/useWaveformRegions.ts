@@ -81,9 +81,14 @@ export function useWaveformRegions({
         resize: false,
       });
       bandRegionIds.current.add(r.id);
+      // RegionsPlugin sets cursor: default on non-draggable regions. These bands
+      // occupy the waveform surface, so set the cursor on the hit target itself.
+      if (r.element) r.element.style.cursor = 'pointer';
+      if (splitPoints.length > 2) {
+        (r.element as HTMLElement | null)?.setAttribute('data-segment-region', 'true');
+      }
       r.on('click', () => {
         if (splitPoints.length > 2) {
-          (ws as unknown as { _regionClickBlocked?: boolean })._regionClickBlocked = true;
           onRegionClick?.(i);
         }
       });

@@ -7,7 +7,7 @@ import { api } from '../../api';
 import { formatMs } from '../../lib/format';
 import { usePersistedState } from '../../lib/persist';
 
-type SplitChoices = { skippedIndices: number[]; dismissedDuplicateTitles: (string | null)[] };
+type SplitChoices = { skippedIndices: number[]; dismissedDuplicateTitles: (string | null)[]; reviewedIndices: number[] };
 const splitChoicesKey = (filePath: string) => `split:choices:${filePath}`;
 function readSplitChoices(filePath: string): SplitChoices | null {
   try {
@@ -20,6 +20,7 @@ function readSplitChoices(filePath: string): SplitChoices | null {
     const choices = {
       skippedIndices: Array.isArray(parsed.skippedIndices) ? parsed.skippedIndices : [],
       dismissedDuplicateTitles: Array.isArray(parsed.dismissedDuplicateTitles) ? parsed.dismissedDuplicateTitles : [],
+      reviewedIndices: Array.isArray(parsed.reviewedIndices) ? parsed.reviewedIndices : [],
     };
     console.info('[split-draft] local choices loaded', { filePath, ...choices });
     return choices;
@@ -28,10 +29,16 @@ function readSplitChoices(filePath: string): SplitChoices | null {
     return null;
   }
 }
-function writeSplitChoices(filePath: string, choices: SplitChoices) {
+function writeSplitChoices(filePath: string, choices: Partial<SplitChoices>) {
   try {
-    localStorage.setItem(splitChoicesKey(filePath), JSON.stringify(choices));
-    console.info('[split-draft] local choices saved', { filePath, ...choices });
+    const previous = readSplitChoices(filePath);
+    const merged: SplitChoices = {
+      skippedIndices: choices.skippedIndices ?? previous?.skippedIndices ?? [],
+      dismissedDuplicateTitles: choices.dismissedDuplicateTitles ?? previous?.dismissedDuplicateTitles ?? [],
+      reviewedIndices: choices.reviewedIndices ?? previous?.reviewedIndices ?? [],
+    };
+    localStorage.setItem(splitChoicesKey(filePath), JSON.stringify(merged));
+    console.info('[split-draft] local choices saved', { filePath, ...merged });
   } catch (error) {
     console.warn('[split-draft] local choices save failed', { filePath, error });
   }
@@ -66,15 +73,16 @@ export function SplitModal({
   const [draftRestored, setDraftRestored] = useState(false);
   const [skipped, setSkipped] = useState<Set<number>>(() => new Set(readSplitChoices(track.filePath)?.skippedIndices ?? []));
   const [dismissedDuplicateTitles, setDismissedDuplicateTitles] = useState<(string | null)[]>(() => readSplitChoices(track.filePath)?.dismissedDuplicateTitles ?? []);
+  const [reviewedIndices, setReviewedIndices] = useState<Set<number>>(() => new Set(readSplitChoices(track.filePath)?.reviewedIndices ?? []));
   const [absCursorMs, setAbsCursorMs] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const saveDraftNow = async () => {
     if (!draftLoaded || splitPoints.length < 2) return;
-    writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles });
+    writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles, reviewedIndices: [...reviewedIndices] });
     setDraftSaving(true);
     try {
-      const result = await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles, segmentMetas, [...skipped], dismissedDuplicateTitles);
+      const result = await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles, segmentMetas, [...skipped], dismissedDuplicateTitles, [...reviewedIndices]);
       console.info('[split-draft] server save succeeded', { filePath: track.filePath, skippedIndices: result.draft.skippedIndices, dismissedDuplicateTitles: result.draft.dismissedDuplicateTitles });
     } catch (error) {
       console.warn('[split-draft] server save failed on close', { filePath: track.filePath, error });
@@ -104,7 +112,11 @@ export function SplitModal({
           setSplitPoints(pts);
           const localChoices = readSplitChoices(track.filePath);
           setSkipped(new Set((localChoices?.skippedIndices ?? draft.skippedIndices ?? []).filter(i => Number.isInteger(i) && i >= 0 && i < pts.length - 1)));
-          setDismissedDuplicateTitles((localChoices?.dismissedDuplicateTitles ?? draft.dismissedDuplicateTitles ?? []).slice(0, pts.length - 1));
+          const restoredDismissed = (localChoices?.dismissedDuplicateTitles ?? draft.dismissedDuplicateTitles ?? []).slice(0, pts.length - 1);
+          setDismissedDuplicateTitles(restoredDismissed);
+          const legacyReviewed = restoredDismissed.flatMap((v, i) => v && v === normalizeSegmentTitle(draft.segmentTitles?.[i] ?? '') ? [i] : []);
+          const restoredReviewed = (localChoices?.reviewedIndices ?? draft.reviewedIndices ?? legacyReviewed).filter(i => Number.isInteger(i) && i >= 0 && i < pts.length - 1);
+          setReviewedIndices(new Set(restoredReviewed));
           setSegmentTitles(draft.segmentTitles ?? pts.slice(0, -1).map(() => ''));
           if (Array.isArray(draft.segments) && draft.segments.length) {
             const metas: SegmentMeta[] = pts.slice(0, -1).map((_, i) => {
@@ -115,6 +127,7 @@ export function SplitModal({
                 album: String(s.album ?? track.album ?? 'Unknown'),
                 genre: String(s.genre ?? track.genre ?? 'Unknown'),
                 year: String(s.year ?? (track.year ? String(track.year) : '')),
+                isCover: Boolean(s.isCover),
                 lyrics: String(s.lyrics ?? ''),
                 lyricsSource: String(s.lyricsSource ?? ''),
               };
@@ -147,7 +160,7 @@ export function SplitModal({
     const t = setTimeout(async () => {
       setDraftSaving(true);
       try {
-        const result = await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles, segmentMetas, [...skipped], dismissedDuplicateTitles);
+        const result = await api.saveSplitDraft(track.filePath, splitPoints, segmentTitles, segmentMetas, [...skipped], dismissedDuplicateTitles, [...reviewedIndices]);
         console.info('[split-draft] autosave succeeded', { filePath: track.filePath, skippedIndices: result.draft.skippedIndices, dismissedDuplicateTitles: result.draft.dismissedDuplicateTitles });
       } catch (error) {
         console.warn('[split-draft] autosave failed', { filePath: track.filePath, error });
@@ -156,7 +169,7 @@ export function SplitModal({
       }
     }, 600);
     return () => clearTimeout(t);
-  }, [splitPoints, segmentTitles, segmentMetas, skipped, dismissedDuplicateTitles, draftLoaded, track.filePath]);
+  }, [splitPoints, segmentTitles, segmentMetas, skipped, dismissedDuplicateTitles, reviewedIndices, draftLoaded, track.filePath]);
 
   const handleDetect = useCallback(async () => {
     setDetecting(true);
@@ -208,6 +221,7 @@ export function SplitModal({
             album: track.album ?? 'Unknown',
             genre: track.genre ?? 'Unknown',
             year: track.year ? String(track.year) : '',
+            isCover: false,
             lyrics: '',
             lyricsSource: '',
           });
@@ -247,8 +261,22 @@ export function SplitModal({
   }, [focusedIndex]);
 
   const handleAddSplit = useCallback((posMs: number) => {
+    const boundaryIndex = splitPoints.findIndex(point => point > posMs);
+    if (boundaryIndex <= 0 || boundaryIndex >= splitPoints.length) return;
+    const splitSegmentIndex = boundaryIndex - 1;
+    const nextReviewed = new Set(
+      [...reviewedIndices]
+        .filter(i => i !== splitSegmentIndex)
+        .map(i => i > splitSegmentIndex ? i + 1 : i)
+    );
+    const nextDismissed = [...dismissedDuplicateTitles];
+    nextDismissed[splitSegmentIndex] = null;
+    nextDismissed.splice(splitSegmentIndex + 1, 0, null);
+    setReviewedIndices(nextReviewed);
+    setDismissedDuplicateTitles(nextDismissed);
+    writeSplitChoices(track.filePath, { reviewedIndices: [...nextReviewed], dismissedDuplicateTitles: nextDismissed });
     setSplitPoints(prev => [...prev, posMs].sort((a, b) => a - b));
-  }, []);
+  }, [splitPoints, reviewedIndices, dismissedDuplicateTitles, track.filePath]);
   const handleEnterFocus = useCallback((idx: number) => {
     setFocusedIndex(idx);
     const target = splitPoints[idx] ?? 0;
@@ -281,9 +309,11 @@ export function SplitModal({
       next.splice(idx + 1, 1);
       return next;
     })();
+    const nextReviewed = new Set([...reviewedIndices].filter(i => i !== idx + 1).map(i => i > idx + 1 ? i - 1 : i));
     setSkipped(nextSkipped);
     setDismissedDuplicateTitles(nextDismissed);
-    writeSplitChoices(track.filePath, { skippedIndices: [...nextSkipped], dismissedDuplicateTitles: nextDismissed });
+    setReviewedIndices(nextReviewed);
+    writeSplitChoices(track.filePath, { skippedIndices: [...nextSkipped], dismissedDuplicateTitles: nextDismissed, reviewedIndices: [...nextReviewed] });
     setSplitPoints(prev => {
       const next = [...prev];
       next.splice(idx + 1, 1);
@@ -299,7 +329,8 @@ export function SplitModal({
     setSegmentMetas([]);
     setSkipped(new Set());
     setDismissedDuplicateTitles([]);
-    writeSplitChoices(track.filePath, { skippedIndices: [], dismissedDuplicateTitles: [] });
+    setReviewedIndices(new Set());
+    writeSplitChoices(track.filePath, { skippedIndices: [], dismissedDuplicateTitles: [], reviewedIndices: [] });
     setSplitPoints(durationMs ? [0, durationMs] : [0, 60000]);
     setDraftRestored(false);
     setFocusedIndex(null);
@@ -322,6 +353,7 @@ export function SplitModal({
         if (m.album.trim()) o.album = m.album.trim();
         if (m.genre.trim()) o.genre = m.genre.trim();
         if (m.year.trim()) o.year = m.year.trim();
+        if (m.isCover) o.isCover = 'true';
         return o;
       });
       // fallback to titles if metas not yet populated
@@ -476,11 +508,16 @@ export function SplitModal({
                 libraryTracks={libraryTracks ?? []}
                 skipped={skipped}
                 dismissedDuplicateTitles={dismissedDuplicateTitles}
+                reviewedIndices={reviewedIndices}
                 onSetReviewed={(idx, reviewed) => {
                   const nextDismissed = [...dismissedDuplicateTitles];
-                  nextDismissed[idx] = reviewed ? normalizeSegmentTitle(segmentTitles[idx] ?? '') : null;
+                  nextDismissed[idx] = null;
+                  const nextReviewed = new Set(reviewedIndices);
+                  if (reviewed) nextReviewed.add(idx);
+                  else nextReviewed.delete(idx);
                   setDismissedDuplicateTitles(nextDismissed);
-                  writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: nextDismissed });
+                  setReviewedIndices(nextReviewed);
+                  writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: nextDismissed, reviewedIndices: [...nextReviewed] });
                 }}
                 onToggleSkip={idx => {
                   const next = new Set(skipped);
@@ -506,7 +543,7 @@ export function SplitModal({
             libraryTracks={libraryTracks ?? []}
             sourceTrack={track}
             skipped={skipped.has(focusedIndex)}
-            dismissed={dismissedDuplicateTitles[focusedIndex] === normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '')}
+            reviewed={reviewedIndices.has(focusedIndex) || dismissedDuplicateTitles[focusedIndex] === normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '')}
             onToggleSkip={() => {
               const next = new Set(skipped);
               if (next.has(focusedIndex)) next.delete(focusedIndex);
@@ -515,25 +552,32 @@ export function SplitModal({
               writeSplitChoices(track.filePath, { skippedIndices: [...next], dismissedDuplicateTitles });
             }}
             onDismiss={() => {
-              const next = [...dismissedDuplicateTitles];
-              next[focusedIndex] = normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '');
-              setDismissedDuplicateTitles(next);
-              writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: next });
-            }}
-            onSetReviewed={reviewed => {
-              const next = [...dismissedDuplicateTitles];
-              next[focusedIndex] = reviewed ? normalizeSegmentTitle(segmentTitles[focusedIndex] ?? '') : null;
-              setDismissedDuplicateTitles(next);
-              writeSplitChoices(track.filePath, { skippedIndices: [...skipped], dismissedDuplicateTitles: next });
-            }}
-            onUndo={() => {
-              const nextSkipped = new Set(skipped);
-              nextSkipped.delete(focusedIndex);
+              const next = new Set(reviewedIndices);
+              next.add(focusedIndex);
               const nextDismissed = [...dismissedDuplicateTitles];
               nextDismissed[focusedIndex] = null;
-              setSkipped(nextSkipped);
+              setReviewedIndices(next);
               setDismissedDuplicateTitles(nextDismissed);
-              writeSplitChoices(track.filePath, { skippedIndices: [...nextSkipped], dismissedDuplicateTitles: nextDismissed });
+              writeSplitChoices(track.filePath, { reviewedIndices: [...next], dismissedDuplicateTitles: nextDismissed });
+            }}
+            onSetReviewed={reviewed => {
+              const next = new Set(reviewedIndices);
+              if (reviewed) next.add(focusedIndex);
+              else next.delete(focusedIndex);
+              const nextDismissed = [...dismissedDuplicateTitles];
+              nextDismissed[focusedIndex] = null;
+              setReviewedIndices(next);
+              setDismissedDuplicateTitles(nextDismissed);
+              writeSplitChoices(track.filePath, { reviewedIndices: [...next], dismissedDuplicateTitles: nextDismissed });
+            }}
+            onUndo={() => {
+              const next = new Set(reviewedIndices);
+              next.delete(focusedIndex);
+              const nextDismissed = [...dismissedDuplicateTitles];
+              nextDismissed[focusedIndex] = null;
+              setReviewedIndices(next);
+              setDismissedDuplicateTitles(nextDismissed);
+              writeSplitChoices(track.filePath, { reviewedIndices: [...next], dismissedDuplicateTitles: nextDismissed });
             }}
           />
           <div style={{ flex: 1, minHeight: 0 }}>

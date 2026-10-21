@@ -11,6 +11,7 @@ export type SegmentMeta = {
   album: string;
   genre: string;
   year: string;
+  isCover: boolean;
   lyrics: string;
   lyricsSource: string;
 };
@@ -151,6 +152,14 @@ export function SplitSegmentEditor({
             <div style={{ flex: 1 }}><Field size="compact" label="Genre" value={meta.genre} onChange={v => onChange({ ...meta, genre: v })} placeholder="Genre" /></div>
             <div style={{ width: 110 }}><Field size="compact" label="Year" value={meta.year} onChange={v => onChange({ ...meta, year: v })} placeholder="2024" /></div>
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={meta.isCover}
+              onChange={e => onChange({ ...meta, isCover: e.target.checked })}
+            />
+            Cover version
+          </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-soft)' }}>
             <span className="muted" style={{ fontSize: 11, flex: 1, fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={googleQueryForSearch}>{googleQueryForSearch}</span>
             <button className="btn" onClick={copyGoogle} style={{ padding: '4px 8px', fontSize: 11 }}>{copied ? '✓ Copied' : 'Copy'}</button>

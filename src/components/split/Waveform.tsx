@@ -1,4 +1,12 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useWaveSurfer, type WaveformHandle } from '../../hooks/useWaveSurfer';
 import { useWaveformRegions } from '../../hooks/useWaveformRegions';
 import { useWaveformHotkey } from '../../hooks/useWaveformHotkey';
@@ -65,9 +73,15 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
     ? (splitPoints[(focusedIndex as number) + 1] ?? durationMs)
     : durationMs;
   const isolatedDuration = isFocused ? Math.max(200, focusEnd - focusStart) : durationMs;
-  const isolatedSplitPoints = isFocused
-    ? splitPoints.filter(p => p >= focusStart && p <= focusEnd).map(p => p - focusStart)
-    : splitPoints;
+  // Memoized: useWaveformRegions rebuilds every region when this identity changes,
+  // and Waveform re-renders on each audioprocess tick.
+  const isolatedSplitPoints = useMemo(
+    () =>
+      isFocused
+        ? splitPoints.filter(p => p >= focusStart && p <= focusEnd).map(p => p - focusStart)
+        : splitPoints,
+    [isFocused, splitPoints, focusStart, focusEnd]
+  );
   const isolatedAudioUrl = isFocused
     ? `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}start_ms=${focusStart}&end_ms=${focusEnd}`
     : audioUrl;
@@ -231,7 +245,7 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
   }, [isFocused, wsRef]);
 
   const [viewportMs, setViewportMs] = useState<{ left: number; right: number } | null>(null);
-  const [hoverMs, setHoverMs] = useState<number | null>(null);
+  const lastHoverLogAt = useRef(0);
   // refs for auto-disable check inside scroll handler (avoid stale closure)
   const autoScrollRef = useRef(autoScroll);
   useEffect(() => {
@@ -491,16 +505,39 @@ export const Waveform = forwardRef<WaveformHandle, Props>(function Waveform(
           ref={containerRef}
           onMouseMove={e => {
             if (!ready) {
-              setHoverMs(null);
               return;
             }
             const activeDur = isolatedDuration;
-            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-            const x = e.clientX - rect.left + (e.currentTarget as HTMLDivElement).scrollLeft;
-            const ms = Math.max(0, Math.min(activeDur, Math.round((x / (zoom || 1)) * 1000)));
-            setHoverMs(ms);
+            const host = e.currentTarget as HTMLDivElement;
+            // Use the rendered waveform's actual width. At fit-to-width, the
+            // effective pixels-per-second differs from the zoom state (often 1).
+            const wrapper = wsRef.current?.getWrapper();
+            const rect = wrapper?.getBoundingClientRect() ?? host.getBoundingClientRect();
+            // WaveSurfer computes click time from this exact bounding rect and width.
+            const width = rect.width;
+            const ratio = width > 0 ? (e.clientX - rect.left) / width : 0;
+            const ms = Math.max(0, Math.min(activeDur, Math.round(ratio * activeDur)));
+            const now = performance.now();
+            if (now - lastHoverLogAt.current >= 500) {
+              lastHoverLogAt.current = now;
+              console.debug('[split-waveform] hover geometry', {
+                isolated: isFocused,
+                ready,
+                clientX: e.clientX,
+                hostRect: (() => {
+                  const r = host.getBoundingClientRect();
+                  return { left: r.left, width: r.width };
+                })(),
+                wrapperRect: { left: rect.left, width: rect.width },
+                wrapperOffsetWidth: wrapper?.offsetWidth ?? null,
+                scrollLeft: wsRef.current?.getScroll() ?? null,
+                activeDurationMs: activeDur,
+                zoom,
+                ratio,
+                hoverMs: ms,
+              });
+            }
           }}
-          onMouseLeave={() => setHoverMs(null)}
           style={{
             width: '100%',
             minHeight: 110,

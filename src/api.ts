@@ -85,7 +85,7 @@ export const api = {
   applySplit: (
     filePath: string,
     splitPoints: number[],
-    segments?: { title?: string; artist?: string; album?: string; year?: string; genre?: string }[],
+    segments?: { title?: string; artist?: string; album?: string; year?: string; genre?: string; isCover?: boolean }[],
     skipIndices?: number[]
   ) =>
     req<{ ok: boolean; files: string[]; count: number }>('/api/split/apply', {
@@ -98,9 +98,10 @@ export const api = {
         filePath: string;
         splitPoints: number[];
         segmentTitles: string[];
-        segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[];
+        segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string; isCover?: boolean }[];
         skippedIndices?: number[];
         dismissedDuplicateTitles?: (string | null)[];
+        reviewedIndices?: number[];
         updatedAt: string;
       } | null;
     }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`),
@@ -108,23 +109,25 @@ export const api = {
     filePath: string,
     splitPoints: number[],
     segmentTitles: string[],
-    segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[],
+    segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string; isCover?: boolean }[],
     skippedIndices?: number[],
-    dismissedDuplicateTitles?: (string | null)[]
+    dismissedDuplicateTitles?: (string | null)[],
+    reviewedIndices?: number[]
   ) =>
     req<{
       draft: {
         filePath: string;
         splitPoints: number[];
         segmentTitles: string[];
-        segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string }[];
+        segments?: { title?: string; artist?: string; album?: string; genre?: string; year?: string; lyrics?: string; lyricsSource?: string; isCover?: boolean }[];
         skippedIndices?: number[];
         dismissedDuplicateTitles?: (string | null)[];
+        reviewedIndices?: number[];
         updatedAt: string;
       };
     }>('/api/split/draft', {
       method: 'PUT',
-      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles, segments, skippedIndices, dismissedDuplicateTitles }),
+      body: JSON.stringify({ path: filePath, split_points_ms: splitPoints, segmentTitles, segments, skippedIndices, dismissedDuplicateTitles, reviewedIndices }),
     }),
   deleteSplitDraft: (filePath: string) =>
     req<{ ok: boolean }>(`/api/split/draft?path=${encodeURIComponent(filePath)}`, {
