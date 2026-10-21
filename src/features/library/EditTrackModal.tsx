@@ -230,7 +230,7 @@ export function EditTrackModal({
     raw
       .split('\n')
       .map(l => {
-        let s = l.replace(/(\[\d{1,3}:\d{2}(?:\.\d{1,3})?\])+/g, '').trim();
+        const s = l.replace(/(\[\d{1,3}:\d{2}(?:\.\d{1,3})?\])+/g, '').trim();
         if (/^\[(ar|ti|al|by|offset):/i.test(s)) return '';
         return s;
       })

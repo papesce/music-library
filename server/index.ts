@@ -982,7 +982,7 @@ const server = createServer(async (req, res) => {
       if (!filePath) return json(res, 400, { error: 'path required' });
       if (!newFilename || !String(newFilename).trim())
         return json(res, 400, { error: 'filename required (e.g. "Artist - Title.mp3")' });
-      let filename = String(newFilename).trim();
+      const filename = String(newFilename).trim();
       // basename only — no directory separators
       if (filename.includes('/') || filename.includes('\\'))
         return json(res, 400, { error: 'filename must not contain path separators' });
@@ -1199,7 +1199,7 @@ const server = createServer(async (req, res) => {
           if (!t.filePath) continue;
           const existing = getTrackByPath(t.filePath);
           if (!existing) continue;
-          let patch: any = {};
+          const patch: any = {};
           if (typeof t.reviewed === 'boolean') {
             patch.reviewed = t.reviewed;
             patch.reviewedAt = t.reviewedAt ?? (t.reviewed ? new Date().toISOString() : null);
