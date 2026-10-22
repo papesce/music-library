@@ -308,6 +308,11 @@ body {
   align-items: center;
   gap: 0;
 }
+.dup-badge.internal-split-badge {
+  background: rgba(124, 92, 255, 0.18);
+  color: #c7baff;
+  border: 1px solid rgba(124, 92, 255, 0.35);
+}
 .track-list-header {
   padding: 10px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -759,8 +764,17 @@ body {
   font-weight: 600;
   font-size: 13px;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.track-title-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.track-title .dup-badge {
+  flex-shrink: 0;
 }
 .track-file {
   font-size: 11px;

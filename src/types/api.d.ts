@@ -16,6 +16,7 @@ export type Track = {
   isCover?: boolean;
   loudness?: Loudness | null;
   bassBoost?: number | null;
+  internalSplitCount?: number;
 };
 export type WishlistItem = {
   id: string;

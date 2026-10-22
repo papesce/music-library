@@ -114,7 +114,9 @@ export const TrackRowGrid = memo(function TrackRowGrid({
           </button>
           <div className="track-main">
             <span className="track-title">
-              {searchQuery ? highlightMatch(track.title, searchQuery) : track.title}
+              <span className="track-title-text">
+                {searchQuery ? highlightMatch(track.title, searchQuery) : track.title}
+              </span>
               {track.isCover ? (
                 <span
                   className="dup-badge"
@@ -135,6 +137,14 @@ export const TrackRowGrid = memo(function TrackRowGrid({
                 </span>
               )}
               {track.duplicateGroupId && <span className="dup-badge">dup</span>}
+              {!!track.internalSplitCount && (
+                <span
+                  className="dup-badge internal-split-badge"
+                  title={`${track.internalSplitCount} internal split${track.internalSplitCount === 1 ? '' : 's'}`}
+                >
+                  {track.internalSplitCount} split{track.internalSplitCount === 1 ? '' : 's'}
+                </span>
+              )}
               {track.reviewed && (
                 <span
                   className="dup-badge"

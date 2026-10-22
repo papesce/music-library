@@ -627,6 +627,20 @@ export function getSplitDraft(filePath: string): SplitDraft | null {
   }
 }
 
+export function getSplitCounts(): Record<string, number> {
+  const d = getDb();
+  const rows = d.prepare('SELECT filePath, splitPoints FROM split_drafts').all() as any[];
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    try {
+      const points = JSON.parse(row.splitPoints);
+      const count = Array.isArray(points) ? Math.max(0, points.length - 1) : 0;
+      if (count > 0) counts[resolve(row.filePath)] = count;
+    } catch {}
+  }
+  return counts;
+}
+
 export function setSplitDraft(
   filePath: string,
   splitPoints: number[],

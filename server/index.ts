@@ -52,6 +52,7 @@ import {
   setTrackLoudness,
   setTrackBassBoost,
   getSplitDraft,
+  getSplitCounts,
   setSplitDraft,
   deleteSplitDraft,
   renameSplitDraft,
@@ -728,7 +729,27 @@ const server = createServer(async (req, res) => {
         markDuplicates(tracks);
       }
       if (showDuplicates) tracks = tracks.filter(t => t.duplicateGroupId);
-      return json(res, 200, tracks);
+      const splitCounts = getSplitCounts();
+      const partPattern = /^(.*) - part \d{2}(?: \(\d+\))?$/i;
+      const groups = new Map<string, number>();
+      for (const t of tracks) {
+        const ext = extname(t.filePath);
+        const stem = basename(t.filePath, ext);
+        const match = stem.match(partPattern);
+        if (!match) continue;
+        const key = join(dirname(resolve(t.filePath)), `${match[1]}${ext}`).toLowerCase();
+        groups.set(key, (groups.get(key) ?? 0) + 1);
+      }
+      return json(res, 200, tracks.map(t => {
+        const resolved = resolve(t.filePath);
+        const ext = extname(resolved);
+        const stem = basename(resolved, ext);
+        const match = stem.match(partPattern);
+        const siblingCount = match
+          ? groups.get(join(dirname(resolved), `${match[1]}${ext}`).toLowerCase()) ?? 0
+          : 0;
+        return { ...t, internalSplitCount: Math.max(splitCounts[resolved] ?? 0, siblingCount) };
+      }));
     }
     if (url.pathname === '/api/library/duplicates' && req.method === 'GET') {
       const tracks = getTracks();

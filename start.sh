@@ -95,6 +95,7 @@ Usage: ./start.sh [command] [options]
 Commands:
   dev         Install deps if needed + start dev server (default)
   start       Build + start production server
+  stop        Kill existing server processes (ports 3055 and 5173)
   --setup     Only install/setup deps (node_modules + ffmpeg check + whisper venv)
   --check     Only check deps (no install, no start)
   --help      Show this help
@@ -163,8 +164,36 @@ cmd_start() {
   exec npm --prefix "$SCRIPT_DIR" start
 }
 
+cmd_stop() {
+  local ports=(3055 5173) stopped=0 port pids
+  for port in "${ports[@]}"; do
+    pids="$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    if [[ -n "$pids" ]]; then
+      info "Stopping process(es) on port $port: $(echo "$pids" | tr '\n' ' ')"
+      # shellcheck disable=SC2086
+      kill $pids 2>/dev/null || true
+      stopped=1
+    fi
+  done
+  if [[ $stopped -eq 0 ]]; then
+    info "Nothing running on ports ${ports[*]}"
+    return 0
+  fi
+  sleep 1
+  for port in "${ports[@]}"; do
+    pids="$(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    if [[ -n "$pids" ]]; then
+      warn "Port $port still busy — force killing"
+      # shellcheck disable=SC2086
+      kill -9 $pids 2>/dev/null || true
+    fi
+  done
+  info "Stopped"
+}
+
 COMMAND="${1:-dev}"
 case "$COMMAND" in
+  --stop|stop)    cmd_stop ;;
   --help|-h|help) cmd_help ;;
   --check|check)  cmd_check ;;
   --setup|setup)  cmd_setup ;;
