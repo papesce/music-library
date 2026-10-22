@@ -3,6 +3,7 @@
 Local MP3 library + wishlist — Node + React (Vite). Glassmorphism UI, virtualized track list, unified player with artwork + synced lyrics, and waveform-based track splitting.
 
 ![stack](https://img.shields.io/badge/stack-React%20%7C%20Vite%20%7C%20Node%20%7C%20SQLite-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![ui](./marketing/Neon%20Glass%20Music%20Library%20UI.png)
 
 ## Features
 
@@ -14,6 +15,29 @@ Local MP3 library + wishlist — Node + React (Vite). Glassmorphism UI, virtuali
 - **Split** — `wavesurfer.js` waveform, regions/markers, export segments
 - **Wishlist** — add/edit/delete with priority + date sort, persisted in SQLite
 - **Persistence** — `node:sqlite` (WAL), `data/music.db`, folders/tracks/wishlist tables, JSON migration
+
+## Marketing Highlights
+
+Based on code analysis, here are the 3 most complex/features worth highlighting:
+
+1. **🎯 Bass Boost & Real-Time Visualization** (unique differentiator)
+   - Web Audio API-driven spectrum analyzer with 64-band EQ display
+   - Low-frequency shelf + sub-bass adjustment with live gain visualization
+   - History/peak meter that animates in real-time
+   - _Marketing hook: "Professional-grade audio enhancement in a desktop music library app"_
+
+2. **🎯 Sophisticated Filtering & State Management** (power user feature)
+   - Search that filters by title/artist/album with highlighting
+   - Duplicates mode showing duplicate groups
+   - Reviewed/unreviewed filtering with progress tracking
+   - Loudness filtering (normal/loud)
+   - _Marketing hook: "Find exactly what you're looking for with granular filtering"_
+
+3. **🎯 Wishlist & Match Enrichment** (discovery feature)
+   - Wishlist items with in-library match highlighting
+   - Levenshtein-based fuzzy matching for track names
+   - Top 3 match suggestions per wishlist item
+   - _Marketing hook: "Never lose track of albums you want to acquire"_
 
 ## Stack
 
